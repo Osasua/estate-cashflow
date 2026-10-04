@@ -2,8 +2,8 @@ import { createContext, useContext, useState } from 'react';
 
 const Ctx = createContext(null);
 
-// Hardcode the backend URL for now to get it working
-const API_BASE = 'https://estate-cashflow.onrender.com/api';
+// Change this back:
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || 'null'));
