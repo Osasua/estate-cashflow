@@ -28,7 +28,7 @@ function Layout({ children }) {
   <img src="/favicon.png" alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px' }} />
   <div>
     <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#fff' }}>Ferrano Court</div>
-    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#9ca3af' }}>Portal</div>
+    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#fff' }}>Portal</div>
   </div>
 </div>
         <nav>
