@@ -42,8 +42,7 @@ export default function Login() {
        Forgot your password?
      </a>
    </p>
-        <p className="muted small">Demo: admin@estate.local / treasurer@estate.local — password ChangeMe123!</p>
-      </form>
+              </form>
     </div>
   );
 }
