@@ -24,7 +24,10 @@ function Layout({ children }) {
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="brand">🏡 Ferrano Court Portal</div>
+           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+     <img src="/favicon.png" alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px' }} />
+     <span style={{ fontSize: '1.25rem', fontWeight: '700', color: '#1f2937' }}>Ferrano Court</span>
+   </div>
         <nav>
           {/* 1. Dashboard (Everyone) */}
           <NavLink to="/" end>Dashboard</NavLink>
