@@ -2,11 +2,15 @@ import { createContext, useContext, useState } from 'react';
 
 const Ctx = createContext(null);
 
+// Hardcode the backend URL for now to get it working
+const API_BASE = 'https://estate-cashflow.onrender.com/api';
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || 'null'));
 
   const login = async (email, password) => {
-    const res = await fetch('/api/auth/login', {
+    // Changed from '/api/auth/login' to the full Render URL
+    const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
