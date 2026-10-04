@@ -25,9 +25,12 @@ function Layout({ children }) {
     <div className="app">
       <aside className="sidebar">
            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-     <img src="/favicon.png" alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px' }} />
-     <span style={{ fontSize: '1.25rem', fontWeight: '700', color: '#1f2937' }}>Ferrano Court</span>
-   </div>
+  <img src="/favicon.png" alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px' }} />
+  <div>
+    <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#fff' }}>Ferrano Court</div>
+    <div style={{ fontSize: '0.85rem', fontWeight: '500', color: '#9ca3af' }}>Portal</div>
+  </div>
+</div>
         <nav>
           {/* 1. Dashboard (Everyone) */}
           <NavLink to="/" end>Dashboard</NavLink>
