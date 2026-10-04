@@ -27,7 +27,10 @@ export default function Login() {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
-        <h1>🏘️ Ferrano Court Portal</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+  <img src="/favicon.png" alt="Logo" style={{ width: '24px', height: '24px' }} />
+  <span>Ferrano Court Portal</span>
+</div>
         <p className="muted">Sign in to your community account</p>
         <label>Email
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
