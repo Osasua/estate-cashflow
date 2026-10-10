@@ -3,16 +3,15 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { naira, fmtDate } from '../format';
 
+// ✅ FIX 1: Removed 'gardening' and 'water' from the fallback list
 const CATEGORIES = [
   { id: 'cleaning', name: 'Cleaning', color: '#6b7280' },
   { id: 'electricity', name: 'Electricity', color: '#6b7280' },
   { id: 'fuel', name: 'Fuel & Diesel', color: '#6b7280' },
-  { id: 'gardening', name: 'Gardening', color: '#6b7280' },
   { id: 'miscellaneous', name: 'Miscellaneous', color: '#6b7280' },
   { id: 'repairs', name: 'Repairs & Maintenance', color: '#6b7280' },
   { id: 'security', name: 'Security', color: '#6b7280' },
   { id: 'waste', name: 'Waste Management', color: '#6b7280' },
-  { id: 'water', name: 'Water', color: '#6b7280' },
 ];
 
 export default function Expenses() {
@@ -53,17 +52,15 @@ export default function Expenses() {
     } catch (e) {
       setMessage(e.message);
     }
-  };
-
   const loadCategories = async () => {
-    try {
-      const data = await api('/categories');
-      setCategories(data.categories || CATEGORIES);
-    } catch (e) {
-      setCategories(CATEGORIES);
-    }
-  };
-
+  try {
+    const data = await api('/categories');
+    console.log('Categories from API:', data);
+    setCategories(data.categories || CATEGORIES);
+  } catch (e) {
+    setCategories(CATEGORIES);
+  }
+};
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -123,7 +120,6 @@ export default function Expenses() {
   const endIndex = startIndex + itemsPerPage;
   const paginatedExpenses = expenses.slice(startIndex, endIndex);
 
-  // ✅ Colored left-border KPI style (matching My Account)
   const kpiStyle = (color) => ({
     background: '#fff',
     padding: '20px 24px',
@@ -137,7 +133,6 @@ export default function Expenses() {
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px 0' }}>
       <h1 style={{ margin: '0 0 24px 0', fontSize: '1.5rem', fontWeight: '600', color: '#1f2937' }}>Expenses</h1>
 
-      {/* ✅ Updated: Colored left-border KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
         <div style={kpiStyle('#ef4444')}>
           <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Total Spent (Selected Period)</div>
@@ -153,7 +148,6 @@ export default function Expenses() {
         </div>
       </div>
 
-      {/* Simple Date Filter */}
       <div style={{ background: '#fff', padding: '16px 20px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '24px' }}>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
           {quickDates.map((qd) => (
@@ -191,7 +185,6 @@ export default function Expenses() {
         </div>
       </div>
 
-      {/* Clean Form */}
       <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', padding: '24px', marginBottom: '24px' }}>
         <h2 style={{ margin: '0 0 20px 0', fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>Record New Expense</h2>
         
@@ -226,13 +219,15 @@ export default function Expenses() {
                 required
                 value={form.category_id}
                 onChange={(e) => setForm({ ...form, category_id: e.target.value })}
-                style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }}
-              >
+               style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }}
+                >
                 <option value="">Select category</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                {categories
+                  .filter((cat) => cat.name !== 'Gardening' && cat.name !== 'Water')
+                  .map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
-              </select>
+            </select>
             </div>
             <div>
               <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151', fontSize: '0.875rem' }}>Amount</label>
@@ -293,7 +288,6 @@ export default function Expenses() {
         </form>
       </div>
 
-      {/* Clean Table */}
       <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
           <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>Recent Expenses</h2>
