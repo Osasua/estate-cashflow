@@ -61,13 +61,41 @@ router.post('/categories', staff, async (req, res) => {
   if (!name) return res.status(400).json({ error: 'Category name is required' });
   
   try {
-    const { rows } = await query(
-      'INSERT INTO categories (name, is_active) VALUES ($1, true) RETURNING *',
-      [name]
+    // 1. First, check if it exists but is hidden, and restore it
+    const restoreRes = await query(
+      'UPDATE categories SET is_active = true WHERE name = $1 AND is_active = false RETURNING *',
+      [name.trim()]
     );
-    res.status(201).json({ category: rows[0] });
+    
+    if (restoreRes.rows.length > 0) {
+      return res.status(200).json({ category: restoreRes.rows[0], message: 'Category restored!' });
+    }
+    
+    // 2. If not hidden, try to insert as a brand new category
+    const insertRes = await query(
+      'INSERT INTO categories (name, is_active) VALUES ($1, true) RETURNING *',
+      [name.trim()]
+    );
+    res.status(201).json({ category: insertRes.rows[0], message: 'Category created!' });
   } catch (e) {
-    if (e.code === '23505') return res.status(409).json({ error: 'Category already exists' });
+    if (e.code === '23505') return res.status(409).json({ error: 'An active category with this name already exists.' });
+    throw e;
+  }
+});
+
+router.patch('/categories/:id', staff, async (req, res) => {
+  const { name } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'Category name is required' });
+  
+  try {
+    const { rows } = await query(
+      'UPDATE categories SET name = $1 WHERE id = $2 RETURNING *',
+      [name.trim(), req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Category not found' });
+    res.json({ category: rows[0], message: 'Category updated!' });
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'Another category with this name already exists.' });
     throw e;
   }
 });

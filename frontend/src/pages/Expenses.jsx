@@ -3,6 +3,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { naira, fmtDate } from '../format';
 
+// ✅ FIX 1: Removed 'gardening' and 'water' from the fallback list
 const CATEGORIES = [
   { id: 'cleaning', name: 'Cleaning', color: '#6b7280' },
   { id: 'electricity', name: 'Electricity', color: '#6b7280' },
@@ -55,7 +56,7 @@ export default function Expenses() {
 
   const loadCategories = async () => {
     try {
-      const data = await api('/categories');
+      const data = await api('/expenses/categories');
       setCategories(data.categories || CATEGORIES);
     } catch (e) {
       setCategories(CATEGORIES);
@@ -81,7 +82,7 @@ export default function Expenses() {
       await api('/expenses', {
         method: 'POST',
         body: formData,
-        headers: {},
+        headers: {}, // Let browser set multipart/form-data automatically
       });
 
       setMessage('Expense recorded successfully');
@@ -95,7 +96,7 @@ export default function Expenses() {
       });
       loadExpenses();
     } catch (e) {
-      setMessage(e.message);
+      setMessage(e.message || 'Failed to record expense');
     } finally {
       setLoading(false);
     }
@@ -134,6 +135,7 @@ export default function Expenses() {
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px 0' }}>
       <h1 style={{ margin: '0 0 24px 0', fontSize: '1.5rem', fontWeight: '600', color: '#1f2937' }}>Expenses</h1>
 
+      {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
         <div style={kpiStyle('#ef4444')}>
           <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Total Spent (Selected Period)</div>
@@ -149,6 +151,7 @@ export default function Expenses() {
         </div>
       </div>
 
+      {/* Date Filter */}
       <div style={{ background: '#fff', padding: '16px 20px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '24px' }}>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
           {quickDates.map((qd) => (
@@ -186,6 +189,7 @@ export default function Expenses() {
         </div>
       </div>
 
+      {/* Record New Expense Form */}
       <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', padding: '24px', marginBottom: '24px' }}>
         <h2 style={{ margin: '0 0 20px 0', fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>Record New Expense</h2>
         
@@ -223,8 +227,9 @@ export default function Expenses() {
                 style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }}
               >
                 <option value="">Select category</option>
+                {/* ✅ FIX 2: Filter out inactive/hidden categories from the dropdown */}
                 {categories
-                  .filter((cat) => cat.name !== 'Gardening' && cat.name !== 'Water')
+                  .filter((cat) => cat.is_active !== false)
                   .map((cat) => (
                     <option key={cat.id} value={cat.id}>{cat.name}</option>
                   ))}
@@ -268,6 +273,16 @@ export default function Expenses() {
             />
           </div>
 
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151', fontSize: '0.875rem' }}>Receipt (Optional)</label>
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              onChange={(e) => setForm({ ...form, receipt: e.target.files[0] })}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }}
+            />
+          </div>
+
           <div style={{ textAlign: 'right' }}>
             <button
               type="submit"
@@ -289,6 +304,7 @@ export default function Expenses() {
         </form>
       </div>
 
+      {/* Recent Expenses Table */}
       <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
           <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>Recent Expenses</h2>
@@ -339,6 +355,7 @@ export default function Expenses() {
               </table>
             </div>
 
+            {/* Pagination */}
             {totalPages > 1 && (
               <div style={{ 
                 padding: '12px 20px', 
