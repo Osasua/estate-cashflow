@@ -1,4 +1,4 @@
-const { query } = require('./db');
+   const { query } = require('./src/db');
 async function check() {
   const res = await query('SELECT * FROM categories LIMIT 1');
   console.log('Columns:', Object.keys(res.rows[0]));
