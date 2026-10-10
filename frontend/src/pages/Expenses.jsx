@@ -3,7 +3,6 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { naira, fmtDate } from '../format';
 
-// ✅ FIX 1: Removed 'gardening' and 'water' from the fallback list
 const CATEGORIES = [
   { id: 'cleaning', name: 'Cleaning', color: '#6b7280' },
   { id: 'electricity', name: 'Electricity', color: '#6b7280' },
@@ -52,15 +51,17 @@ export default function Expenses() {
     } catch (e) {
       setMessage(e.message);
     }
+  };
+
   const loadCategories = async () => {
-  try {
-    const data = await api('/categories');
-    console.log('Categories from API:', data);
-    setCategories(data.categories || CATEGORIES);
-  } catch (e) {
-    setCategories(CATEGORIES);
-  }
-};
+    try {
+      const data = await api('/categories');
+      setCategories(data.categories || CATEGORIES);
+    } catch (e) {
+      setCategories(CATEGORIES);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -219,15 +220,15 @@ export default function Expenses() {
                 required
                 value={form.category_id}
                 onChange={(e) => setForm({ ...form, category_id: e.target.value })}
-               style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }}
-                >
+                style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }}
+              >
                 <option value="">Select category</option>
                 {categories
                   .filter((cat) => cat.name !== 'Gardening' && cat.name !== 'Water')
                   .map((cat) => (
                     <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-            </select>
+                  ))}
+              </select>
             </div>
             <div>
               <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151', fontSize: '0.875rem' }}>Amount</label>
