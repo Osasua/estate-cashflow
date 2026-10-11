@@ -85,16 +85,12 @@ router.post('/:id/create-login', staff, async (req, res) => {
     [m.household_name, m.email.toLowerCase().trim(), password_hash, m.id]
   );
 
-  try {
-    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    await sendWelcomeEmail(m.email, tempPassword, loginUrl);
-    res.json({ message: `Login created and welcome email sent to ${m.email}!` });
-  } catch (error) {
-    console.error('Email failed:', error);
-    await query('DELETE FROM users WHERE id = $1', [newUser[0].id]);
-    res.status(500).json({ error: 'Account created, but failed to send email. Please check SMTP settings.' });
-  }
-});
+   // TEMPORARY FIX: Skip email and show password on screen
+  // (Once you configure SMTP on Render, you can switch back to sendWelcomeEmail)
+  
+  res.json({ 
+    message: `✅ Login created for ${m.email}! Temporary Password: ${tempPassword}` 
+  });
 
 // DELETE a member permanently (Hard Delete)
 router.delete('/:id', staff, async (req, res) => {
