@@ -5,202 +5,216 @@ import { naira } from '../format';
 
 export default function Members() {
   const { user } = useAuth();
-  const staff = ['admin', 'treasurer'].includes(user.role);
-
+  const isStaff = ['admin', 'treasurer'].includes(user?.role);
+  
   const [members, setMembers] = useState([]);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({});
   const [message, setMessage] = useState('');
-  const [showAdd, setShowAdd] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const load = () =>
-    api('/members')
-      .then((d) => setMembers(d.members))
-      .catch((e) => setMessage(e.message));
-
-  useEffect(() => { load(); }, []);
-
-  const startEdit = (m) => {
-    setEditing(m.id);
-    setForm({
-      household_name: m.household_name,
-      house_number: m.house_number,
-      phone: m.phone || '',
-      email: m.email || '',
-      monthly_due: m.monthly_due,
-      active: m.active,
-    });
-  };
-
-  const saveEdit = async (e) => {
-    e.preventDefault();
+  const loadMembers = async () => {
+    setLoading(true);
     try {
-      await api(`/members/${editing}`, { method: 'PUT', body: form });
-      setMessage('✅ Member updated successfully!');
-      setEditing(null);
-      setForm({});
-      load();
-    } catch (err) {
-      setMessage('❌ Error updating member.');
+      const data = await api('/members');
+      setMembers(data.members || []); 
+    } catch (e) {
+      setMessage(e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const cancelEdit = () => {
-    setEditing(null);
-    setForm({});
-  };
+  useEffect(() => { loadMembers(); }, []);
 
-  const addMember = async (e) => {
-    e.preventDefault();
-    try {
-      await api('/members', { method: 'POST', body: form });
-      setMessage('✅ New member added!');
-      setShowAdd(false);
-      setForm({});
-      load();
-    } catch (err) {
-      setMessage('❌ Error adding member.');
-    }
-  };
-
-  const createLoginAndEmail = async (memberId) => {
-    if (!window.confirm('This will create a login account and email the member. Continue?')) return;
-    try {
-      const res = await api(`/members/${memberId}/create-login`, { method: 'POST' });
-      setMessage(res.message);
-      load();
-    } catch (err) {
-      setMessage(err.message || 'Error creating login.');
-    }
-  };
-
-  const removeMember = async (memberId, currentStatus) => {
-    const actionText = currentStatus ? 'remove (make inactive)' : 'restore (make active)';
-    if (!window.confirm(`Are you sure you want to ${actionText} this member? Their financial history will be preserved.`)) return;
+  // ✅ This safely marks them as moved out WITHOUT deleting their history
+  const handleMoveOut = async (id) => {
+    if (!window.confirm('Are you sure you want to mark this member as moved out? Their history will be preserved, but they will be marked as inactive.')) return;
     
     try {
-      await api(`/members/${memberId}`, { method: 'PUT', body: { active: !currentStatus } });
-      setMessage(`Member ${currentStatus ? 'removed' : 'restored'} successfully.`);
-      load();
+      await api(`/members/${id}`, { 
+        method: 'PUT', 
+        body: { active: false } 
+      });
+      setMessage('✅ Member marked as moved out successfully.');
+      loadMembers();
     } catch (err) {
-      setMessage('Error updating member status.');
+      setMessage('❌ Error updating member status.');
+    }
+  };
+
+  // ✅ This brings them back to active status
+  const handleReactivate = async (id) => {
+    if (!window.confirm('Reactivate this member?')) return;
+    
+    try {
+      await api(`/members/${id}`, { 
+        method: 'PUT', 
+        body: { active: true } 
+      });
+      setMessage('✅ Member reactivated.');
+      loadMembers();
+    } catch (err) {
+      setMessage('❌ Error reactivating member.');
+    }
+  };
+
+  const handleCreateLogin = async (id) => {
+    if (!window.confirm('Create a portal login for this member? A temporary password will be emailed to them.')) return;
+    try {
+      const res = await api(`/members/${id}/create-login`, { method: 'POST' });
+      setMessage(`✅ ${res.message}`);
+    } catch (err) {
+      setMessage(`❌ ${err.message}`);
     }
   };
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h1>Members Management</h1>
-        {staff && (
-          <button 
-            onClick={() => { setShowAdd(true); setForm({ household_name: '', house_number: '', monthly_due: 10000 }); }}
-            style={{ padding: '10px 20px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
-          >
-            + Add New Member
-          </button>
-        )}
-      </div>
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px 0' }}>
+      <h1 style={{ margin: '0 0 24px 0', fontSize: '1.5rem', fontWeight: '600', color: '#1f2937' }}>
+        Members Directory
+      </h1>
 
-      {message && <p className={message.includes('❌') ? 'error' : 'muted'} style={{ marginBottom: '15px', padding: '10px', background: message.includes('❌') ? '#fee' : '#efe', borderRadius: '4px' }}>{message}</p>}
-
-      {/* ADD NEW MEMBER FORM */}
-      {showAdd && staff && (
-        <div className="card" style={{ border: '2px solid #4f46e5', marginBottom: '20px', padding: '20px' }}>
-          <h3>Add New Member</h3>
-          <form onSubmit={addMember} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
-            <input placeholder="Household Name" value={form.household_name || ''} required onChange={(e) => setForm({ ...form, household_name: e.target.value })} style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }} />
-            <input placeholder="House Number" value={form.house_number || ''} required onChange={(e) => setForm({ ...form, house_number: e.target.value })} style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }} />
-            <input placeholder="Phone" value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }} />
-            <input placeholder="Email" value={form.email || ''} onChange={(e) => setForm({ ...form, email: e.target.value })} style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }} />
-            <input placeholder="Monthly Due" type="number" value={form.monthly_due || 10000} onChange={(e) => setForm({ ...form, monthly_due: Number(e.target.value) })} style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }} />
-            <div style={{ display: 'flex', gap: '10px', gridColumn: '1 / -1', justifyContent: 'flex-end' }}>
-              <button type="submit" style={{ padding: '10px 20px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Save Member</button>
-              <button type="button" className="btn-ghost" onClick={() => { setShowAdd(false); setForm({}); }} style={{ padding: '10px 20px' }}>Cancel</button>
-            </div>
-          </form>
+      {message && (
+        <div style={{
+          padding: '12px 16px',
+          background: message.includes('✅') ? '#f0fdf4' : '#fef2f2',
+          color: message.includes('✅') ? '#166534' : '#991b1b',
+          borderRadius: '6px',
+          marginBottom: '20px',
+          fontSize: '0.875rem',
+          border: `1px solid ${message.includes('✅') ? '#bbf7d0' : '#fecaca'}`
+        }}>
+          {message}
         </div>
       )}
 
-      {/* MEMBERS TABLE */}
-      <div className="card" style={{ overflowX: 'auto' }}>
-        <table className="mobile-cards" style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ textAlign: 'left', borderBottom: '2px solid #eee', background: '#f9fafb' }}>
-              <th style={{ padding: '12px 10px', fontWeight: '600' }}>House #</th>
-              <th style={{ padding: '12px 10px', fontWeight: '600' }}>Name</th>
-              <th style={{ padding: '12px 10px', fontWeight: '600' }}>Phone</th>
-              <th style={{ padding: '12px 10px', fontWeight: '600' }}>Email</th>
-              <th style={{ padding: '12px 10px', fontWeight: '600' }}>Due</th>
-              <th style={{ padding: '12px 10px', fontWeight: '600' }}>Status</th>
-              <th style={{ padding: '12px 10px', fontWeight: '600' }}>Linked User</th>
-              {staff && <th style={{ padding: '12px 10px', fontWeight: '600', textAlign: 'right' }}>Actions</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {members.map((m) => (
-              <tr key={m.id} style={{ borderBottom: '1px solid #eee', opacity: m.active ? 1 : 0.5, background: editing === m.id ? '#f0f9ff' : 'transparent' }}>
-                {editing === m.id ? (
-                  // EDIT MODE
-                  <>
-                    <td data-label="House #" style={{ padding: '8px 10px' }}><input value={form.house_number} onChange={(e) => setForm({ ...form, house_number: e.target.value })} style={{ width: '70px', padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} /></td>
-                    <td data-label="Name" style={{ padding: '8px 10px' }}><input value={form.household_name} onChange={(e) => setForm({ ...form, household_name: e.target.value })} style={{ width: '100%', padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} /></td>
-                    <td data-label="Phone" style={{ padding: '8px 10px' }}><input value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} style={{ width: '100%', padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} /></td>
-                    <td data-label="Email" style={{ padding: '8px 10px' }}><input value={form.email || ''} onChange={(e) => setForm({ ...form, email: e.target.value })} style={{ width: '100%', padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} /></td>
-                    <td data-label="Due" style={{ padding: '8px 10px' }}><input type="number" value={form.monthly_due} onChange={(e) => setForm({ ...form, monthly_due: Number(e.target.value) })} style={{ width: '90px', padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }} /></td>
-                    <td data-label="Status" style={{ padding: '8px 10px' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
-                        <span>{form.active ? 'Active' : 'Inactive'}</span>
-                      </label>
+      <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
+          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>
+            All Households ({members.length})
+          </h2>
+        </div>
+        
+        {loading ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>Loading members...</div>
+        ) : members.length === 0 ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>No members found.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead style={{ background: '#f9fafb' }}>
+                <tr>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>House No.</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Household Name</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Contact</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Portal User</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Total Due</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Status</th>
+                  {isStaff && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {members.map((member, idx) => (
+                  <tr key={member.id} style={{ 
+                    borderBottom: idx !== members.length - 1 ? '1px solid #f3f4f6' : 'none',
+                    opacity: member.active === false ? 0.6 : 1,
+                    background: member.active === false ? '#fafafa' : 'transparent'
+                  }}>
+                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', fontWeight: '600', color: '#1f2937' }}>
+                      {member.house_number}
                     </td>
-                    <td data-label="Linked User" style={{ padding: '8px 10px' }} className="muted">—</td>
-                    {staff && (
-                      <td data-label="Actions" style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <button onClick={saveEdit} style={{ padding: '6px 12px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '5px', fontWeight: 'bold' }}>Save</button>
-                        <button onClick={cancelEdit} className="btn-ghost" style={{ padding: '6px 12px' }}>Cancel</button>
-                      </td>
-                    )}
-                  </>
-                ) : (
-                  // VIEW MODE
-                  <>
-                    <td data-label="House #" style={{ padding: '12px 10px', fontWeight: '500' }}>{m.house_number}</td>
-                    <td data-label="Name" style={{ padding: '12px 10px' }}>{m.household_name}</td>
-                    <td data-label="Phone" style={{ padding: '12px 10px' }} className="muted">{m.phone || '—'}</td>
-                    <td data-label="Email" style={{ padding: '12px 10px' }} className="muted">{m.email || '—'}</td>
-                    <td data-label="Due" style={{ padding: '12px 10px' }}>{naira(m.monthly_due)}</td>
-                    <td data-label="Status" style={{ padding: '12px 10px' }}>
-                      <span className={`badge ${m.active ? 'paid' : 'pending'}`} style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '0.85rem' }}>
-                        {m.active ? 'Active' : 'Inactive'}
+                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#4b5563' }}>
+                      {member.household_name}
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#4b5563' }}>
+                      <div>{member.phone || '-'}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{member.email || '-'}</div>
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#4b5563' }}>
+                      {member.user_name ? (
+                        <span style={{ color: '#166534', fontWeight: '500' }}>{member.user_email}</span>
+                      ) : (
+                        <span style={{ color: '#9ca3af' }}>No login</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', fontWeight: '500', color: member.total_due > 0 ? '#ef4444' : '#10b981' }}>
+                      {naira(member.total_due)}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '4px 8px',
+                        borderRadius: '9999px',
+                        fontSize: '0.75rem',
+                        fontWeight: '500',
+                        background: member.active === false ? '#fee2e2' : '#dcfce7',
+                        color: member.active === false ? '#991b1b' : '#166534'
+                      }}>
+                        {member.active === false ? 'Moved Out' : 'Active'}
                       </span>
                     </td>
-                    <td data-label="Linked User" style={{ padding: '12px 10px' }} className="muted">{m.user_name || m.user_email || '—'}</td>
-                    {staff && (
-                      <td data-label="Actions" style={{ padding: '12px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end' }}>
-                          <button className="btn-ghost" onClick={() => startEdit(m)} style={{ padding: '6px 12px', border: '1px solid #ddd', borderRadius: '4px' }}>Edit</button>
-                          {!m.user_email && m.active && (
-                            <button className="btn-ghost" style={{ color: '#4f46e5', fontWeight: 'bold', padding: '6px 12px', border: '1px solid #4f46e5', borderRadius: '4px' }} onClick={() => createLoginAndEmail(m.id)}>
-                              Create Login
-                            </button>
-                          )}
+                    {isStaff && (
+                      <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {member.active !== false ? (
                           <button 
-                            className="btn-ghost" 
-                            style={{ color: m.active ? '#ef4444' : '#22c55e', fontWeight: 'bold', padding: '6px 12px', border: `1px solid ${m.active ? '#ef4444' : '#22c55e'}`, borderRadius: '4px' }} 
-                            onClick={() => removeMember(m.id, m.active)}
+                            onClick={() => handleMoveOut(member.id)}
+                            style={{
+                              padding: '6px 12px',
+                              background: '#fef2f2',
+                              color: '#991b1b',
+                              border: '1px solid #fecaca',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem',
+                              fontWeight: '500',
+                              marginRight: '8px'
+                            }}
                           >
-                            {m.active ? 'Remove' : 'Restore'}
+                            Mark as Moved Out
                           </button>
-                        </div>
+                        ) : (
+                          <button 
+                            onClick={() => handleReactivate(member.id)}
+                            style={{
+                              padding: '6px 12px',
+                              background: '#f0fdf4',
+                              color: '#166534',
+                              border: '1px solid #bbf7d0',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem',
+                              fontWeight: '500',
+                              marginRight: '8px'
+                            }}
+                          >
+                            Reactivate
+                          </button>
+                        )}
+                        
+                        {!member.user_email && (
+                          <button 
+                            onClick={() => handleCreateLogin(member.id)}
+                            style={{
+                              padding: '6px 12px',
+                              background: '#eff6ff',
+                              color: '#1d4ed8',
+                              border: '1px solid #bfdbfe',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem',
+                              fontWeight: '500'
+                            }}
+                          >
+                            Create Login
+                          </button>
+                        )}
                       </td>
                     )}
-                  </>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {members.length === 0 && <p className="muted" style={{ padding: '20px', textAlign: 'center' }}>No members found.</p>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
