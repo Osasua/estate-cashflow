@@ -83,11 +83,19 @@ router.post('/:id/create-login', staff, async (req, res) => {
     [m.household_name, m.email.toLowerCase().trim(), password_hash, m.id]
   );
 
-  // TEMPORARY FIX: Skip email and show password on screen
-  res.json({ 
-    message: `✅ Login created for ${m.email}! Temporary Password: ${tempPassword}` 
-  });
-}); // ✅ THIS WAS MISSING!
+  // Try to send email
+  try {
+    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    await sendWelcomeEmail(m.email, tempPassword, loginUrl);
+    res.json({ message: `✅ Login created and welcome email sent to ${m.email}!` });
+  } catch (emailError) {
+    console.error('Email sending failed:', emailError);
+    // Still show the password on screen if email fails
+    res.json({ 
+      message: `✅ Login created for ${m.email}! Email failed (check SMTP settings). Password: ${tempPassword}` 
+    });
+  }
+});
 
 // DELETE a member permanently (Hard Delete)
 router.delete('/:id', staff, async (req, res) => {
