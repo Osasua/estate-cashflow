@@ -90,4 +90,47 @@ router.put('/:id', adminOnly, async (req, res) => {
   res.json({ user: rows[0] });
 });
 
+// Mark a member as moved out
+router.patch('/:id/move-out', staff, async (req, res) => {
+  const { move_out_date } = req.body || {};
+  const dateToSet = move_out_date || new Date().toISOString().split('T')[0]; // Default to today
+
+  try {
+    const { rows } = await query(
+      `UPDATE users 
+       SET move_out_date = $1, is_active = false 
+       WHERE id = $2 RETURNING *`,
+      [dateToSet, req.params.id]
+    );
+    
+    if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    
+    res.json({ user: rows[0], message: 'Member marked as moved out' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update member status' });
+  }
+});
+
+// Mark a member as moved out
+router.patch('/:id/move-out', staff, async (req, res) => {
+  const { move_out_date } = req.body || {};
+  const dateToSet = move_out_date || new Date().toISOString().split('T')[0]; 
+
+  try {
+    const { rows } = await query(
+      `UPDATE users 
+       SET move_out_date = $1, is_active = false 
+       WHERE id = $2 RETURNING *`,
+      [dateToSet, req.params.id]
+    );
+    
+    if (rows.length === 0) return res.status(404).json({ error: 'Member not found' });
+    res.json({ user: rows[0], message: 'Member marked as moved out' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update member' });
+  }
+});
+
 module.exports = router;
