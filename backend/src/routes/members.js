@@ -95,4 +95,20 @@ router.post('/:id/create-login', staff, async (req, res) => {
   }
 });
 
+// DELETE a member permanently (Hard Delete)
+router.delete('/:id', staff, async (req, res) => {
+  try {
+    // Check if member has payments/contributions before deleting to prevent orphaned records
+    const hasHistory = await query('SELECT id FROM contributions WHERE member_id = $1 LIMIT 1', [req.params.id]);
+    if (hasHistory.rows.length > 0) {
+      return res.status(400).json({ error: 'Cannot delete member with payment history. Please use "Mark as Moved Out" instead.' });
+    }
+
+    await query('DELETE FROM members WHERE id = $1', [req.params.id]);
+    res.json({ message: 'Member permanently deleted' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete member' });
+  }
+});
+
 module.exports = router;
