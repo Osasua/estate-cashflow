@@ -29,8 +29,7 @@ router.get('/', async (req, res) => {
 // UPDATE a member's details
 router.put('/:id', staff, async (req, res) => {
   const { household_name, house_number, phone, email, monthly_due, active, opening_balance } = req.body || {};
-  // ... (keep existing checks) ...
-
+  
   const { rows } = await query(
     `UPDATE members SET 
         household_name = COALESCE($2, household_name),
@@ -50,8 +49,7 @@ router.put('/:id', staff, async (req, res) => {
 // ADD a new member
 router.post('/', staff, async (req, res) => {
   const { household_name, house_number, phone, email, monthly_due = 10000, opening_balance = 0 } = req.body || {};
-  // ... (keep existing validation) ...
-
+  
   try {
     const { rows } = await query(
       `INSERT INTO members (household_name, house_number, phone, email, monthly_due, active, opening_balance)
@@ -85,12 +83,18 @@ router.post('/:id/create-login', staff, async (req, res) => {
     [m.household_name, m.email.toLowerCase().trim(), password_hash, m.id]
   );
 
-   // TEMPORARY FIX: Skip email and show password on screen
-  // (Once you configure SMTP on Render, you can switch back to sendWelcomeEmail)
-  
-  res.json({ 
-    message: `✅ Login created for ${m.email}! Temporary Password: ${tempPassword}` 
-  });
+  try {
+    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    await sendWelcomeEmail(m.email, tempPassword, loginUrl);
+    res.json({ message: `Login created and welcome email sent to ${m.email}!` });
+  } catch (error) {
+    console.error('Email failed:', error);
+    // Don't delete the user, just warn and show the password
+    res.json({ 
+      message: `Account created but email failed. Password: ${tempPassword}. Check Render logs for SMTP error.` 
+    });
+  }
+}); // ✅ THIS CLOSING BRACE WAS MISSING!
 
 // DELETE a member permanently (Hard Delete)
 router.delete('/:id', staff, async (req, res) => {
@@ -110,9 +114,6 @@ router.delete('/:id', staff, async (req, res) => {
 
 // Reset password for a member and show it
 router.post('/:id/reset-password', staff, async (req, res) => {
-  const crypto = require('crypto');
-  const bcrypt = require('bcryptjs');
-  
   const tempPassword = crypto.randomBytes(6).toString('hex');
   const password_hash = bcrypt.hashSync(tempPassword, 10);
 
