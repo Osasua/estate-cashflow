@@ -66,7 +66,7 @@ export default function Members() {
       setFormData(emptyForm);
       loadMembers();
     } catch (err) {
-      setMessage(`❌ ${err.message}`);
+      setMessage(` ${err.message}`);
     }
   };
 
@@ -115,7 +115,7 @@ export default function Members() {
   };
 
   // --- UI HELPERS ---
-  const inputStyle = { width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' };
+  const inputStyle = { width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' };
   const btnPrimary = { padding: '8px 16px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '500', fontSize: '0.875rem' };
   const btnGhost = { padding: '6px 12px', background: 'transparent', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', color: '#374151' };
 
@@ -165,9 +165,10 @@ export default function Members() {
                 <tr>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>House No.</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Household</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Contact</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Phone</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Email</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Linked User</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Total Due</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Due</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Status</th>
                   {isStaff && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>}
                 </tr>
@@ -191,27 +192,25 @@ export default function Members() {
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#4b5563' }}>
                       {editingId === member.id ? (
-                        <div style={{display:'flex', flexDirection:'column', gap:'4px'}}>
-                          <input placeholder="Phone" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} style={inputStyle} />
-                          <input placeholder="Email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} style={inputStyle} />
-                          <input type="number" placeholder="Monthly Due" value={formData.monthly_due} onChange={e => setFormData({...formData, monthly_due: Number(e.target.value)})} style={inputStyle} />
-                        </div>
-                      ) : (
-                        <div>
-                          <div>{member.phone || '-'}</div>
-                          <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{member.email || '-'}</div>
-                        </div>
-                      )}
+                        <input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} style={inputStyle} />
+                      ) : member.phone || '—'}
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#4b5563' }}>
+                      {editingId === member.id ? (
+                        <input value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} style={inputStyle} />
+                      ) : member.email || '—'}
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#4b5563' }}>
                       {member.user_name ? (
                         <span style={{ color: '#166534', fontWeight: '500' }}>{member.user_email}</span>
                       ) : (
-                        <span style={{ color: '#9ca3af' }}>No login</span>
+                        <span style={{ color: '#9ca3af' }}>—</span>
                       )}
                     </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', fontWeight: '600', color: member.total_due > 0 ? '#ef4444' : '#10b981' }}>
-                      {naira(member.total_due)}
+                      {editingId === member.id ? (
+                        <input type="number" value={formData.monthly_due} onChange={e => setFormData({...formData, monthly_due: Number(e.target.value)})} style={{...inputStyle, width: '100px', textAlign: 'right'}} />
+                      ) : naira(member.monthly_due || 0)}
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <span style={{
