@@ -29,7 +29,7 @@ router.get('/', async (req, res) => {
 // UPDATE a member's details
 router.put('/:id', staff, async (req, res) => {
   const { household_name, house_number, phone, email, monthly_due, active, opening_balance } = req.body || {};
-  
+
   const { rows } = await query(
     `UPDATE members SET 
         household_name = COALESCE($2, household_name),
@@ -83,23 +83,15 @@ router.post('/:id/create-login', staff, async (req, res) => {
     [m.household_name, m.email.toLowerCase().trim(), password_hash, m.id]
   );
 
-  try {
-    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    await sendWelcomeEmail(m.email, tempPassword, loginUrl);
-    res.json({ message: `Login created and welcome email sent to ${m.email}!` });
-  } catch (error) {
-    console.error('Email failed:', error);
-    // Don't delete the user, just warn and show the password
-    res.json({ 
-      message: `Account created but email failed. Password: ${tempPassword}. Check Render logs for SMTP error.` 
-    });
-  }
-}); // ✅ THIS CLOSING BRACE WAS MISSING!
+  // TEMPORARY FIX: Skip email and show password on screen
+  res.json({ 
+    message: `✅ Login created for ${m.email}! Temporary Password: ${tempPassword}` 
+  });
+}); // ✅ THIS WAS MISSING!
 
 // DELETE a member permanently (Hard Delete)
 router.delete('/:id', staff, async (req, res) => {
   try {
-    // Check if member has payments/contributions before deleting to prevent orphaned records
     const hasHistory = await query('SELECT id FROM contributions WHERE member_id = $1 LIMIT 1', [req.params.id]);
     if (hasHistory.rows.length > 0) {
       return res.status(400).json({ error: 'Cannot delete member with payment history. Please use "Mark as Moved Out" instead.' });
