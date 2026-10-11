@@ -108,4 +108,24 @@ router.delete('/:id', staff, async (req, res) => {
   }
 });
 
+// Reset password for a member and show it
+router.post('/:id/reset-password', staff, async (req, res) => {
+  const crypto = require('crypto');
+  const bcrypt = require('bcryptjs');
+  
+  const tempPassword = crypto.randomBytes(6).toString('hex');
+  const password_hash = bcrypt.hashSync(tempPassword, 10);
+
+  const { rows } = await query(
+    `UPDATE users SET password_hash = $1 WHERE member_id = $2 RETURNING email`,
+    [password_hash, req.params.id]
+  );
+  
+  if (rows.length === 0) return res.status(404).json({ error: 'No login found for this member' });
+  
+  res.json({ 
+    message: `Password reset for ${rows[0].email}! New temporary password: ${tempPassword}` 
+  });
+});
+
 module.exports = router;
