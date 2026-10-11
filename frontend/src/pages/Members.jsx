@@ -15,7 +15,7 @@ export default function Members() {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
   
-  const emptyForm = { household_name: '', house_number: '', phone: '', email: '', monthly_due: 10000 };
+  const emptyForm = { household_name: '', house_number: '', phone: '', email: '', monthly_due: 10000, opening_balance: 0 };
   const [formData, setFormData] = useState(emptyForm);
 
   const loadMembers = async () => {
@@ -54,7 +54,8 @@ export default function Members() {
       house_number: member.house_number,
       phone: member.phone || '',
       email: member.email || '',
-      monthly_due: member.monthly_due || 10000
+      monthly_due: member.monthly_due || 10000,
+      opening_balance: member.opening_balance || 0
     });
   };
 
@@ -66,7 +67,7 @@ export default function Members() {
       setFormData(emptyForm);
       loadMembers();
     } catch (err) {
-      setMessage(` ${err.message}`);
+      setMessage(`❌ ${err.message}`);
     }
   };
 
@@ -104,11 +105,25 @@ export default function Members() {
   };
 
   const handleCreateLogin = async (id) => {
-    if (!window.confirm('Create a portal login for this member? A temporary password will be emailed to them.')) return;
+    if (!window.confirm('Create a portal login for this member?')) return;
     try {
       const res = await api(`/members/${id}/create-login`, { method: 'POST' });
-      setMessage(`✅ ${res.message}`);
-      loadMembers();
+      alert(res.message); 
+      setMessage('✅ Login created successfully.');
+      loadMembers(); // Refresh list
+    } catch (err) {
+      setMessage(`❌ ${err.message}`);
+      loadMembers(); // ✅ CRITICAL: Refresh list even on error so the button changes to "Reset Pwd"
+    }
+  };
+
+  const handleResetPassword = async (id) => {
+    if (!window.confirm('Reset password for this member? A new temporary password will be generated.')) return;
+    try {
+      const res = await api(`/members/${id}/reset-password`, { method: 'POST' });
+      alert(res.message); // Show password in popup
+      setMessage('✅ Password reset successfully.');
+      loadMembers(); // Refresh list
     } catch (err) {
       setMessage(`❌ ${err.message}`);
     }
@@ -146,6 +161,7 @@ export default function Members() {
             <input placeholder="Phone" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} style={inputStyle} />
             <input type="email" placeholder="Email (for portal login)" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} style={inputStyle} />
             <input type="number" placeholder="Monthly Due" value={formData.monthly_due} onChange={e => setFormData({...formData, monthly_due: Number(e.target.value)})} style={inputStyle} />
+            <input type="number" placeholder="Previous Arrears (₦)" value={formData.opening_balance} onChange={e => setFormData({...formData, opening_balance: Number(e.target.value)})} style={inputStyle} />
           </div>
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
             <button type="button" onClick={() => setIsAdding(false)} style={btnGhost}>Cancel</button>
@@ -168,7 +184,7 @@ export default function Members() {
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Phone</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Email</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Linked User</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Due</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Outstanding</th>
                   <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Status</th>
                   {isStaff && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>}
                 </tr>
@@ -207,11 +223,16 @@ export default function Members() {
                         <span style={{ color: '#9ca3af' }}>—</span>
                       )}
                     </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', fontWeight: '600', color: member.total_due > 0 ? '#ef4444' : '#10b981' }}>
+                    
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', fontWeight: '600', color: (member.outstanding_balance || 0) > 0 ? '#ef4444' : '#10b981' }}>
                       {editingId === member.id ? (
-                        <input type="number" value={formData.monthly_due} onChange={e => setFormData({...formData, monthly_due: Number(e.target.value)})} style={{...inputStyle, width: '100px', textAlign: 'right'}} />
-                      ) : naira(member.monthly_due || 0)}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+                          <input type="number" placeholder="Monthly Due" value={formData.monthly_due} onChange={e => setFormData({...formData, monthly_due: Number(e.target.value)})} style={{...inputStyle, width: '100px', textAlign: 'right'}} />
+                          <input type="number" placeholder="Prev. Arrears" value={formData.opening_balance} onChange={e => setFormData({...formData, opening_balance: Number(e.target.value)})} style={{...inputStyle, width: '100px', textAlign: 'right'}} />
+                        </div>
+                      ) : naira(member.outstanding_balance || 0)}
                     </td>
+
                     <td style={{ padding: '12px 16px' }}>
                       <span style={{
                         display: 'inline-block', padding: '4px 8px', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: '500',
@@ -238,7 +259,9 @@ export default function Members() {
                               <button onClick={() => handleReactivate(member.id)} style={{...btnGhost, marginRight: '8px', color: '#166534', borderColor: '#bbf7d0', background: '#f0fdf4'}}>Reactivate</button>
                             )}
 
-                            {!member.user_email && member.active !== false && (
+                            {member.user_email ? (
+                              <button onClick={() => handleResetPassword(member.id)} style={{...btnGhost, marginRight: '8px', color: '#7c3aed', borderColor: '#ddd6fe', background: '#f5f3ff'}}>Reset Pwd</button>
+                            ) : (
                               <button onClick={() => handleCreateLogin(member.id)} style={{...btnGhost, marginRight: '8px', color: '#1d4ed8', borderColor: '#bfdbfe', background: '#eff6ff'}}>Create Login</button>
                             )}
 
