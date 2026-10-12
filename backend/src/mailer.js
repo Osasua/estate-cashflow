@@ -2,16 +2,20 @@ const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: process.env.SMTP_PORT || 465,
-  secure: true,
+  port: Number(process.env.SMTP_PORT) || 587,
+  secure: false, // false for port 587 (STARTTLS)
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+  tls: {
+    rejectUnauthorized: false // Helps with some hosting environments
+  }
 });
 
 console.log('SMTP_USER:', process.env.SMTP_USER);
 console.log('SMTP_PASS:', process.env.SMTP_PASS ? '***LOADED***' : '❌ NOT FOUND');
+
 
 // FIX 1: Updated to accept the full resetLink and name from the backend route
 const sendResetEmail = async (email, name, resetLink) => {
