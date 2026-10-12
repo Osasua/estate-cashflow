@@ -112,7 +112,7 @@ router.delete('/:id', staff, async (req, res) => {
   }
 });
 
-// Reset password for a member and show it
+// Reset password for a member and send email
 router.post('/:id/reset-password', staff, async (req, res) => {
   const tempPassword = crypto.randomBytes(6).toString('hex');
   const password_hash = bcrypt.hashSync(tempPassword, 10);
@@ -121,12 +121,21 @@ router.post('/:id/reset-password', staff, async (req, res) => {
     `UPDATE users SET password_hash = $1 WHERE member_id = $2 RETURNING email`,
     [password_hash, req.params.id]
   );
-  
+
   if (rows.length === 0) return res.status(404).json({ error: 'No login found for this member' });
-  
-  res.json({ 
-    message: `Password reset for ${rows[0].email}! New temporary password: ${tempPassword}` 
-  });
+
+  // Try to send the email with the new password
+  try {
+    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    await sendWelcomeEmail(rows[0].email, tempPassword, loginUrl);
+    res.json({ message: `Password reset and welcome email sent to ${rows[0].email}!` });
+  } catch (emailError) {
+    console.error('Email sending failed:', emailError);
+    // Fallback: show password on screen if email fails
+    res.json({ 
+      message: `Password reset for ${rows[0].email}! Email failed. New temporary password: ${tempPassword}` 
+    });
+  }
 });
 
 module.exports = router;
