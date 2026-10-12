@@ -107,14 +107,17 @@ router.delete('/:id', staff, async (req, res) => {
   }
 });
 
-// Reset password and SEND EMAIL (Debug Version)
+// Reset password - BULLETPROOF VERSION
 router.post('/:id/reset-password', staff, async (req, res) => {
   console.log('🔄 Reset password requested for member ID:', req.params.id);
   
   try {
+    // 1. Generate new password
     const tempPassword = crypto.randomBytes(6).toString('hex');
     const password_hash = bcrypt.hashSync(tempPassword, 10);
+    console.log('Generated new password hash');
 
+    // 2. Update database
     const result = await query(
       `UPDATE users SET password_hash = $1 WHERE member_id = $2 RETURNING email`,
       [password_hash, req.params.id]
@@ -123,29 +126,35 @@ router.post('/:id/reset-password', staff, async (req, res) => {
     console.log('Database update result:', result.rows);
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'No login found for this member' });
+      console.log('❌ No user found with that member_id');
+      return res.status(404).json({ message: 'No login found for this member' });
     }
 
     const userEmail = result.rows[0].email;
-    console.log('Attempting to send email to:', userEmail);
+    console.log('✅ Password updated for:', userEmail);
 
-    // Try to send email
+    // 3. Try to send email (but don't let it break the response)
+    let emailStatus = '';
     try {
+      console.log('Attempting to send email to:', userEmail);
       const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
       await sendWelcomeEmail(userEmail, tempPassword, loginUrl);
       console.log('✅ Email sent successfully');
-      
-      // CRITICAL: Ensure we send the 'message' property
-      return res.json({ message: `Password reset and email sent to ${userEmail}!` });
+      emailStatus = `Email sent to ${userEmail}.`;
     } catch (emailErr) {
-      console.error('❌ Email failed:', emailErr);
-      
-      // CRITICAL: Ensure we send the 'message' property even on failure
-      return res.json({ message: `Password reset for ${userEmail}! Email failed. New password: ${tempPassword}` });
+      console.error('❌ Email failed:', emailErr.message || emailErr);
+      emailStatus = `Email failed. Password: ${tempPassword}`;
     }
+
+    // 4. ALWAYS return a message
+    const responseMessage = `Password reset for ${userEmail}! ${emailStatus}`;
+    console.log('Sending response:', responseMessage);
+    
+    return res.json({ message: responseMessage });
+
   } catch (err) {
-    console.error('💥 Critical Error in reset-password:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error(' Critical error in reset-password:', err);
+    return res.status(500).json({ message: `Error: ${err.message}` });
   }
 });
 
