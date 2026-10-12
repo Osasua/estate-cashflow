@@ -1,21 +1,21 @@
 const nodemailer = require('nodemailer');
 
+// FORCE reliable settings for Gmail
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false, // false for port 587 (STARTTLS)
+  port: 587, // Force port 587
+  secure: false, // MUST be false for port 587
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
   tls: {
-    rejectUnauthorized: false // Helps with some hosting environments
+    rejectUnauthorized: false // Helps prevent certificate errors on some servers
   }
 });
 
 console.log('SMTP_USER:', process.env.SMTP_USER);
 console.log('SMTP_PASS:', process.env.SMTP_PASS ? '***LOADED***' : '❌ NOT FOUND');
-
 
 // FIX 1: Updated to accept the full resetLink and name from the backend route
 const sendResetEmail = async (email, name, resetLink) => {
