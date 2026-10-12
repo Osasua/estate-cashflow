@@ -117,19 +117,28 @@ export default function Members() {
     }
   };
 
-    const handleResetPassword = async (id) => {
-    if (!window.confirm('Reset password for this member? A new temporary password will be emailed to them.')) return;
+      const handleResetPassword = async (id) => {
+    if (!window.confirm('Reset password for this member?')) return;
     try {
       const res = await api(`/members/${id}/reset-password`, { method: 'POST' });
-      // Show the exact message (success or fallback password)
-      alert(res.message); 
-      setMessage('✅ Password reset successfully.');
+      
+      // DEBUG: Log exactly what the server sent back
+      console.log(' Raw Backend Response:', res);
+      
+      // Show message, or error, or 'undefined' if the server sent nothing
+      const msg = res.message || res.error || 'No message received from server';
+      alert(msg);
+      
+      if (res.message) {
+        setMessage('✅ Password reset successfully.');
+      }
       loadMembers();
     } catch (err) {
+      console.error('Frontend Catch Error:', err);
       setMessage(`❌ ${err.message}`);
     }
   };
-  
+
   // --- UI HELPERS ---
   const inputStyle = { width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' };
   const btnPrimary = { padding: '8px 16px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '500', fontSize: '0.875rem' };
