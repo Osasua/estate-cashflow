@@ -77,34 +77,29 @@ router.post('/:id/create-login', staff, async (req, res) => {
   const tempPassword = crypto.randomBytes(6).toString('hex'); 
   const password_hash = bcrypt.hashSync(tempPassword, 10);
 
-  const { rows: newUser } = await query(
+  await query(
     `INSERT INTO users (name, email, password_hash, role, member_id) 
-     VALUES ($1, $2, $3, 'member', $4) RETURNING *`,
+     VALUES ($1, $2, $3, 'member', $4)`,
     [m.household_name, m.email.toLowerCase().trim(), password_hash, m.id]
   );
 
-  // Try to send email
   try {
     const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     await sendWelcomeEmail(m.email, tempPassword, loginUrl);
-    res.json({ message: `✅ Login created and welcome email sent to ${m.email}!` });
+    res.json({ message: `Login created and welcome email sent to ${m.email}!` });
   } catch (emailError) {
     console.error('Email sending failed:', emailError);
-    // Still show the password on screen if email fails
-    res.json({ 
-      message: `✅ Login created for ${m.email}! Email failed (check SMTP settings). Password: ${tempPassword}` 
-    });
+    res.json({ message: `Login created for ${m.email}! Email failed. Password: ${tempPassword}` });
   }
 });
 
-// DELETE a member permanently (Hard Delete)
+// DELETE a member permanently
 router.delete('/:id', staff, async (req, res) => {
   try {
     const hasHistory = await query('SELECT id FROM contributions WHERE member_id = $1 LIMIT 1', [req.params.id]);
     if (hasHistory.rows.length > 0) {
-      return res.status(400).json({ error: 'Cannot delete member with payment history. Please use "Mark as Moved Out" instead.' });
+      return res.status(400).json({ error: 'Cannot delete member with payment history.' });
     }
-
     await query('DELETE FROM members WHERE id = $1', [req.params.id]);
     res.json({ message: 'Member permanently deleted' });
   } catch (err) {
@@ -112,7 +107,7 @@ router.delete('/:id', staff, async (req, res) => {
   }
 });
 
-// Reset password for a member and send email
+// Reset password and SEND EMAIL
 router.post('/:id/reset-password', staff, async (req, res) => {
   const tempPassword = crypto.randomBytes(6).toString('hex');
   const password_hash = bcrypt.hashSync(tempPassword, 10);
@@ -121,20 +116,16 @@ router.post('/:id/reset-password', staff, async (req, res) => {
     `UPDATE users SET password_hash = $1 WHERE member_id = $2 RETURNING email`,
     [password_hash, req.params.id]
   );
-
+  
   if (rows.length === 0) return res.status(404).json({ error: 'No login found for this member' });
-
-  // Try to send the email with the new password
+  
   try {
     const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     await sendWelcomeEmail(rows[0].email, tempPassword, loginUrl);
-    res.json({ message: `Password reset and welcome email sent to ${rows[0].email}!` });
+    res.json({ message: `Password reset and email sent to ${rows[0].email}!` });
   } catch (emailError) {
     console.error('Email sending failed:', emailError);
-    // Fallback: show password on screen if email fails
-    res.json({ 
-      message: `Password reset for ${rows[0].email}! Email failed. New temporary password: ${tempPassword}` 
-    });
+    res.json({ message: `Password reset for ${rows[0].email}! Email failed. New password: ${tempPassword}` });
   }
 });
 
