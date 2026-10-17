@@ -9,16 +9,17 @@ const router = express.Router();
 router.use(authenticate);
 
 // GET all members with their linked user info
+// ✅ Updated to pull opening_balance directly from the 'arrears' contribution row
 router.get('/', async (req, res) => {
   const { rows } = await query(
     `SELECT m.*, 
             u.email AS user_email, 
             u.name AS user_name,
-            (SELECT COALESCE(SUM(amount_due), 0) FROM contributions WHERE member_id = m.id) AS total_due_expected,
+            COALESCE((SELECT amount_due - amount_paid FROM contributions WHERE member_id = m.id AND type = 'arrears' LIMIT 1), 0) AS opening_balance,
+            (SELECT COALESCE(SUM(amount_due), 0) FROM contributions WHERE member_id = m.id AND type != 'arrears') AS total_monthly_due,
             (SELECT COALESCE(SUM(amount_paid), 0) FROM contributions WHERE member_id = m.id) AS total_paid,
             ((SELECT COALESCE(SUM(amount_due), 0) FROM contributions WHERE member_id = m.id) - 
-             (SELECT COALESCE(SUM(amount_paid), 0) FROM contributions WHERE member_id = m.id) + 
-             COALESCE(m.opening_balance, 0)) AS outstanding_balance
+             (SELECT COALESCE(SUM(amount_paid), 0) FROM contributions WHERE member_id = m.id)) AS outstanding_balance
        FROM members m 
        LEFT JOIN users u ON u.member_id = m.id
       ORDER BY m.house_number`
@@ -29,6 +30,19 @@ router.get('/', async (req, res) => {
 // UPDATE a member's details
 router.put('/:id', staff, async (req, res) => {
   const { household_name, house_number, phone, email, monthly_due, active, opening_balance } = req.body || {};
+
+  // ✅ Sync Arrears: If opening_balance is edited, update the 'arrears' contribution row
+  if (opening_balance !== undefined) {
+    const val = Math.max(0, Number(opening_balance) || 0);
+    const lastYear = new Date().getFullYear() - 1;
+    await query(
+      `INSERT INTO contributions (member_id, type, period_year, period_month, amount_due, amount_paid)
+       VALUES ($1, 'arrears', $2, 12, $3, 0)
+       ON CONFLICT (member_id, type, period_year, period_month)
+       DO UPDATE SET amount_due = COALESCE(contributions.amount_paid, 0) + EXCLUDED.amount_due`,
+      [req.params.id, lastYear, val]
+    );
+  }
 
   const { rows } = await query(
     `UPDATE members SET 
@@ -49,13 +63,26 @@ router.put('/:id', staff, async (req, res) => {
 // ADD a new member
 router.post('/', staff, async (req, res) => {
   const { household_name, house_number, phone, email, monthly_due = 10000, opening_balance = 0 } = req.body || {};
+  const arrears = Math.max(0, Number(opening_balance) || 0);
   
   try {
     const { rows } = await query(
       `INSERT INTO members (household_name, house_number, phone, email, monthly_due, active, opening_balance)
        VALUES ($1, $2, $3, $4, $5, true, $6) RETURNING *`,
-      [household_name, house_number, phone || null, email || null, monthly_due, opening_balance]
+      [household_name, house_number, phone || null, email || null, monthly_due, arrears]
     );
+    
+    // ✅ If there's arrears on a new member, create the contribution row immediately
+    if (arrears > 0) {
+      const lastYear = new Date().getFullYear() - 1;
+      await query(
+        `INSERT INTO contributions (member_id, type, period_year, period_month, amount_due, amount_paid)
+         VALUES ($1, 'arrears', $2, 12, $3, 0)
+         ON CONFLICT (member_id, type, period_year, period_month) DO NOTHING`,
+        [rows[0].id, lastYear, arrears]
+      );
+    }
+    
     res.status(201).json({ member: rows[0] });
   } catch (e) {
     if (e.code === '23505') return res.status(409).json({ error: 'House number already exists' });
@@ -83,12 +110,10 @@ router.post('/:id/create-login', staff, async (req, res) => {
     [m.household_name, m.email.toLowerCase().trim(), password_hash, m.id]
   );
 
-  // 1. Respond IMMEDIATELY with the password
   res.json({ 
     message: `Login created for ${m.email}! New temporary password: ${tempPassword}. (Email is being sent in the background)` 
   });
 
-  // 2. Fire-and-forget the email in the background
   const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
   sendWelcomeEmail(m.email, tempPassword, loginUrl)
     .then(() => console.log('✅ Background email sent successfully to', m.email))
@@ -126,12 +151,10 @@ router.post('/:id/reset-password', staff, async (req, res) => {
 
     const userEmail = result.rows[0].email;
 
-    // 1. Respond to the client IMMEDIATELY so there's no timeout or hanging
     res.json({ 
       message: `Password reset successful for ${userEmail}! New temporary password: ${tempPassword}. (Email is being sent in the background)` 
     });
 
-    // 2. Fire-and-forget the email sending in the background
     const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     sendWelcomeEmail(userEmail, tempPassword, loginUrl)
       .then(() => console.log('✅ Background email sent successfully to', userEmail))

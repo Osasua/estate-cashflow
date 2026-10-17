@@ -66,7 +66,10 @@ export default function Contributions() {
       // Build detailed success message from waterfall allocation
       let msg = res.message || 'Payment recorded.';
       if (res.allocations && res.allocations.length > 0) {
-        const monthsCovered = res.allocations.map(a => `${MONTHS[a.month - 1]} ${a.year}`).join(', ');
+        // ✅ FIX: Show "Previous Year Arrears" instead of "December 2025"
+        const monthLabel = (a) => a.type === 'arrears' ? 'Previous Year Arrears' : `${MONTHS[a.month - 1]} ${a.year}`;
+        const monthsCovered = res.allocations.map(monthLabel).join(', ');
+        
         msg = `✅ Payment of ${naira(Number(form.amount))} allocated to: ${monthsCovered}.`;
         if (res.credit_balance > 0) {
           msg += ` Credit balance: ${naira(res.credit_balance)}.`;

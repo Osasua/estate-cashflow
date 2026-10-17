@@ -94,42 +94,55 @@ router.post('/payments', staff, async (req, res) => {
       return res.status(400).json({ error: 'Cannot record payment for an inactive member.' });
     }
 
-    const monthlyDue = member.monthly_due || 0;
+    const monthlyDue = Number(member.monthly_due || 0);
     let remaining = amt;
-    const allocations = []; // Tracks { contrib_id, amount, year, month }
+    const allocations = []; 
 
-    // 2. Get all existing contributions for this member (oldest first)
-    const { rows: existingContribs } = await client.query(
-      `SELECT id, period_year, period_month, amount_due, amount_paid 
-         FROM contributions 
-        WHERE member_id = $1 AND type = $2 
-        ORDER BY period_year ASC, period_month ASC`,
-      [member_id, type]
+    // 2. FIRST: Clear Previous-Year Arrears (type = 'arrears')
+    const { rows: [arrearsRow] } = await client.query(
+      `SELECT id, period_year, period_month, amount_due, amount_paid
+         FROM contributions
+        WHERE member_id = $1 AND type = 'arrears'`,
+      [member_id]
     );
-
-    // 3. Allocate to oldest unpaid/partial months first (Clears Arrears)
-    for (const c of existingContribs) {
-      if (remaining <= 0) break;
-      const owed = c.amount_due - c.amount_paid;
+    if (arrearsRow && remaining > 0) {
+      const owed = Number(arrearsRow.amount_due) - Number(arrearsRow.amount_paid);
       if (owed > 0) {
         const allocate = Math.min(remaining, owed);
-        allocations.push({ contrib_id: c.id, amount: allocate, year: c.period_year, month: c.period_month });
+        allocations.push({ contrib_id: arrearsRow.id, amount: allocate, year: arrearsRow.period_year, month: arrearsRow.period_month, type: 'arrears' });
         remaining -= allocate;
       }
     }
 
-    // 4. If money remains, allocate to future months (up to 24 months ahead)
-    if (remaining > 0) {
+    // 3. Then allocate to oldest unpaid months of this specific type (e.g. 'monthly')
+    const { rows: existingContribs } = await client.query(
+      `SELECT id, period_year, period_month, amount_due, amount_paid
+         FROM contributions
+        WHERE member_id = $1 AND type = $2
+        ORDER BY period_year ASC, period_month ASC`,
+      [member_id, type]
+    );
+    for (const c of existingContribs) {
+      if (remaining <= 0) break;
+      const owed = Number(c.amount_due) - Number(c.amount_paid);
+      if (owed > 0) {
+        const allocate = Math.min(remaining, owed);
+        allocations.push({ contrib_id: c.id, amount: allocate, year: c.period_year, month: c.period_month, type });
+        remaining -= allocate;
+      }
+    }
+
+    // 4. Then future months (monthly only, up to 24 ahead)
+    if (remaining > 0 && type === 'monthly') {
       let anchorDate = new Date(year, month - 1, 1);
       const today = new Date(); today.setDate(1);
-      if (anchorDate < today) anchorDate = today; // Start from current month if payload date is in the past
+      if (anchorDate < today) anchorDate = today;
 
       let monthsAhead = 0;
       while (remaining > 0 && monthsAhead < 24) {
         const fYear = anchorDate.getFullYear();
         const fMonth = anchorDate.getMonth() + 1;
 
-        // Ensure future contribution row exists
         await client.query(
           `INSERT INTO contributions (member_id, type, period_year, period_month, amount_due, amount_paid)
              VALUES ($1, $2, $3, $4, $5, 0)
@@ -138,16 +151,16 @@ router.post('/payments', staff, async (req, res) => {
         );
 
         const { rows: [fc] } = await client.query(
-          `SELECT id, amount_due, amount_paid FROM contributions 
+          `SELECT id, amount_due, amount_paid FROM contributions
              WHERE member_id = $1 AND type = $2 AND period_year = $3 AND period_month = $4`,
           [member_id, type, fYear, fMonth]
         );
 
         if (fc) {
-          const owed = fc.amount_due - fc.amount_paid;
+          const owed = Number(fc.amount_due) - Number(fc.amount_paid);
           if (owed > 0) {
             const allocate = Math.min(remaining, owed);
-            allocations.push({ contrib_id: fc.id, amount: allocate, year: fYear, month: fMonth });
+            allocations.push({ contrib_id: fc.id, amount: allocate, year: fYear, month: fMonth, type });
             remaining -= allocate;
           }
         }
@@ -156,7 +169,7 @@ router.post('/payments', staff, async (req, res) => {
       }
     }
 
-    // 5. Fallback: If still remaining (e.g. they paid 25 months in advance), dump it into the requested month as an overpayment (Credit Balance)
+    // 5. Fallback: If still remaining, dump it into the requested month as an overpayment
     if (allocations.length === 0 && remaining > 0) {
       await client.query(
         `INSERT INTO contributions (member_id, type, period_year, period_month, amount_due, amount_paid)
@@ -168,7 +181,7 @@ router.post('/payments', staff, async (req, res) => {
         `SELECT id FROM contributions WHERE member_id = $1 AND type = $2 AND period_year = $3 AND period_month = $4`,
         [member_id, type, year, month]
       );
-      allocations.push({ contrib_id: fallback.id, amount: remaining, year, month });
+      allocations.push({ contrib_id: fallback.id, amount: remaining, year, month, type });
       remaining = 0;
     }
 
@@ -176,7 +189,6 @@ router.post('/payments', staff, async (req, res) => {
     const baseRef = reference || `PAY-${Date.now()}`;
     for (let i = 0; i < allocations.length; i++) {
       const alloc = allocations[i];
-      // Append -1, -2 etc to reference if the payment was split across multiple months
       const allocRef = allocations.length > 1 ? `${baseRef}-${i + 1}` : baseRef;
       
       await client.query(
@@ -191,13 +203,10 @@ router.post('/payments', staff, async (req, res) => {
       );
     }
 
-    // Audit log
     await client.query(
       `INSERT INTO audit_log (user_id, action, table_name, record_id, new_value)
        VALUES ($1, 'payment', 'payments', $2, $3)`,
-      [req.user.id, member_id, JSON.stringify({ 
-        member_id, total_amount: amt, method, allocations 
-      })]
+      [req.user.id, member_id, JSON.stringify({ member_id, total_amount: amt, method, allocations })]
     );
 
     await client.query('COMMIT');
@@ -205,7 +214,7 @@ router.post('/payments', staff, async (req, res) => {
     res.status(201).json({ 
       message: `Payment of ₦${amt.toLocaleString()} allocated successfully.`,
       allocations,
-      credit_balance: remaining // Will be 0 unless they paid >24 months in advance
+      credit_balance: remaining
     });
 
   } catch (e) {
@@ -214,17 +223,6 @@ router.post('/payments', staff, async (req, res) => {
   } finally {
     client.release();
   }
-});
-
-// GET Credit Balance for a member
-router.get('/credit-balance/:member_id', async (req, res) => {
-  const { rows } = await query(
-    `SELECT COALESCE(SUM(amount_paid - amount_due), 0) AS credit_balance
-       FROM contributions 
-      WHERE member_id = $1 AND amount_paid > amount_due`,
-    [req.params.member_id]
-  );
-  res.json({ credit_balance: rows[0].credit_balance || 0 });
 });
 
 module.exports = router;
