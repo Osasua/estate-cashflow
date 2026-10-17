@@ -53,18 +53,33 @@ export default function Contributions() {
 
   const recordPayment = async (e) => {
     e.preventDefault();
-    const res = await api('/contributions/payments', {
-      method: 'POST',
-      body: {
-        member_id: paying.member_id, month, year, type,
-        amount: Number(form.amount), method: form.method,
-        reference: form.reference || undefined,
-      },
-    });
-    setMessage(res.queued ? 'Saved offline — will sync when you are back online.' : 'Payment recorded.');
-    setPaying(null);
-    setForm({ amount: '', method: 'cash', reference: '' });
-    load();
+    try {
+      const res = await api('/contributions/payments', {
+        method: 'POST',
+        body: {
+          member_id: paying.member_id, month, year, type,
+          amount: Number(form.amount), method: form.method,
+          reference: form.reference || undefined,
+        },
+      });
+      
+      // Build detailed success message from waterfall allocation
+      let msg = res.message || 'Payment recorded.';
+      if (res.allocations && res.allocations.length > 0) {
+        const monthsCovered = res.allocations.map(a => `${MONTHS[a.month - 1]} ${a.year}`).join(', ');
+        msg = `✅ Payment of ${naira(Number(form.amount))} allocated to: ${monthsCovered}.`;
+        if (res.credit_balance > 0) {
+          msg += ` Credit balance: ${naira(res.credit_balance)}.`;
+        }
+      }
+      
+      setMessage(msg);
+      setPaying(null);
+      setForm({ amount: '', method: 'cash', reference: '' });
+      load();
+    } catch (err) {
+      setMessage(`❌ ${err.message}`);
+    }
   };
 
   const filtered = onlyDefaulters ? rows.filter((r) => r.status !== 'paid') : rows;
@@ -210,12 +225,12 @@ export default function Contributions() {
       {message && (
         <div style={{ 
           padding: '12px 16px', 
-          background: message.includes('generated') || message.includes('recorded') ? '#f0fdf4' : '#fef2f2', 
-          color: message.includes('generated') || message.includes('recorded') ? '#166534' : '#991b1b', 
+          background: message.includes('✅') || message.includes('generated') ? '#f0fdf4' : '#fef2f2', 
+          color: message.includes('✅') || message.includes('generated') ? '#166534' : '#991b1b', 
           borderRadius: '6px', 
           marginBottom: '24px', 
           fontSize: '0.875rem',
-          border: `1px solid ${message.includes('generated') || message.includes('recorded') ? '#bbf7d0' : '#fecaca'}`
+          border: `1px solid ${message.includes('✅') || message.includes('generated') ? '#bbf7d0' : '#fecaca'}`
         }}>
           {message}
         </div>
@@ -248,23 +263,20 @@ export default function Contributions() {
                       borderRadius: '12px', 
                       fontSize: '0.75rem', 
                       fontWeight: '600', 
-                      background: r.status === 'paid' ? '#dcfce7' : '#fee2e2', 
-                      color: r.status === 'paid' ? '#166534' : '#991b1b' 
+                      background: r.status === 'paid' ? '#dcfce7' : r.status === 'partial' ? '#fef3c7' : '#fee2e2', 
+                      color: r.status === 'paid' ? '#166534' : r.status === 'partial' ? '#92400e' : '#991b1b' 
                     }}>
                       {r.status}
                     </span>
                   </td>
                   {staff && (
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      {r.status !== 'paid' && (
-                        <button 
-                          className="btn-ghost" 
-                          onClick={() => setPaying(r)} 
-                          style={{ padding: '6px 12px', background: 'transparent', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', color: '#374151' }}
-                        >
-                          Record Payment
-                        </button>
-                      )}
+                      <button 
+                        onClick={() => setPaying(r)} 
+                        style={{ padding: '6px 12px', background: 'transparent', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', color: '#374151' }}
+                      >
+                        {r.status === 'paid' ? 'Add Payment' : 'Record Payment'}
+                      </button>
                     </td>
                   )}
                 </tr>
