@@ -61,7 +61,6 @@ router.post('/categories', staff, async (req, res) => {
   if (!name) return res.status(400).json({ error: 'Category name is required' });
   
   try {
-    // 1. First, check if it exists but is hidden, and restore it
     const restoreRes = await query(
       'UPDATE categories SET is_active = true WHERE name = $1 AND is_active = false RETURNING *',
       [name.trim()]
@@ -71,7 +70,6 @@ router.post('/categories', staff, async (req, res) => {
       return res.status(200).json({ category: restoreRes.rows[0], message: 'Category restored!' });
     }
     
-    // 2. If not hidden, try to insert as a brand new category
     const insertRes = await query(
       'INSERT INTO categories (name, is_active) VALUES ($1, true) RETURNING *',
       [name.trim()]
@@ -111,26 +109,31 @@ router.put('/categories/:id', staff, async (req, res) => {
   res.json({ category: rows[0] });
 });
 
-// --- EXPENSE CREATION ---
+// --- EXPENSE CREATION (FIXED DATE HANDLING) ---
 router.post('/', staff, upload.single('receipt'), async (req, res) => {
-  const { category_id, amount, description, vendor, spent_on } = req.body || {};
+  // ✅ FIX: Look for BOTH 'date' (from frontend) and 'spent_on'
+  const { category_id, amount, description, vendor, date, spent_on } = req.body || {};
   const amt = Number(amount);
+  
+  // ✅ FIX: Use the provided date, fallback to today ONLY if truly missing
+  const expenseDate = date || spent_on || new Date().toISOString().split('T')[0];
   
   if (!(amt > 0) || !description) {
     return res.status(400).json({ error: 'A positive amount and a description are required' });
   }
 
   const receiptUrl = req.file 
-    ? `http://localhost:4000/uploads/${req.file.filename}` 
+    ? `/uploads/${req.file.filename}` // Clean relative path (adjust if your frontend needs full URL)
     : (req.body.receipt_url || null);
 
+  // ✅ FIX: Removed COALESCE(..., CURRENT_DATE). We now strictly use expenseDate.
   const { rows } = await query(
     `INSERT INTO expenses (category_id, amount, description, vendor, spent_on, receipt_url, recorded_by)
-     VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_DATE), $6, $7) RETURNING *`,
-    [category_id || null, amt, description, vendor || null, spent_on || null, receiptUrl, req.user.id]
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [category_id || null, amt, description, vendor || null, expenseDate, receiptUrl, req.user.id]
   );
   
-  res.status(201).json({ expense: rows[0] });
+  res.status(201).json({ expense: rows[0], message: 'Expense recorded successfully' });
 });
 
 // --- EXPENSE UPDATE ---
@@ -151,7 +154,7 @@ router.put('/:id', staff, async (req, res) => {
     [req.params.id, category_id, amount ? Number(amount) : null, description, vendor, spent_on, receipt_url]
   );
   
-  res.json({ expense: rows[0] });
+  res.json({ expense: rows[0], message: 'Expense updated successfully' });
 });
 
 // --- EXPENSE DELETE ---
@@ -160,7 +163,7 @@ router.delete('/:id', staff, async (req, res) => {
   if (!old.rows[0]) return res.status(404).json({ error: 'Expense not found' });
   
   await query('DELETE FROM expenses WHERE id = $1', [req.params.id]);
-  res.json({ deleted: true });
+  res.json({ deleted: true, message: 'Expense deleted successfully' });
 });
 
 module.exports = router;
