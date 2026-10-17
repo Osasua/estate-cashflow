@@ -63,16 +63,16 @@ router.post('/', staff, async (req, res) => {
   }
 });
 
-// Create login and send welcome email
+// Create login (Fire-and-forget email to prevent timeouts)
 router.post('/:id/create-login', staff, async (req, res) => {
   const member = await query('SELECT * FROM members WHERE id = $1', [req.params.id]);
-  if (!member.rows[0]) return res.status(404).json({ error: 'Member not found' });
+  if (!member.rows[0]) return res.status(404).json({ message: 'Member not found' });
   
   const m = member.rows[0];
-  if (!m.email) return res.status(400).json({ error: 'Member must have an email address to create a login.' });
+  if (!m.email) return res.status(400).json({ message: 'Member must have an email address to create a login.' });
 
   const existingUser = await query('SELECT id FROM users WHERE member_id = $1', [m.id]);
-  if (existingUser.rows[0]) return res.status(409).json({ error: 'A login account already exists for this member.' });
+  if (existingUser.rows[0]) return res.status(409).json({ message: 'A login account already exists for this member.' });
 
   const tempPassword = crypto.randomBytes(6).toString('hex'); 
   const password_hash = bcrypt.hashSync(tempPassword, 10);
@@ -83,14 +83,16 @@ router.post('/:id/create-login', staff, async (req, res) => {
     [m.household_name, m.email.toLowerCase().trim(), password_hash, m.id]
   );
 
-  try {
-    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    await sendWelcomeEmail(m.email, tempPassword, loginUrl);
-    res.json({ message: `Login created and welcome email sent to ${m.email}!` });
-  } catch (emailError) {
-    console.error('Email sending failed:', emailError);
-    res.json({ message: `Login created for ${m.email}! Email failed. Password: ${tempPassword}` });
-  }
+  // 1. Respond IMMEDIATELY with the password
+  res.json({ 
+    message: `Login created for ${m.email}! New temporary password: ${tempPassword}. (Email is being sent in the background)` 
+  });
+
+  // 2. Fire-and-forget the email in the background
+  const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  sendWelcomeEmail(m.email, tempPassword, loginUrl)
+    .then(() => console.log('✅ Background email sent successfully to', m.email))
+    .catch((emailErr) => console.error('❌ Background email failed for', m.email, ':', emailErr.message || emailErr));
 });
 
 // DELETE a member permanently
@@ -98,63 +100,46 @@ router.delete('/:id', staff, async (req, res) => {
   try {
     const hasHistory = await query('SELECT id FROM contributions WHERE member_id = $1 LIMIT 1', [req.params.id]);
     if (hasHistory.rows.length > 0) {
-      return res.status(400).json({ error: 'Cannot delete member with payment history.' });
+      return res.status(400).json({ message: 'Cannot delete member with payment history.' });
     }
     await query('DELETE FROM members WHERE id = $1', [req.params.id]);
     res.json({ message: 'Member permanently deleted' });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to delete member' });
+    res.status(500).json({ message: 'Failed to delete member' });
   }
 });
 
-// Reset password - BULLETPROOF VERSION
+// MINIMAL Reset Password Route (Fire-and-forget email to prevent timeouts)
 router.post('/:id/reset-password', staff, async (req, res) => {
-  console.log('🔄 Reset password requested for member ID:', req.params.id);
-  
   try {
-    // 1. Generate new password
     const tempPassword = crypto.randomBytes(6).toString('hex');
     const password_hash = bcrypt.hashSync(tempPassword, 10);
-    console.log('Generated new password hash');
 
-    // 2. Update database
     const result = await query(
       `UPDATE users SET password_hash = $1 WHERE member_id = $2 RETURNING email`,
       [password_hash, req.params.id]
     );
 
-    console.log('Database update result:', result.rows);
-
     if (result.rows.length === 0) {
-      console.log('❌ No user found with that member_id');
       return res.status(404).json({ message: 'No login found for this member' });
     }
 
     const userEmail = result.rows[0].email;
-    console.log('✅ Password updated for:', userEmail);
 
-    // 3. Try to send email (but don't let it break the response)
-    let emailStatus = '';
-    try {
-      console.log('Attempting to send email to:', userEmail);
-      const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      await sendWelcomeEmail(userEmail, tempPassword, loginUrl);
-      console.log('✅ Email sent successfully');
-      emailStatus = `Email sent to ${userEmail}.`;
-    } catch (emailErr) {
-      console.error('❌ Email failed:', emailErr.message || emailErr);
-      emailStatus = `Email failed. Password: ${tempPassword}`;
-    }
+    // 1. Respond to the client IMMEDIATELY so there's no timeout or hanging
+    res.json({ 
+      message: `Password reset successful for ${userEmail}! New temporary password: ${tempPassword}. (Email is being sent in the background)` 
+    });
 
-    // 4. ALWAYS return a message
-    const responseMessage = `Password reset for ${userEmail}! ${emailStatus}`;
-    console.log('Sending response:', responseMessage);
-    
-    return res.json({ message: responseMessage });
+    // 2. Fire-and-forget the email sending in the background
+    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    sendWelcomeEmail(userEmail, tempPassword, loginUrl)
+      .then(() => console.log('✅ Background email sent successfully to', userEmail))
+      .catch((emailErr) => console.error('❌ Background email failed for', userEmail, ':', emailErr.message || emailErr));
 
   } catch (err) {
-    console.error(' Critical error in reset-password:', err);
-    return res.status(500).json({ message: `Error: ${err.message}` });
+    console.error('Critical error in reset-password:', err);
+    res.status(500).json({ message: `Error: ${err.message}` });
   }
 });
 
