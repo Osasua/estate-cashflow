@@ -1,9 +1,6 @@
 // Force IPv4 for DNS resolution (fixes Gmail ENETUNREACH on Render)
 require('dns').setDefaultResultOrder('ipv4first');
 
-const express = require('express');
-// ... rest of your existing code ...
-
 require('dotenv').config();
 const { startCronJobs } = require('./cron');
 const path = require('path');
@@ -11,6 +8,7 @@ const express = require('express');
 const cors = require('cors');
 
 const app = express();
+app.set('trust proxy', 1); // Fixes the X-Forwarded-For warning on Render
 
    app.use(cors({ 
      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
