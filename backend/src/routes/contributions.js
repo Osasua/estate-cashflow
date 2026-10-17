@@ -5,7 +5,6 @@ const { authenticate, staff } = require('../auth');
 const router = express.Router();
 router.use(authenticate);
 
-// ✅ FIX: Convert to Number() to prevent string comparison bugs from PostgreSQL
 const statusOf = (r) => {
   const paid = Number(r.amount_paid || 0);
   const due = Number(r.amount_due || 0);
@@ -20,42 +19,56 @@ router.get('/', async (req, res) => {
   const month = +req.query.month || new Date().getMonth() + 1;
   const type = req.query.type || 'monthly';
 
-  const { rows } = await query(
-    `SELECT c.*, m.household_name, m.house_number
-       FROM contributions c JOIN members m ON m.id = c.member_id
-      WHERE c.period_year = $1 AND c.period_month = $2 AND c.type = $3 AND m.active = true
-      ORDER BY m.house_number`,
-    [year, month, type]
-  );
-  res.json({
-    month, year, type,
-    contributions: rows.map((r) => ({ ...r, status: statusOf(r) })),
-  });
+  try {
+    const { rows } = await query(
+      `SELECT c.*, m.household_name, m.house_number
+         FROM contributions c JOIN members m ON m.id = c.member_id
+        WHERE c.period_year = $1 AND c.period_month = $2 AND c.type = $3 AND m.active = true
+        ORDER BY m.house_number`,
+      [year, month, type]
+    );
+    res.json({
+      month, year, type,
+      contributions: rows.map((r) => ({ ...r, status: statusOf(r) })),
+    });
+  } catch (err) {
+    console.error('GET contributions error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // GET defaulters list
 router.get('/defaulters', async (req, res) => {
   const monthsBack = Math.min(+req.query.months || 3, 24);
-  const { rows } = await query(
-    `SELECT m.household_name, m.house_number,
-            COUNT(*)::int AS unpaid_months,
-            SUM(c.amount_due - c.amount_paid) AS total_owed
-       FROM contributions c JOIN members m ON m.id = c.member_id
-      WHERE c.amount_due > c.amount_paid
-        AND m.active = true
-        AND make_date(c.period_year, c.period_month, 1)
-            >= date_trunc('month', CURRENT_DATE) - ($1 || ' months')::interval
-      GROUP BY m.id ORDER BY total_owed DESC`,
-    [monthsBack]
-  );
-  res.json({ defaulters: rows });
+  try {
+    const { rows } = await query(
+      `SELECT m.household_name, m.house_number,
+              COUNT(*)::int AS unpaid_months,
+              SUM(c.amount_due - c.amount_paid) AS total_owed
+         FROM contributions c JOIN members m ON m.id = c.member_id
+        WHERE c.amount_due > c.amount_paid
+          AND m.active = true
+          AND make_date(c.period_year, c.period_month, 1)
+              >= date_trunc('month', CURRENT_DATE) - ($1 || ' months')::interval
+        GROUP BY m.id ORDER BY total_owed DESC`,
+      [monthsBack]
+    );
+    res.json({ defaulters: rows });
+  } catch (err) {
+    console.error('GET defaulters error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// POST generate monthly bills (BULLETPROOF VERSION)
+// POST generate monthly bills (NO AUDIT DEPENDENCY)
 router.post('/generate', staff, async (req, res) => {
   const { month, year, type = 'monthly', amount } = req.body || {};
-  if (!(month >= 1 && month <= 12) || !(year >= 2000 && year <= 2100))
+  
+  console.log('Generate bills request:', { month, year, type, amount });
+  
+  if (!(month >= 1 && month <= 12) || !(year >= 2000 && year <= 2100)) {
     return res.status(400).json({ error: 'Valid month (1-12) and year are required' });
+  }
   
   try {
     const { rowCount } = await query(
@@ -65,21 +78,18 @@ router.post('/generate', staff, async (req, res) => {
       [type, year, month, amount]
     );
     
-    // Safe audit call - won't crash if audit table/function is missing
-    try {
-      const { audit } = require('../audit');
-      await audit(req.user.id, 'generate', 'contributions', null, null, { month, year, type, count: rowCount });
-    } catch (auditErr) {
-      console.warn('⚠️ Audit log skipped (non-critical):', auditErr.message);
-    }
-
+    console.log(`✅ Generated ${rowCount} bills for ${type} ${month}/${year}`);
     res.json({ generated: rowCount });
   } catch (err) {
     console.error('❌ Generate bills failed:', err);
-    // If it's an enum error, give a helpful message
+    
+    // Helpful error messages
     if (err.message.includes('invalid input value for enum')) {
-      return res.status(400).json({ error: `The contribution type '${type}' is not allowed in the database. Please run the fix-contribution-types script.` });
+      return res.status(400).json({ 
+        error: `The type '${type}' is not allowed. Run: node scripts/fix-contribution-types.js` 
+      });
     }
+    
     res.status(500).json({ error: err.message });
   }
 });
@@ -88,8 +98,12 @@ router.post('/generate', staff, async (req, res) => {
 router.post('/payments', staff, async (req, res) => {
   const { member_id, month, year, type = 'monthly', amount, method = 'cash', reference, note } = req.body || {};
   const amt = Number(amount);
-  if (!member_id || !(month >= 1 && month <= 12) || !(year >= 2000 && year <= 2100) || !(amt > 0))
+  
+  console.log('Payment request:', { member_id, month, year, type, amount });
+  
+  if (!member_id || !(month >= 1 && month <= 12) || !(year >= 2000 && year <= 2100) || !(amt > 0)) {
     return res.status(400).json({ error: 'member_id, month, year and a positive amount are required' });
+  }
   
   if (reference) {
     const existing = await query('SELECT id FROM payments WHERE reference = $1', [reference]);
