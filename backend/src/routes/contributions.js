@@ -75,7 +75,7 @@ router.post('/generate', staff, async (req, res) => {
       `INSERT INTO contributions (member_id, type, period_year, period_month, amount_due)
          SELECT id, $1, $2, $3, CASE WHEN $4 > 0 THEN $4 ELSE monthly_due END FROM members WHERE active = true
        ON CONFLICT (member_id, type, period_year, period_month) DO NOTHING`,
-      [type, year, month, amount]
+            [type, year, month, Number(amount) || 0]
     );
     
     console.log(`✅ Generated ${rowCount} bills for ${type} ${month}/${year}`);
