@@ -118,17 +118,23 @@ export default function Expenses() {
   };
 
   const handleEdit = (expense) => {
-    setEditingId(expense.id);
-    setForm({
-      date: expense.spent_on,
-      description: expense.description,
-      vendor: expense.vendor || '',
-      category_id: expense.category_id,
-      amount: expense.amount.toString(),
-      receipt: null,
-    });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  // Normalize date to YYYY-MM-DD format (HTML date input is strict about this)
+  const rawDate = expense.spent_on;
+  const normalizedDate = rawDate 
+    ? new Date(rawDate).toISOString().split('T')[0] 
+    : new Date().toISOString().split('T')[0];
+
+  setEditingId(expense.id);
+  setForm({
+    date: normalizedDate,
+    description: expense.description,
+    vendor: expense.vendor || '',
+    category_id: expense.category_id,
+    amount: expense.amount.toString(),
+    receipt: null,
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this expense? This cannot be undone.')) return;
