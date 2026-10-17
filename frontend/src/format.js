@@ -1,9 +1,10 @@
-export const naira = (n) =>
-  new Intl.NumberFormat('en-NG', {
-    style: 'currency',
-    currency: 'NGN',
-    maximumFractionDigits: 0,
-  }).format(Number(n) || 0);
+export const naira = (amount) => {
+  const num = Number(amount) || 0;
+  return '₦' + num.toLocaleString('en-NG', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
 
 export const fmtDate = (d) =>
   new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
