@@ -12,15 +12,29 @@ export default function Expenses() {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const [form, setForm] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`,
     description: '',
     vendor: '',
     category_id: '',
     amount: '',
+    receipt: null,
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [editingId, setEditingId] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
+
+  // Reset to page 1 when month/year changes
+  useEffect(() => { setCurrentPage(1); }, [month, year]);
+
+  // Update form date to 1st of selected month when month/year changes (only if not editing)
+  useEffect(() => {
+    if (!editingId) {
+      const firstDay = `${year}-${String(month).padStart(2, '0')}-01`;
+      setForm(prev => ({ ...prev, date: firstDay }));
+    }
+  }, [month, year]);
 
   useEffect(() => {
     loadExpenses();
@@ -52,6 +66,7 @@ export default function Expenses() {
 
     try {
       if (editingId) {
+        // Update - send as JSON
         await api(`/expenses/${editingId}`, {
           method: 'PUT',
           body: {
@@ -64,12 +79,16 @@ export default function Expenses() {
         });
         setMessage('✅ Expense updated successfully');
       } else {
+        // Create - send as FormData (supports file upload)
         const formData = new FormData();
         formData.append('date', form.date);
         formData.append('description', form.description);
         formData.append('vendor', form.vendor);
         formData.append('category_id', form.category_id);
         formData.append('amount', form.amount);
+        if (form.receipt) {
+          formData.append('receipt', form.receipt);
+        }
 
         await api('/expenses', {
           method: 'POST',
@@ -79,12 +98,15 @@ export default function Expenses() {
         setMessage('✅ Expense recorded successfully');
       }
 
+      // Reset form to 1st of currently selected month
+      const firstDay = `${year}-${String(month).padStart(2, '0')}-01`;
       setForm({
-        date: new Date().toISOString().split('T')[0],
+        date: firstDay,
         description: '',
         vendor: '',
         category_id: '',
         amount: '',
+        receipt: null,
       });
       setEditingId(null);
       loadExpenses();
@@ -103,12 +125,13 @@ export default function Expenses() {
       vendor: expense.vendor || '',
       category_id: expense.category_id,
       amount: expense.amount.toString(),
+      receipt: null,
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this expense?')) return;
+    if (!window.confirm('Delete this expense? This cannot be undone.')) return;
     try {
       await api(`/expenses/${id}`, { method: 'DELETE' });
       setMessage('✅ Expense deleted');
@@ -119,15 +142,28 @@ export default function Expenses() {
   };
 
   const totalSpent = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+  const totalPages = Math.ceil(expenses.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedExpenses = expenses.slice(startIndex, endIndex);
+
+  const kpiStyle = (color) => ({
+    background: '#fff',
+    padding: '20px 24px',
+    borderRadius: '8px',
+    border: '1px solid #e5e7eb',
+    borderLeft: `4px solid ${color}`,
+    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+  });
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px 0' }}>
       <h1 style={{ margin: '0 0 24px 0', fontSize: '1.5rem', fontWeight: '600', color: '#1f2937' }}>
-        Expenses - {MONTHS[month - 1]} {year}
+        Expenses
       </h1>
 
       {/* Month/Year Selector */}
-      <div style={{ background: '#fff', padding: '16px 20px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
+      <div style={{ background: '#fff', padding: '16px 20px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div>
           <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>Month</label>
           <select value={month} onChange={(e) => setMonth(+e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', minWidth: '120px' }}>
@@ -140,10 +176,16 @@ export default function Expenses() {
         </div>
       </div>
 
-      {/* KPI Card */}
-      <div style={{ background: '#fff', padding: '20px 24px', borderRadius: '8px', border: '1px solid #e5e7eb', borderLeft: '4px solid #ef4444', marginBottom: '24px' }}>
-        <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Total Spent ({MONTHS[month - 1]} {year})</div>
-        <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#111827' }}>{naira(totalSpent)}</div>
+      {/* KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+        <div style={kpiStyle('#ef4444')}>
+          <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Total Spent ({MONTHS[month - 1]} {year})</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#111827' }}>{naira(totalSpent)}</div>
+        </div>
+        <div style={kpiStyle('#10b981')}>
+          <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Total Transactions</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#111827' }}>{expenses.length}</div>
+        </div>
       </div>
 
       {/* Form */}
@@ -175,7 +217,7 @@ export default function Expenses() {
               <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151', fontSize: '0.875rem' }}>Category</label>
               <select required value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }}>
                 <option value="">Select category</option>
-                {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                {categories.filter(c => c.is_active !== false).map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
               </select>
             </div>
             <div>
@@ -194,9 +236,20 @@ export default function Expenses() {
             <input type="text" value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} placeholder="Who received the payment?" style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }} />
           </div>
 
+          {!editingId && (
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151', fontSize: '0.875rem' }}>Receipt (Optional)</label>
+              <input type="file" accept="image/*,.pdf" onChange={(e) => setForm({ ...form, receipt: e.target.files[0] })} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }} />
+            </div>
+          )}
+
           <div style={{ textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
             {editingId && (
-              <button type="button" onClick={() => { setEditingId(null); setForm({ date: new Date().toISOString().split('T')[0], description: '', vendor: '', category_id: '', amount: '' }); }} style={{ padding: '8px 24px', background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontWeight: '500', fontSize: '0.875rem' }}>
+              <button type="button" onClick={() => {
+                setEditingId(null);
+                const firstDay = `${year}-${String(month).padStart(2, '0')}-01`;
+                setForm({ date: firstDay, description: '', vendor: '', category_id: '', amount: '', receipt: null });
+              }} style={{ padding: '8px 24px', background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontWeight: '500', fontSize: '0.875rem' }}>
                 Cancel
               </button>
             )}
@@ -218,42 +271,67 @@ export default function Expenses() {
             No expenses found for {MONTHS[month - 1]} {year}
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead style={{ background: '#f9fafb' }}>
-                <tr>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Date</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Description</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Category</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Vendor</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Amount</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {expenses.map((expense, idx) => {
-                  const category = categories.find(c => c.id === expense.category_id);
-                  return (
-                    <tr key={expense.id} style={{ borderBottom: idx !== expenses.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
-                      <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#374151' }}>{fmtDate(expense.spent_on)}</td>
-                      <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#1f2937' }}>{expense.description}</td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span style={{ display: 'inline-block', padding: '3px 10px', background: '#f3f4f6', color: '#374151', borderRadius: '4px', fontSize: '0.75rem' }}>
-                          {category?.name || expense.category_id}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#6b7280' }}>{expense.vendor || '-'}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', fontWeight: '500', color: '#1f2937' }}>{naira(expense.amount)}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <button onClick={() => handleEdit(expense)} style={{ padding: '4px 10px', background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', marginRight: '6px' }}>Edit</button>
-                        <button onClick={() => handleDelete(expense.id)} style={{ padding: '4px 10px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}>Delete</button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead style={{ background: '#f9fafb' }}>
+                  <tr>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Date</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Description</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Category</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Vendor</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Amount</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedExpenses.map((expense, idx) => {
+                    const category = categories.find(c => c.id === expense.category_id);
+                    return (
+                      <tr key={expense.id} style={{ borderBottom: idx !== paginatedExpenses.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                        <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#374151' }}>{fmtDate(expense.spent_on)}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#1f2937' }}>{expense.description}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ display: 'inline-block', padding: '3px 10px', background: '#f3f4f6', color: '#374151', borderRadius: '4px', fontSize: '0.75rem' }}>
+                            {category?.name || expense.category_id}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#6b7280' }}>{expense.vendor || '-'}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', fontWeight: '500', color: '#1f2937' }}>{naira(expense.amount)}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <button onClick={() => handleEdit(expense)} style={{ padding: '4px 10px', background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', marginRight: '6px' }}>Edit</button>
+                          <button onClick={() => handleDelete(expense.id)} style={{ padding: '4px 10px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}>Delete</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f9fafb' }}>
+                <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+                  {startIndex + 1}-{Math.min(endIndex, expenses.length)} of {expenses.length}
+                </div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} style={{ padding: '6px 12px', border: '1px solid #d1d5db', background: currentPage === 1 ? '#f3f4f6' : '#fff', color: currentPage === 1 ? '#9ca3af' : '#374151', borderRadius: '4px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.875rem' }}>Previous</button>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) pageNum = i + 1;
+                    else if (currentPage <= 3) pageNum = i + 1;
+                    else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                    else pageNum = currentPage - 2 + i;
+                    return (
+                      <button key={pageNum} onClick={() => setCurrentPage(pageNum)} style={{ padding: '6px 12px', border: '1px solid #d1d5db', background: currentPage === pageNum ? '#4f46e5' : '#fff', color: currentPage === pageNum ? '#fff' : '#374151', borderRadius: '4px', cursor: 'pointer', fontSize: '0.875rem' }}>{pageNum}</button>
+                    );
+                  })}
+                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} style={{ padding: '6px 12px', border: '1px solid #d1d5db', background: currentPage === totalPages ? '#f3f4f6' : '#fff', color: currentPage === totalPages ? '#9ca3af' : '#374151', borderRadius: '4px', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontSize: '0.875rem' }}>Next</button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
