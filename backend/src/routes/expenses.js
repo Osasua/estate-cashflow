@@ -27,14 +27,23 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }
 });
 
-// --- EXPENSE ROUTES ---
+// --- EXPENSE ROUTES (WITH MONTH/YEAR FILTERING) ---
 router.get('/', async (req, res) => {
-  const { from, to, category_id } = req.query;
+  const { month, year, from, to, category_id } = req.query;
   const where = [];
   const params = [];
+  
+  // If month/year provided, filter by that specific month
+  if (month && year) {
+    params.push(month, year);
+    where.push(`EXTRACT(MONTH FROM e.spent_on) = $${params.length - 1} AND EXTRACT(YEAR FROM e.spent_on) = $${params.length}`);
+  }
+  
+  // Additional date range filter
   if (from) { params.push(from); where.push(`e.spent_on >= $${params.length}`); }
   if (to) { params.push(to); where.push(`e.spent_on <= $${params.length}`); }
   if (category_id) { params.push(category_id); where.push(`e.category_id = $${params.length}`); }
+  
   const { rows } = await query(
     `SELECT e.*, c.name AS category
        FROM expenses e LEFT JOIN categories c ON c.id = e.category_id
@@ -109,13 +118,11 @@ router.put('/categories/:id', staff, async (req, res) => {
   res.json({ category: rows[0] });
 });
 
-// --- EXPENSE CREATION (FIXED DATE HANDLING) ---
+// --- EXPENSE CREATION ---
 router.post('/', staff, upload.single('receipt'), async (req, res) => {
-  // ✅ FIX: Look for BOTH 'date' (from frontend) and 'spent_on'
   const { category_id, amount, description, vendor, date, spent_on } = req.body || {};
   const amt = Number(amount);
   
-  // ✅ FIX: Use the provided date, fallback to today ONLY if truly missing
   const expenseDate = date || spent_on || new Date().toISOString().split('T')[0];
   
   if (!(amt > 0) || !description) {
@@ -123,10 +130,9 @@ router.post('/', staff, upload.single('receipt'), async (req, res) => {
   }
 
   const receiptUrl = req.file 
-    ? `/uploads/${req.file.filename}` // Clean relative path (adjust if your frontend needs full URL)
+    ? `/uploads/${req.file.filename}`
     : (req.body.receipt_url || null);
 
-  // ✅ FIX: Removed COALESCE(..., CURRENT_DATE). We now strictly use expenseDate.
   const { rows } = await query(
     `INSERT INTO expenses (category_id, amount, description, vendor, spent_on, receipt_url, recorded_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
@@ -136,9 +142,10 @@ router.post('/', staff, upload.single('receipt'), async (req, res) => {
   res.status(201).json({ expense: rows[0], message: 'Expense recorded successfully' });
 });
 
-// --- EXPENSE UPDATE ---
+// --- EXPENSE UPDATE (WITH FULL FIELD SUPPORT) ---
 router.put('/:id', staff, async (req, res) => {
   const { category_id, amount, description, vendor, spent_on, receipt_url } = req.body || {};
+  
   const old = await query('SELECT * FROM expenses WHERE id = $1', [req.params.id]);
   if (!old.rows[0]) return res.status(404).json({ error: 'Expense not found' });
   
