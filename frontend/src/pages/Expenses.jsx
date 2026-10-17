@@ -3,7 +3,8 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { naira, fmtDate } from '../format';
 
-// ✅ FIX 1: Removed 'gardening' and 'water' from the fallback list
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
 const CATEGORIES = [
   { id: 'cleaning', name: 'Cleaning', color: '#6b7280' },
   { id: 'electricity', name: 'Electricity', color: '#6b7280' },
@@ -18,6 +19,8 @@ export default function Expenses() {
   const { user } = useAuth();
   const [expenses, setExpenses] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [year, setYear] = useState(new Date().getFullYear());
   const [form, setForm] = useState({
     date: new Date().toISOString().split('T')[0],
     description: '',
@@ -28,26 +31,22 @@ export default function Expenses() {
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const [dateRange, setDateRange] = useState({
-    start: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
-    end: new Date().toISOString().split('T')[0],
-  });
-
+  const [editingId, setEditingId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
   useEffect(() => {
     loadExpenses();
     loadCategories();
-  }, [dateRange]);
+  }, [month, year]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateRange]);
+  }, [month, year]);
 
   const loadExpenses = async () => {
     try {
-      const data = await api(`/expenses?start=${dateRange.start}&end=${dateRange.end}`);
+      const data = await api(`/expenses?month=${month}&year=${year}`);
       setExpenses(data.expenses || []);
     } catch (e) {
       setMessage(e.message);
@@ -79,13 +78,29 @@ export default function Expenses() {
         formData.append('receipt', form.receipt);
       }
 
-      await api('/expenses', {
-        method: 'POST',
-        body: formData,
-        headers: {}, // Let browser set multipart/form-data automatically
-      });
+      if (editingId) {
+        // Update existing expense
+        await api(`/expenses/${editingId}`, {
+          method: 'PUT',
+          body: {
+            date: form.date,
+            description: form.description,
+            vendor: form.vendor,
+            category_id: form.category_id,
+            amount: form.amount,
+          },
+        });
+        setMessage('Expense updated successfully');
+      } else {
+        // Create new expense
+        await api('/expenses', {
+          method: 'POST',
+          body: formData,
+          headers: {},
+        });
+        setMessage('Expense recorded successfully');
+      }
 
-      setMessage('Expense recorded successfully');
       setForm({
         date: new Date().toISOString().split('T')[0],
         description: '',
@@ -94,11 +109,38 @@ export default function Expenses() {
         amount: '',
         receipt: null,
       });
+      setEditingId(null);
       loadExpenses();
     } catch (e) {
       setMessage(e.message || 'Failed to record expense');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEdit = (expense) => {
+    setEditingId(expense.id);
+    setForm({
+      date: expense.spent_on,
+      description: expense.description,
+      vendor: expense.vendor || '',
+      category_id: expense.category_id,
+      amount: expense.amount.toString(),
+      receipt: null,
+    });
+    // Scroll to form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this expense? This cannot be undone.')) return;
+    
+    try {
+      await api(`/expenses/${id}`, { method: 'DELETE' });
+      setMessage('Expense deleted successfully');
+      loadExpenses();
+    } catch (e) {
+      setMessage(e.message || 'Failed to delete expense');
     }
   };
 
@@ -110,12 +152,6 @@ export default function Expenses() {
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     })
     .reduce((sum, e) => sum + Number(e.amount), 0);
-
-  const quickDates = [
-    { label: 'Today', start: new Date().toISOString().split('T')[0], end: new Date().toISOString().split('T')[0] },
-    { label: 'This Week', start: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0], end: new Date().toISOString().split('T')[0] },
-    { label: 'This Month', start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0], end: new Date().toISOString().split('T')[0] },
-  ];
 
   const totalPages = Math.ceil(expenses.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -138,7 +174,7 @@ export default function Expenses() {
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
         <div style={kpiStyle('#ef4444')}>
-          <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Total Spent (Selected Period)</div>
+          <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Total Spent ({MONTHS[month - 1]} {year})</div>
           <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#111827' }}>{naira(totalSpent)}</div>
         </div>
         <div style={kpiStyle('#4f46e5')}>
@@ -151,47 +187,25 @@ export default function Expenses() {
         </div>
       </div>
 
-      {/* Date Filter */}
-      <div style={{ background: '#fff', padding: '16px 20px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
-          {quickDates.map((qd) => (
-            <button
-              key={qd.label}
-              onClick={() => setDateRange({ start: qd.start, end: qd.end })}
-              style={{
-                padding: '6px 12px',
-                border: '1px solid #e5e7eb',
-                background: '#fff',
-                color: '#374151',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '0.875rem',
-              }}
-            >
-              {qd.label}
-            </button>
-          ))}
+      {/* Month/Year Selector */}
+      <div style={{ background: '#fff', padding: '16px 20px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div>
+          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>Month</label>
+          <select value={month} onChange={(e) => setMonth(+e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', minWidth: '120px' }}>
+            {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
         </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <input
-            type="date"
-            value={dateRange.start}
-            onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-            style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem' }}
-          />
-          <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>to</span>
-          <input
-            type="date"
-            value={dateRange.end}
-            onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-            style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem' }}
-          />
+        <div>
+          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>Year</label>
+          <input type="number" value={year} onChange={(e) => setYear(+e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', width: '90px' }} />
         </div>
       </div>
 
-      {/* Record New Expense Form */}
+      {/* Record/Edit Expense Form */}
       <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', padding: '24px', marginBottom: '24px' }}>
-        <h2 style={{ margin: '0 0 20px 0', fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>Record New Expense</h2>
+        <h2 style={{ margin: '0 0 20px 0', fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>
+          {editingId ? 'Edit Expense' : 'Record New Expense'}
+        </h2>
         
         {message && (
           <div style={{
@@ -227,7 +241,6 @@ export default function Expenses() {
                 style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }}
               >
                 <option value="">Select category</option>
-                {/* ✅ FIX 2: Filter out inactive/hidden categories from the dropdown */}
                 {categories
                   .filter((cat) => cat.is_active !== false)
                   .map((cat) => (
@@ -283,7 +296,35 @@ export default function Expenses() {
             />
           </div>
 
-          <div style={{ textAlign: 'right' }}>
+          <div style={{ textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            {editingId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingId(null);
+                  setForm({
+                    date: new Date().toISOString().split('T')[0],
+                    description: '',
+                    vendor: '',
+                    category_id: '',
+                    amount: '',
+                    receipt: null,
+                  });
+                }}
+                style={{
+                  padding: '8px 24px',
+                  background: '#fff',
+                  color: '#374151',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  fontSize: '0.875rem',
+                }}
+              >
+                Cancel Edit
+              </button>
+            )}
             <button
               type="submit"
               disabled={loading}
@@ -298,21 +339,23 @@ export default function Expenses() {
                 fontSize: '0.875rem',
               }}
             >
-              {loading ? 'Recording...' : 'Record Expense'}
+              {loading ? (editingId ? 'Updating...' : 'Recording...') : (editingId ? 'Update Expense' : 'Record Expense')}
             </button>
           </div>
         </form>
       </div>
 
-      {/* Recent Expenses Table */}
+      {/* Expenses Table */}
       <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
-          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>Recent Expenses</h2>
+          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>
+            Expenses for {MONTHS[month - 1]} {year}
+          </h2>
         </div>
         
         {expenses.length === 0 ? (
           <div style={{ padding: '40px 20px', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>
-            No expenses found for this period
+            No expenses found for {MONTHS[month - 1]} {year}
           </div>
         ) : (
           <>
@@ -325,6 +368,7 @@ export default function Expenses() {
                     <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Category</th>
                     <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Vendor</th>
                     <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Amount</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -348,6 +392,37 @@ export default function Expenses() {
                         </td>
                         <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#6b7280' }}>{expense.vendor || '-'}</td>
                         <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', fontWeight: '500', color: '#1f2937' }}>{naira(expense.amount)}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <button
+                            onClick={() => handleEdit(expense)}
+                            style={{
+                              padding: '4px 10px',
+                              background: '#fef3c7',
+                              color: '#92400e',
+                              border: '1px solid #fcd34d',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem',
+                              marginRight: '6px',
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(expense.id)}
+                            style={{
+                              padding: '4px 10px',
+                              background: '#fee2e2',
+                              color: '#991b1b',
+                              border: '1px solid #fecaca',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem',
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
