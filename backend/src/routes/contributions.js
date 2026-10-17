@@ -6,9 +6,14 @@ const { audit } = require('../audit');
 const router = express.Router();
 router.use(authenticate);
 
-const statusOf = (r) =>
-  r.amount_paid >= r.amount_due && r.amount_due > 0 ? 'paid'
-  : r.amount_paid > 0 ? 'partial' : 'pending';
+// ✅ FIX: Convert to Number() to prevent string comparison bugs from PostgreSQL
+const statusOf = (r) => {
+  const paid = Number(r.amount_paid || 0);
+  const due = Number(r.amount_due || 0);
+  if (due > 0 && paid >= due) return 'paid';
+  if (paid > 0) return 'partial';
+  return 'pending';
+};
 
 // GET contributions for a specific month/year/type
 router.get('/', async (req, res) => {
