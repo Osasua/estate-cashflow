@@ -1,3 +1,9 @@
+// Force IPv4 for DNS resolution (fixes Gmail ENETUNREACH on Render)
+require('dns').setDefaultResultOrder('ipv4first');
+
+const express = require('express');
+// ... rest of your existing code ...
+
 require('dotenv').config();
 const { startCronJobs } = require('./cron');
 const path = require('path');
