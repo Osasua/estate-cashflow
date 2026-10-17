@@ -117,7 +117,7 @@ export default function Members() {
     }
   };
 
-      const handleResetPassword = async (id) => {
+  const handleResetPassword = async (id) => {
     if (!window.confirm('Reset password for this member?')) return;
     try {
       const res = await api(`/members/${id}/reset-password`, { method: 'POST' });
@@ -234,11 +234,18 @@ export default function Members() {
                       )}
                     </td>
                     
+                    {/* FIXED: Added visible labels above the edit inputs */}
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', fontWeight: '600', color: (member.outstanding_balance || 0) > 0 ? '#ef4444' : '#10b981' }}>
                       {editingId === member.id ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
-                          <input type="number" placeholder="Monthly Due" value={formData.monthly_due} onChange={e => setFormData({...formData, monthly_due: Number(e.target.value)})} style={{...inputStyle, width: '100px', textAlign: 'right'}} />
-                          <input type="number" placeholder="Prev. Arrears" value={formData.opening_balance} onChange={e => setFormData({...formData, opening_balance: Number(e.target.value)})} style={{...inputStyle, width: '100px', textAlign: 'right'}} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                          <div>
+                            <div style={{ fontSize: '0.65rem', color: '#6b7280', textAlign: 'right', marginBottom: '2px' }}>Monthly Due (₦)</div>
+                            <input type="number" value={formData.monthly_due} onChange={e => setFormData({...formData, monthly_due: Number(e.target.value)})} style={{...inputStyle, width: '110px', textAlign: 'right'}} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.65rem', color: '#6b7280', textAlign: 'right', marginBottom: '2px' }}>Prev. Year Arrears (₦)</div>
+                            <input type="number" value={formData.opening_balance} onChange={e => setFormData({...formData, opening_balance: Number(e.target.value)})} style={{...inputStyle, width: '110px', textAlign: 'right'}} />
+                          </div>
                         </div>
                       ) : naira(member.outstanding_balance || 0)}
                     </td>
