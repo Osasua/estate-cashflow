@@ -13,7 +13,7 @@ const statusOf = (r) => {
   return 'pending';
 };
 
-// GET contributions for a specific month/year/type (includes inactive members for historical accuracy)
+// GET contributions (now includes payment references)
 router.get('/', async (req, res) => {
   const year = +req.query.year || new Date().getFullYear();
   const month = +req.query.month || new Date().getMonth() + 1;
@@ -21,7 +21,9 @@ router.get('/', async (req, res) => {
 
   try {
     const { rows } = await query(
-      `SELECT c.*, m.household_name, m.house_number, m.active
+      `SELECT c.*, m.household_name, m.house_number, m.active,
+              (SELECT string_agg(reference, ', ' ORDER BY id) 
+                 FROM payments WHERE contribution_id = c.id) AS references
          FROM contributions c JOIN members m ON m.id = c.member_id
         WHERE c.period_year = $1 AND c.period_month = $2 AND c.type = $3
         ORDER BY m.house_number`,
@@ -60,36 +62,58 @@ router.get('/defaulters', async (req, res) => {
   }
 });
 
-// POST generate monthly bills (NO AUDIT DEPENDENCY)
+// POST generate monthly bills
 router.post('/generate', staff, async (req, res) => {
   const { month, year, type = 'monthly', amount } = req.body || {};
-  
-  console.log('Generate bills request:', { month, year, type, amount });
-  
-  if (!(month >= 1 && month <= 12) || !(year >= 2000 && year <= 2100)) {
+  if (!(month >= 1 && month <= 12) || !(year >= 2000 && year <= 2100))
     return res.status(400).json({ error: 'Valid month (1-12) and year are required' });
-  }
-  
+
   try {
     const { rowCount } = await query(
       `INSERT INTO contributions (member_id, type, period_year, period_month, amount_due)
          SELECT id, $1, $2, $3, CASE WHEN $4 > 0 THEN $4 ELSE monthly_due END FROM members WHERE active = true
        ON CONFLICT (member_id, type, period_year, period_month) DO NOTHING`,
-            [type, year, month, Number(amount) || 0]
+      [type, year, month, Number(amount) || 0]
     );
-    
     console.log(`✅ Generated ${rowCount} bills for ${type} ${month}/${year}`);
     res.json({ generated: rowCount });
   } catch (err) {
     console.error('❌ Generate bills failed:', err);
-    
-    // Helpful error messages
     if (err.message.includes('invalid input value for enum')) {
-      return res.status(400).json({ 
-        error: `The type '${type}' is not allowed. Run: node scripts/fix-contribution-types.js` 
-      });
+      return res.status(400).json({ error: `Type '${type}' not allowed. Run fix-contribution-types script.` });
     }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ NEW: EDIT a contribution directly (for correcting wrong figures)
+router.put('/:id', staff, async (req, res) => {
+  try {
+    const { amount_due, amount_paid } = req.body || {};
     
+    // Validate
+    const newDue = amount_due !== undefined ? Number(amount_due) : null;
+    const newPaid = amount_paid !== undefined ? Number(amount_paid) : null;
+    
+    if (newDue !== null && newDue < 0) return res.status(400).json({ error: 'Amount due cannot be negative' });
+    if (newPaid !== null && newPaid < 0) return res.status(400).json({ error: 'Amount paid cannot be negative' });
+
+    const { rows } = await query(
+      `UPDATE contributions SET 
+         amount_due = COALESCE($2, amount_due),
+         amount_paid = COALESCE($3, amount_paid)
+       WHERE id = $1 RETURNING *`,
+      [req.params.id, newDue, newPaid]
+    );
+    
+    if (rows.length === 0) return res.status(404).json({ error: 'Contribution not found' });
+    
+    res.json({ 
+      contribution: { ...rows[0], status: statusOf(rows[0]) },
+      message: 'Contribution updated successfully'
+    });
+  } catch (err) {
+    console.error('PUT contribution error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -98,12 +122,8 @@ router.post('/generate', staff, async (req, res) => {
 router.post('/payments', staff, async (req, res) => {
   const { member_id, month, year, type = 'monthly', amount, method = 'cash', reference, note } = req.body || {};
   const amt = Number(amount);
-  
-  console.log('Payment request:', { member_id, month, year, type, amount });
-  
-  if (!member_id || !(month >= 1 && month <= 12) || !(year >= 2000 && year <= 2100) || !(amt > 0)) {
+  if (!member_id || !(month >= 1 && month <= 12) || !(year >= 2000 && year <= 2100) || !(amt > 0))
     return res.status(400).json({ error: 'member_id, month, year and a positive amount are required' });
-  }
   
   if (reference) {
     const existing = await query('SELECT id FROM payments WHERE reference = $1', [reference]);

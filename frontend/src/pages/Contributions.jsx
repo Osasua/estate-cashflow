@@ -13,7 +13,6 @@ const CONTRIBUTION_TYPES = [
   { id: 'welfare', label: 'Welfare' },
 ];
 
-// ✅ Unified KPI Card Style
 const kpiStyle = (color) => ({
   background: '#fff',
   padding: '20px 24px',
@@ -34,6 +33,7 @@ export default function Contributions() {
   const [rows, setRows] = useState([]);
   const [onlyDefaulters, setOnlyDefaulters] = useState(false);
   const [paying, setPaying] = useState(null);
+  const [editing, setEditing] = useState(null); // { id, amount_due, amount_paid }
   const [form, setForm] = useState({ amount: '', method: 'cash', reference: '' });
   const [message, setMessage] = useState('');
   const [billAmount, setBillAmount] = useState('');
@@ -46,9 +46,13 @@ export default function Contributions() {
   useEffect(() => { load(); }, [month, year, type]);
 
   const generate = async (amount) => {
-    const res = await api('/contributions/generate', { method: 'POST', body: { month, year, type, amount } });
-    setMessage(`${res.generated} bill(s) generated for ${MONTHS[month - 1]} ${year}.`);
-    load();
+    try {
+      const res = await api('/contributions/generate', { method: 'POST', body: { month, year, type, amount } });
+      setMessage(`✅ ${res.generated} bill(s) generated for ${MONTHS[month - 1]} ${year}.`);
+      load();
+    } catch (err) {
+      setMessage(`❌ ${err.message}`);
+    }
   };
 
   const recordPayment = async (e) => {
@@ -63,13 +67,10 @@ export default function Contributions() {
         },
       });
       
-      // Build detailed success message from waterfall allocation
       let msg = res.message || 'Payment recorded.';
       if (res.allocations && res.allocations.length > 0) {
-        // ✅ FIX: Show "Previous Year Arrears" instead of "December 2025"
         const monthLabel = (a) => a.type === 'arrears' ? 'Previous Year Arrears' : `${MONTHS[a.month - 1]} ${a.year}`;
         const monthsCovered = res.allocations.map(monthLabel).join(', ');
-        
         msg = `✅ Payment of ${naira(Number(form.amount))} allocated to: ${monthsCovered}.`;
         if (res.credit_balance > 0) {
           msg += ` Credit balance: ${naira(res.credit_balance)}.`;
@@ -85,6 +86,35 @@ export default function Contributions() {
     }
   };
 
+  // ✅ NEW: Start editing a contribution
+  const startEdit = (row) => {
+    setEditing({
+      id: row.id,
+      amount_due: row.amount_due,
+      amount_paid: row.amount_paid,
+    });
+  };
+
+  // ✅ NEW: Save edited contribution
+  const saveEdit = async (id) => {
+    try {
+      await api(`/contributions/${id}`, {
+        method: 'PUT',
+        body: {
+          amount_due: Number(editing.amount_due),
+          amount_paid: Number(editing.amount_paid),
+        },
+      });
+      setMessage('✅ Contribution updated successfully.');
+      setEditing(null);
+      load();
+    } catch (err) {
+      setMessage(`❌ ${err.message}`);
+    }
+  };
+
+  const cancelEdit = () => setEditing(null);
+
   const filtered = onlyDefaulters ? rows.filter((r) => r.status !== 'paid') : rows;
   const collected = rows.reduce((s, r) => s + Number(r.amount_paid), 0);
   const expected = rows.reduce((s, r) => s + Number(r.amount_due), 0);
@@ -95,7 +125,7 @@ export default function Contributions() {
         {type === 'end-of-year' ? 'End of Year' : type.charAt(0).toUpperCase() + type.slice(1)} Contributions
       </h1>
       
-      {/* Clean Tab Navigation */}
+      {/* Tab Navigation */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', borderBottom: '2px solid #e5e7eb' }}>
         {CONTRIBUTION_TYPES.map((t) => (
           <button
@@ -155,7 +185,7 @@ export default function Contributions() {
         )}
       </div>
 
-      {/* ✅ Unified KPI Cards */}
+      {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
         <div style={kpiStyle('#4f46e5')}>
           <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Expected</div>
@@ -228,18 +258,18 @@ export default function Contributions() {
       {message && (
         <div style={{ 
           padding: '12px 16px', 
-          background: message.includes('✅') || message.includes('generated') ? '#f0fdf4' : '#fef2f2', 
-          color: message.includes('✅') || message.includes('generated') ? '#166534' : '#991b1b', 
+          background: message.includes('✅') ? '#f0fdf4' : '#fef2f2', 
+          color: message.includes('✅') ? '#166534' : '#991b1b', 
           borderRadius: '6px', 
           marginBottom: '24px', 
           fontSize: '0.875rem',
-          border: `1px solid ${message.includes('✅') || message.includes('generated') ? '#bbf7d0' : '#fecaca'}`
+          border: `1px solid ${message.includes('✅') ? '#bbf7d0' : '#fecaca'}`
         }}>
           {message}
         </div>
       )}
 
-      {/* Clean Table */}
+      {/* Table */}
       <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -250,43 +280,83 @@ export default function Contributions() {
                 <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Due</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Paid</th>
                 <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Status</th>
-                {staff && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Action</th>}
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Reference</th>
+                {staff && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r, idx) => (
-                <tr key={r.id} style={{ borderBottom: idx !== filtered.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
-                  <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#374151' }}>{r.house_number}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#1f2937', fontWeight: '500' }}>{r.household_name}</td>
-                  <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', color: '#1f2937' }}>{naira(r.amount_due)}</td>
-                  <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', color: '#1f2937' }}>{naira(r.amount_paid)}</td>
-                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                    <span style={{ 
-                      padding: '4px 12px', 
-                      borderRadius: '12px', 
-                      fontSize: '0.75rem', 
-                      fontWeight: '600', 
-                      background: r.status === 'paid' ? '#dcfce7' : r.status === 'partial' ? '#fef3c7' : '#fee2e2', 
-                      color: r.status === 'paid' ? '#166534' : r.status === 'partial' ? '#92400e' : '#991b1b' 
-                    }}>
-                      {r.status}
-                    </span>
-                  </td>
-                  {staff && (
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      <button 
-                        onClick={() => setPaying(r)} 
-                        style={{ padding: '6px 12px', background: 'transparent', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', color: '#374151' }}
-                      >
-                        {r.status === 'paid' ? 'Add Payment' : 'Record Payment'}
-                      </button>
+              {filtered.map((r, idx) => {
+                const isEditing = editing && editing.id === r.id;
+                return (
+                  <tr key={r.id} style={{ borderBottom: idx !== filtered.length - 1 ? '1px solid #f3f4f6' : 'none', background: r.active === false ? '#fafafa' : 'transparent', opacity: r.active === false ? 0.7 : 1 }}>
+                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#374151' }}>{r.house_number}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#1f2937', fontWeight: '500' }}>{r.household_name}</td>
+                    
+                    {/* Due column - editable */}
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', color: '#1f2937' }}>
+                      {isEditing ? (
+                        <input 
+                          type="number" 
+                          value={editing.amount_due} 
+                          onChange={(e) => setEditing({ ...editing, amount_due: e.target.value })}
+                          style={{ width: '110px', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', textAlign: 'right' }}
+                        />
+                      ) : naira(r.amount_due)}
                     </td>
-                  )}
-                </tr>
-              ))}
+                    
+                    {/* Paid column - editable */}
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', color: '#1f2937' }}>
+                      {isEditing ? (
+                        <input 
+                          type="number" 
+                          value={editing.amount_paid} 
+                          onChange={(e) => setEditing({ ...editing, amount_paid: e.target.value })}
+                          style={{ width: '110px', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', textAlign: 'right' }}
+                        />
+                      ) : naira(r.amount_paid)}
+                    </td>
+                    
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <span style={{ 
+                        padding: '4px 12px', 
+                        borderRadius: '12px', 
+                        fontSize: '0.75rem', 
+                        fontWeight: '600', 
+                        background: r.status === 'paid' ? '#dcfce7' : r.status === 'partial' ? '#fef3c7' : '#fee2e2', 
+                        color: r.status === 'paid' ? '#166534' : r.status === 'partial' ? '#92400e' : '#991b1b' 
+                      }}>
+                        {r.status}
+                      </span>
+                    </td>
+                    
+                    {/* ✅ NEW: Reference column */}
+                    <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#6b7280', fontStyle: 'italic' }}>
+                      {r.references || '—'}
+                    </td>
+                    
+                    {staff && (
+                      <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {isEditing ? (
+                          <>
+                            <button onClick={() => saveEdit(r.id)} style={{ padding: '4px 10px', background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', marginRight: '6px' }}>Save</button>
+                            <button onClick={cancelEdit} style={{ padding: '4px 10px', background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}>Cancel</button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => startEdit(r)} style={{ padding: '4px 10px', background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', marginRight: '6px' }}>Edit</button>
+                            <button onClick={() => setPaying(r)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', color: '#374151' }}>
+                              {r.status === 'paid' ? 'Add Payment' : 'Record Payment'}
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={staff ? 6 : 5} style={{ padding: '40px 20px', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>
+                  <td colSpan={staff ? 7 : 6} style={{ padding: '40px 20px', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>
                     No bills found for this period — click "Generate Bills" to create them.
                   </td>
                 </tr>
