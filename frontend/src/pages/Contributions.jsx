@@ -270,16 +270,17 @@ export default function Contributions() {
       {/* Table */}
       <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          {/* ✅ KEY FIX: Added tableLayout: 'fixed' to lock column widths */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <thead style={{ background: '#f9fafb' }}>
               <tr>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>House</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Household</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Due</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Paid</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Status</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', maxWidth: '200px' }}>Reference</th>
-                {staff && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', width: '220px', minWidth: '220px' }}>Actions</th>}
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', width: '60px' }}>House</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', width: '180px' }}>Household</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', width: '110px' }}>Due</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', width: '110px' }}>Paid</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', width: '90px' }}>Status</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Reference</th>
+                {staff && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', width: '200px' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -297,7 +298,7 @@ export default function Contributions() {
                           type="number" 
                           value={editing.amount_due} 
                           onChange={(e) => setEditing({ ...editing, amount_due: e.target.value })}
-                          style={{ width: '110px', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', textAlign: 'right' }}
+                          style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', textAlign: 'right', boxSizing: 'border-box' }}
                         />
                       ) : naira(r.amount_due)}
                     </td>
@@ -309,7 +310,7 @@ export default function Contributions() {
                           type="number" 
                           value={editing.amount_paid} 
                           onChange={(e) => setEditing({ ...editing, amount_paid: e.target.value })}
-                          style={{ width: '110px', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', textAlign: 'right' }}
+                          style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', textAlign: 'right', boxSizing: 'border-box' }}
                         />
                       ) : naira(r.amount_paid)}
                     </td>
@@ -327,13 +328,12 @@ export default function Contributions() {
                       </span>
                     </td>
                     
-                    {/* ✅ FIXED: Reference column with truncation */}
+                    {/* Reference column with truncation */}
                     <td style={{ 
                       padding: '12px 16px', 
                       fontSize: '0.8rem', 
                       color: '#6b7280', 
                       fontStyle: 'italic',
-                      maxWidth: '200px',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap'
@@ -341,9 +341,9 @@ export default function Contributions() {
                       {r.references || '—'}
                     </td>
                     
-                    {/* ✅ FIXED: Actions column with strict width to prevent shifting */}
+                    {/* Actions column */}
                     {staff && (
-                      <td style={{ padding: '12px 16px', textAlign: 'right', width: '220px', minWidth: '220px' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
                           {isEditing ? (
                             <>
