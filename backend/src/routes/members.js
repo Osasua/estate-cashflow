@@ -72,7 +72,7 @@ router.post('/', staff, async (req, res) => {
       [household_name, house_number, phone || null, email || null, monthly_due, arrears]
     );
     
-    // ✅ If there's arrears on a new member, create the contribution row immediately
+    // If there's arrears on a new member, create the contribution row immediately
     if (arrears > 0) {
       const lastYear = new Date().getFullYear() - 1;
       await query(
@@ -82,6 +82,27 @@ router.post('/', staff, async (req, res) => {
         [rows[0].id, lastYear, arrears]
       );
     }
+    
+    res.status(201).json({ member: rows[0] });
+  } catch (e) {
+    if (e.code === '23505') {
+      // Find which member already has this house number
+      const existing = await query(
+        `SELECT id, house_number, household_name, active FROM members WHERE house_number = $1`,
+        [house_number]
+      );
+      if (existing.rows.length > 0) {
+        const m = existing.rows[0];
+        const status = m.active ? 'active' : 'inactive (moved out)';
+        return res.status(409).json({ 
+          error: `House number '${house_number}' is already assigned to '${m.household_name}' (House ${m.house_number}, ${status}).` 
+        });
+      }
+      return res.status(409).json({ error: 'House number already exists' });
+    }
+    throw e;
+  }
+});
     
     res.status(201).json({ member: rows[0] });
   } catch (e) {

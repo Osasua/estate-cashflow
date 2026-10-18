@@ -35,17 +35,24 @@ export default function Members() {
   // --- ACTIONS ---
 
   const handleAdd = async (e) => {
-    e.preventDefault();
-    try {
-      await api('/members', { method: 'POST', body: formData });
-      setMessage('✅ Member added successfully.');
-      setIsAdding(false);
-      setFormData(emptyForm);
-      loadMembers();
-    } catch (err) {
-      setMessage(`❌ ${err.message}`);
+  e.preventDefault();
+  try {
+    await api('/members', { method: 'POST', body: formData });
+    setMessage('✅ Member added successfully.');
+    setIsAdding(false);
+    setFormData(emptyForm);
+    loadMembers();
+  } catch (err) {
+    // Show detailed error with option to reactivate if member exists but is inactive
+    let errorMsg = err.message;
+    if (err.message.includes('already assigned to')) {
+      errorMsg = `❌ ${err.message} If this member moved out, you can reactivate them from the list below, or use a different house number.`;
+    } else {
+      errorMsg = `❌ ${err.message}`;
     }
-  };
+    setMessage(errorMsg);
+  }
+};
 
   const startEdit = (member) => {
     setEditingId(member.id);
