@@ -278,8 +278,8 @@ export default function Contributions() {
                 <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Due</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Paid</th>
                 <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Status</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Reference</th>
-                {staff && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>}
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', maxWidth: '200px' }}>Reference</th>
+                {staff && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', width: '220px', minWidth: '220px' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -327,14 +327,23 @@ export default function Contributions() {
                       </span>
                     </td>
                     
-                    {/* Reference column */}
-                    <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#6b7280', fontStyle: 'italic' }}>
+                    {/* ✅ FIXED: Reference column with truncation */}
+                    <td style={{ 
+                      padding: '12px 16px', 
+                      fontSize: '0.8rem', 
+                      color: '#6b7280', 
+                      fontStyle: 'italic',
+                      maxWidth: '200px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
                       {r.references || '—'}
                     </td>
                     
-                    {/* ✅ FIXED: Actions column with perfect alignment */}
+                    {/* ✅ FIXED: Actions column with strict width to prevent shifting */}
                     {staff && (
-                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', width: '220px', minWidth: '220px' }}>
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
                           {isEditing ? (
                             <>
