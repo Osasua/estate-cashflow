@@ -33,7 +33,7 @@ export default function Contributions() {
   const [rows, setRows] = useState([]);
   const [onlyDefaulters, setOnlyDefaulters] = useState(false);
   const [paying, setPaying] = useState(null);
-  const [editing, setEditing] = useState(null); // { id, amount_due, amount_paid }
+  const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ amount: '', method: 'cash', reference: '' });
   const [message, setMessage] = useState('');
   const [billAmount, setBillAmount] = useState('');
@@ -86,7 +86,6 @@ export default function Contributions() {
     }
   };
 
-  // ✅ NEW: Start editing a contribution
   const startEdit = (row) => {
     setEditing({
       id: row.id,
@@ -95,7 +94,6 @@ export default function Contributions() {
     });
   };
 
-  // ✅ NEW: Save edited contribution
   const saveEdit = async (id) => {
     try {
       await api(`/contributions/${id}`, {
@@ -329,26 +327,91 @@ export default function Contributions() {
                       </span>
                     </td>
                     
-                    {/* ✅ NEW: Reference column */}
+                    {/* Reference column */}
                     <td style={{ padding: '12px 16px', fontSize: '0.8rem', color: '#6b7280', fontStyle: 'italic' }}>
                       {r.references || '—'}
                     </td>
                     
+                    {/* ✅ FIXED: Actions column with perfect alignment */}
                     {staff && (
-                      <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        {isEditing ? (
-                          <>
-                            <button onClick={() => saveEdit(r.id)} style={{ padding: '4px 10px', background: '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', marginRight: '6px' }}>Save</button>
-                            <button onClick={cancelEdit} style={{ padding: '4px 10px', background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}>Cancel</button>
-                          </>
-                        ) : (
-                          <>
-                            <button onClick={() => startEdit(r)} style={{ padding: '4px 10px', background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', marginRight: '6px' }}>Edit</button>
-                            <button onClick={() => setPaying(r)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', color: '#374151' }}>
-                              {r.status === 'paid' ? 'Add Payment' : 'Record Payment'}
-                            </button>
-                          </>
-                        )}
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                          {isEditing ? (
+                            <>
+                              <button 
+                                onClick={() => saveEdit(r.id)} 
+                                style={{ 
+                                  padding: '6px 14px', 
+                                  background: '#10b981', 
+                                  color: 'white', 
+                                  border: 'none', 
+                                  borderRadius: '6px', 
+                                  cursor: 'pointer', 
+                                  fontSize: '0.8rem',
+                                  fontWeight: '500',
+                                  height: '32px',
+                                  lineHeight: '20px'
+                                }}
+                              >
+                                Save
+                              </button>
+                              <button 
+                                onClick={cancelEdit} 
+                                style={{ 
+                                  padding: '6px 14px', 
+                                  background: '#fff', 
+                                  color: '#374151', 
+                                  border: '1px solid #d1d5db', 
+                                  borderRadius: '6px', 
+                                  cursor: 'pointer', 
+                                  fontSize: '0.8rem',
+                                  fontWeight: '500',
+                                  height: '32px',
+                                  lineHeight: '20px'
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button 
+                                onClick={() => startEdit(r)} 
+                                style={{ 
+                                  padding: '6px 14px', 
+                                  background: '#fef3c7', 
+                                  color: '#92400e', 
+                                  border: '1px solid #fcd34d', 
+                                  borderRadius: '6px', 
+                                  cursor: 'pointer', 
+                                  fontSize: '0.8rem',
+                                  fontWeight: '500',
+                                  height: '32px',
+                                  lineHeight: '20px'
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button 
+                                onClick={() => setPaying(r)} 
+                                style={{ 
+                                  padding: '6px 14px', 
+                                  background: '#fff', 
+                                  color: '#374151', 
+                                  border: '1px solid #d1d5db', 
+                                  borderRadius: '6px', 
+                                  cursor: 'pointer', 
+                                  fontSize: '0.8rem',
+                                  fontWeight: '500',
+                                  height: '32px',
+                                  lineHeight: '20px'
+                                }}
+                              >
+                                {r.status === 'paid' ? 'Add Payment' : 'Record Payment'}
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
