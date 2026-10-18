@@ -82,7 +82,7 @@ export default function Contributions() {
       setForm({ amount: '', method: 'cash', reference: '' });
       load();
     } catch (err) {
-      setMessage(`❌ ${err.message}`);
+      setMessage(` ${err.message}`);
     }
   };
 
@@ -270,7 +270,6 @@ export default function Contributions() {
       {/* Table */}
       <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
-          {/* ✅ KEY FIX: Added tableLayout: 'fixed' to lock column widths */}
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <thead style={{ background: '#f9fafb' }}>
               <tr>
@@ -279,8 +278,8 @@ export default function Contributions() {
                 <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', width: '110px' }}>Due</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', width: '110px' }}>Paid</th>
                 <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', width: '90px' }}>Status</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Reference</th>
-                {staff && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', width: '200px' }}>Actions</th>}
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', width: '250px' }}>Reference</th>
+                {staff && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', width: '220px' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -291,7 +290,6 @@ export default function Contributions() {
                     <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#374151' }}>{r.house_number}</td>
                     <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#1f2937', fontWeight: '500' }}>{r.household_name}</td>
                     
-                    {/* Due column - editable */}
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', color: '#1f2937' }}>
                       {isEditing ? (
                         <input 
@@ -303,7 +301,6 @@ export default function Contributions() {
                       ) : naira(r.amount_due)}
                     </td>
                     
-                    {/* Paid column - editable */}
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', color: '#1f2937' }}>
                       {isEditing ? (
                         <input 
@@ -328,7 +325,6 @@ export default function Contributions() {
                       </span>
                     </td>
                     
-                    {/* Reference column with truncation */}
                     <td style={{ 
                       padding: '12px 16px', 
                       fontSize: '0.8rem', 
@@ -341,7 +337,6 @@ export default function Contributions() {
                       {r.references || '—'}
                     </td>
                     
-                    {/* Actions column */}
                     {staff && (
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
@@ -359,7 +354,8 @@ export default function Contributions() {
                                   fontSize: '0.8rem',
                                   fontWeight: '500',
                                   height: '32px',
-                                  lineHeight: '20px'
+                                  lineHeight: '20px',
+                                  whiteSpace: 'nowrap'
                                 }}
                               >
                                 Save
@@ -376,7 +372,8 @@ export default function Contributions() {
                                   fontSize: '0.8rem',
                                   fontWeight: '500',
                                   height: '32px',
-                                  lineHeight: '20px'
+                                  lineHeight: '20px',
+                                  whiteSpace: 'nowrap'
                                 }}
                               >
                                 Cancel
@@ -396,7 +393,8 @@ export default function Contributions() {
                                   fontSize: '0.8rem',
                                   fontWeight: '500',
                                   height: '32px',
-                                  lineHeight: '20px'
+                                  lineHeight: '20px',
+                                  whiteSpace: 'nowrap'
                                 }}
                               >
                                 Edit
@@ -413,7 +411,8 @@ export default function Contributions() {
                                   fontSize: '0.8rem',
                                   fontWeight: '500',
                                   height: '32px',
-                                  lineHeight: '20px'
+                                  lineHeight: '20px',
+                                  whiteSpace: 'nowrap'
                                 }}
                               >
                                 {r.status === 'paid' ? 'Add Payment' : 'Record Payment'}
