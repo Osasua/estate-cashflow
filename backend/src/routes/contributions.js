@@ -13,7 +13,7 @@ const statusOf = (r) => {
   return 'pending';
 };
 
-// GET contributions for a specific month/year/type
+// GET contributions for a specific month/year/type (includes inactive members for historical accuracy)
 router.get('/', async (req, res) => {
   const year = +req.query.year || new Date().getFullYear();
   const month = +req.query.month || new Date().getMonth() + 1;
@@ -21,9 +21,9 @@ router.get('/', async (req, res) => {
 
   try {
     const { rows } = await query(
-      `SELECT c.*, m.household_name, m.house_number
+      `SELECT c.*, m.household_name, m.house_number, m.active
          FROM contributions c JOIN members m ON m.id = c.member_id
-        WHERE c.period_year = $1 AND c.period_month = $2 AND c.type = $3 AND m.active = true
+        WHERE c.period_year = $1 AND c.period_month = $2 AND c.type = $3
         ORDER BY m.house_number`,
       [year, month, type]
     );
