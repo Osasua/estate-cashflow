@@ -13,7 +13,7 @@ const statusOf = (r) => {
   return 'pending';
 };
 
-// GET contributions (now includes payment references)
+// GET contributions (now includes payment references or custom note)
 router.get('/', async (req, res) => {
   const year = +req.query.year || new Date().getFullYear();
   const month = +req.query.month || new Date().getMonth() + 1;
@@ -22,8 +22,8 @@ router.get('/', async (req, res) => {
   try {
     const { rows } = await query(
       `SELECT c.*, m.household_name, m.house_number, m.active,
-              (SELECT string_agg(reference, ', ' ORDER BY id) 
-                 FROM payments WHERE contribution_id = c.id) AS references
+              COALESCE(c.note, (SELECT string_agg(reference, ', ' ORDER BY id) 
+                 FROM payments WHERE contribution_id = c.id)) AS references
          FROM contributions c JOIN members m ON m.id = c.member_id
         WHERE c.period_year = $1 AND c.period_month = $2 AND c.type = $3
         ORDER BY m.house_number`,
@@ -86,10 +86,10 @@ router.post('/generate', staff, async (req, res) => {
   }
 });
 
-// ✅ NEW: EDIT a contribution directly (for correcting wrong figures)
+// ✅ UPDATED: EDIT a contribution directly (now includes 'note' for Reference)
 router.put('/:id', staff, async (req, res) => {
   try {
-    const { amount_due, amount_paid } = req.body || {};
+    const { amount_due, amount_paid, note } = req.body || {};
     
     // Validate
     const newDue = amount_due !== undefined ? Number(amount_due) : null;
@@ -101,9 +101,10 @@ router.put('/:id', staff, async (req, res) => {
     const { rows } = await query(
       `UPDATE contributions SET 
          amount_due = COALESCE($2, amount_due),
-         amount_paid = COALESCE($3, amount_paid)
+         amount_paid = COALESCE($3, amount_paid),
+         note = COALESCE($4, note)
        WHERE id = $1 RETURNING *`,
-      [req.params.id, newDue, newPaid]
+      [req.params.id, newDue, newPaid, note !== undefined ? note : null]
     );
     
     if (rows.length === 0) return res.status(404).json({ error: 'Contribution not found' });
