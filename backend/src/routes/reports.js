@@ -13,11 +13,11 @@ router.get('/summary', staff, async (req, res) => {
     const start = startDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     const end = endDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`;
 
-    // 1. Opening Balance (FIXED: Cast text to date)
+    // 1. Opening Balance
     const openingBalanceRes = await query(`
       SELECT 
         COALESCE((SELECT SUM(amount_paid) FROM contributions WHERE period_year || '-' || LPAD(period_month::text, 2, '0') < $1), 0) -
-        COALESCE((SELECT SUM(amount) FROM expenses WHERE spent_on < $1::date), 0) AS balance
+        COALESCE((SELECT SUM(amount) FROM expenses WHERE spent_on::text < $1), 0) AS balance
     `, [start]);
 
     // 2. Total Received
@@ -27,11 +27,11 @@ router.get('/summary', staff, async (req, res) => {
       WHERE period_year || '-' || LPAD(period_month::text, 2, '0') BETWEEN $1 AND $2
     `, [start, end]);
 
-    // 3. Total Expenses (FIXED: Cast text to date)
+    // 3. Total Expenses
     let expenseQuery = `
       SELECT COALESCE(SUM(amount), 0) AS total
       FROM expenses
-      WHERE spent_on BETWEEN $1::date AND $2::date
+      WHERE spent_on::text BETWEEN $1 AND $2
     `;
     const expenseParams = [start, end];
     
@@ -42,14 +42,14 @@ router.get('/summary', staff, async (req, res) => {
     
     const totalExpensesRes = await query(expenseQuery, expenseParams);
 
-    // 4. Closing Balance (FIXED: Cast text to date)
+    // 4. Closing Balance
     const closingBalanceRes = await query(`
       SELECT 
-        COALESCE((SELECT SUM(amount_paid) FROM contributions WHERE period_year || '-' || LPAD(period_month::text, 2, '0') <= $2), 0) -
-        COALESCE((SELECT SUM(amount) FROM expenses WHERE spent_on <= $2::date), 0) AS balance
+        COALESCE((SELECT SUM(amount_paid) FROM contributions WHERE period_year || '-' || LPAD(period_month::text, 2, '0') <= $1), 0) -
+        COALESCE((SELECT SUM(amount) FROM expenses WHERE spent_on::text <= $1), 0) AS balance
     `, [end]);
 
-    // 5. Expense Breakdown (FIXED: Cast text to date)
+    // 5. Expense Breakdown
     let breakdownQuery = `
       SELECT 
         COALESCE(c.name, 'Uncategorized') AS name,
@@ -57,7 +57,7 @@ router.get('/summary', staff, async (req, res) => {
         COUNT(e.id)::int AS count
       FROM expenses e
       LEFT JOIN categories c ON e.category_id = c.id
-      WHERE e.spent_on BETWEEN $1::date AND $2::date
+      WHERE e.spent_on::text BETWEEN $1 AND $2
     `;
     const breakdownParams = [start, end];
     
@@ -70,14 +70,14 @@ router.get('/summary', staff, async (req, res) => {
     
     const breakdownRes = await query(breakdownQuery, breakdownParams);
 
-    // 6. Daily trend (FIXED: Cast text to date)
+    // 6. Daily trend
     let dailyTrendQuery = `
       SELECT 
         TO_CHAR(spent_on, 'YYYY-MM-DD') AS date,
         TO_CHAR(spent_on, 'DD Mon') AS label,
         COALESCE(SUM(amount), 0) AS total
       FROM expenses
-      WHERE spent_on BETWEEN $1::date AND $2::date
+      WHERE spent_on::text BETWEEN $1 AND $2
     `;
     const dailyTrendParams = [start, end];
     
@@ -90,7 +90,7 @@ router.get('/summary', staff, async (req, res) => {
     
     const dailyTrendRes = await query(dailyTrendQuery, dailyTrendParams);
 
-    // 7. Top expenses (FIXED: Cast text to date)
+    // 7. Top expenses
     let topExpensesQuery = `
       SELECT 
         e.id,
@@ -101,7 +101,7 @@ router.get('/summary', staff, async (req, res) => {
         c.name AS category_name
       FROM expenses e
       LEFT JOIN categories c ON e.category_id = c.id
-      WHERE e.spent_on BETWEEN $1::date AND $2::date
+      WHERE e.spent_on::text BETWEEN $1 AND $2
     `;
     const topExpensesParams = [start, end];
     
