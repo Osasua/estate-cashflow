@@ -11,24 +11,55 @@ router.get('/', async (req, res) => {
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
 
-    // 1. KPIs
-    const [balanceRes, monthInRes, monthDueRes, monthExpenseRes, pendingRes] = await Promise.all([
-      query(`SELECT COALESCE(SUM(amount_paid), 0) - COALESCE((SELECT SUM(amount) FROM expenses), 0) AS balance FROM contributions`),
-      query(`SELECT COALESCE(SUM(amount_paid), 0) AS total FROM contributions WHERE period_year = $1 AND period_month = $2`, [currentYear, currentMonth]),
-      query(`SELECT COALESCE(SUM(monthly_due), 0) AS total FROM members WHERE active = true`),
-      query(`SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE EXTRACT(YEAR FROM spent_on) = $1 AND EXTRACT(MONTH FROM spent_on) = $2`, [currentYear, currentMonth]),
-      query(`SELECT COUNT(DISTINCT member_id)::int AS count FROM contributions WHERE period_year = $1 AND period_month = $2 AND type = 'monthly' AND amount_paid < amount_due`, [currentYear, currentMonth])
-    ]);
+    // 1. KPIs - Use consistent calculation
+    const kpisRes = await query(`
+      SELECT 
+        -- Cash Balance: ALL contributions paid - ALL expenses
+        COALESCE((SELECT SUM(amount_paid) FROM contributions), 0) -
+        COALESCE((SELECT SUM(amount) FROM expenses), 0) AS balance,
+        
+        -- This Month Collected: Only current month's contributions
+        COALESCE((
+          SELECT SUM(amount_paid) 
+          FROM contributions 
+          WHERE period_year = $1 AND period_month = $2
+        ), 0) AS month_in,
+        
+        -- This Month Expected: Sum of monthly_due for active members
+        COALESCE((
+          SELECT SUM(monthly_due) 
+          FROM members 
+          WHERE active = true
+        ), 0) AS month_due,
+        
+        -- This Month Expenses
+        COALESCE((
+          SELECT SUM(amount) 
+          FROM expenses 
+          WHERE EXTRACT(YEAR FROM spent_on) = $1 
+            AND EXTRACT(MONTH FROM spent_on) = $2
+        ), 0) AS month_expense,
+        
+        -- Households Owing This Month
+        COALESCE((
+          SELECT COUNT(DISTINCT member_id)
+          FROM contributions
+          WHERE period_year = $1 
+            AND period_month = $2 
+            AND type = 'monthly' 
+            AND amount_paid < amount_due
+        ), 0)::int AS pending_count
+    `, [currentYear, currentMonth]);
 
     const kpis = {
-      balance: parseFloat(balanceRes.rows[0].balance) || 0,
-      month_in: parseFloat(monthInRes.rows[0].total) || 0,
-      month_due: parseFloat(monthDueRes.rows[0].total) || 0,
-      month_expense: parseFloat(monthExpenseRes.rows[0].total) || 0,
-      pending_count: parseInt(pendingRes.rows[0].count) || 0
+      balance: parseFloat(kpisRes.rows[0].balance) || 0,
+      month_in: parseFloat(kpisRes.rows[0].month_in) || 0,
+      month_due: parseFloat(kpisRes.rows[0].month_due) || 0,
+      month_expense: parseFloat(kpisRes.rows[0].month_expense) || 0,
+      pending_count: parseInt(kpisRes.rows[0].pending_count) || 0
     };
 
-    // 2. Trend - Last 6 months (FIXED: Use CAST to avoid type issues)
+    // 2. Trend - Last 6 months with SEPARATE aggregations (no Cartesian product)
     const trendRes = await query(`
       WITH RECURSIVE months AS (
         SELECT date_trunc('month', CURRENT_DATE) - INTERVAL '5 months' AS month_start
