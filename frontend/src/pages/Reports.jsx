@@ -1,53 +1,117 @@
-import Skeleton from '../components/Skeleton';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../api';
-import { naira, fmtDate } from '../format';
+import { useAuth } from '../auth';
+import { naira } from '../format';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
-  PieChart, Pie, Cell,
+  PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area,
 } from 'recharts';
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import Skeleton from '../components/Skeleton';
 
-const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#64748b', '#84cc16'];
-const ITEMS_PER_PAGE = 10;
+const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#64748b', '#84cc16', '#ec4899', '#14b8a6'];
+
+function KPICard({ title, value, subtitle, color, icon }) {
+  const colorMap = {
+    indigo: { bg: '#eef2ff', text: '#4f46e5', border: '#c7d2fe' },
+    emerald: { bg: '#ecfdf5', text: '#059669', border: '#a7f3d0' },
+    rose: { bg: '#fff1f2', text: '#e11d48', border: '#fecdd3' },
+    violet: { bg: '#f5f3ff', text: '#7c3aed', border: '#ddd6fe' },
+  };
+  const c = colorMap[color] || colorMap.indigo;
+
+  return (
+    <div style={{
+      background: '#fff',
+      borderRadius: '16px',
+      padding: '24px',
+      border: '1px solid #e5e7eb',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+      position: 'relative',
+      overflow: 'hidden'
+    }}>
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        width: '120px',
+        height: '120px',
+        background: `radial-gradient(circle at top right, ${c.bg} 0%, transparent 70%)`,
+        opacity: 0.6
+      }} />
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <span style={{ fontSize: '0.875rem', fontWeight: '500', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</span>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '10px',
+            background: c.bg,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.25rem'
+          }}>{icon}</div>
+        </div>
+        <div style={{ fontSize: '2.25rem', fontWeight: '700', color: '#111827', lineHeight: 1.1, marginBottom: '8px' }}>{value}</div>
+        {subtitle && <div style={{ fontSize: '0.85rem', color: '#9ca3af' }}>{subtitle}</div>}
+      </div>
+    </div>
+  );
+}
+
+function ChartPanel({ title, subtitle, children, action }) {
+  return (
+    <div style={{
+      background: '#fff',
+      borderRadius: '16px',
+      border: '1px solid #e5e7eb',
+      padding: '24px',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>{title}</h3>
+          {subtitle && <p style={{ margin: '4px 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>{subtitle}</p>}
+        </div>
+        {action}
+      </div>
+      <div style={{ minHeight: '300px' }}>{children}</div>
+    </div>
+  );
+}
 
 export default function Reports() {
-  const now = new Date();
+  const { user } = useAuth();
   const [data, setData] = useState(null);
-  const [categories, setCategories] = useState([]);
-  const [selectedCategories, setSelectedCategories] = useState([]);
-  const [timeframe, setTimeframe] = useState('monthly');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
+  
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
 
-  const getDateRange = () => {
-    const end = new Date();
-    const start = new Date();
-    if (timeframe === 'monthly') {
-      start.setDate(1);
-    } else if (timeframe === 'quarterly') {
-      start.setMonth(Math.floor(now.getMonth() / 3) * 3, 1);
-    } else if (timeframe === 'biannual') {
-      start.setMonth(now.getMonth() < 6 ? 0 : 6, 1);
-    } else if (timeframe === 'annual') {
-      start.setMonth(0, 1);
+  useEffect(() => {
+    // Set default dates to current month
+    const now = new Date();
+    const firstDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const lastDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`;
+    setStartDate(firstDay);
+    setEndDate(lastDay);
+  }, []);
+
+  useEffect(() => {
+    if (startDate && endDate) {
+      loadData();
     }
-    return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
-  };
+  }, [startDate, endDate, selectedCategory]);
 
   const loadData = async () => {
     setLoading(true);
     setError('');
-    setCurrentPage(1);
     try {
-      const { start, end } = getDateRange();
-      const queryParams = new URLSearchParams({ startDate: start, endDate: end });
-      if (selectedCategories.length > 0) {
-        queryParams.append('category_ids', selectedCategories.join(','));
-      }
-      const res = await api(`/reports/summary?${queryParams.toString()}`);
+      const params = new URLSearchParams({ startDate, endDate });
+      if (selectedCategory) params.append('category_id', selectedCategory);
+      const res = await api(`/reports/summary?${params.toString()}`);
       setData(res);
     } catch (e) {
       setError(e.message);
@@ -56,241 +120,250 @@ export default function Reports() {
     }
   };
 
-  useEffect(() => {
-    api('/expenses/categories/active').then((d) => setCategories(d.categories));
-  }, []);
-
-  useEffect(() => {
-    loadData();
-  }, [timeframe, selectedCategories]);
-
-  const toggleCategory = (id) => {
-    setSelectedCategories(prev => 
-      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
-    );
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div style={{
+          background: 'white',
+          padding: '14px 18px',
+          border: '1px solid #e5e7eb',
+          borderRadius: '10px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+          fontSize: '0.875rem',
+          minWidth: '180px'
+        }}>
+          <p style={{ margin: '0 0 10px 0', fontWeight: '600', color: '#111827', fontSize: '0.9rem' }}>{label}</p>
+          {payload.map((entry, index) => (
+            <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', gap: '20px' }}>
+              <span style={{ color: '#6b7280', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: entry.color, display: 'inline-block' }}></span>
+                {entry.name}
+              </span>
+              <span style={{ fontWeight: '600', color: '#111827' }}>{naira(entry.value)}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return null;
   };
 
-  const expenses = data?.expenses || [];
-  const totalPages = Math.ceil(expenses.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedExpenses = expenses.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  if (error) return <div style={{ padding: '40px', color: '#ef4444', textAlign: 'center' }}><h2>Error</h2><p>{error}</p></div>;
+  if (loading || !data) return <div style={{ padding: '40px' }}><Skeleton height="40px" width="300px" style={{ marginBottom: '24px' }} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>{[1,2,3,4].map(i => <Skeleton key={i} height="140px" width="100%" />)}</div></div>;
 
-  const exportCSV = () => {
-    if (!expenses.length) return;
-    const headers = ['Date', 'Category', 'Description', 'Vendor', 'Amount'];
-    const rows = expenses.map(e => [e.day, e.category, e.description, e.vendor || '', e.amount]);
-    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `expense_report_${timeframe}.csv`;
-    link.click();
-  };
-
-  const exportPDF = () => {
-    if (!expenses.length) return;
-    const doc = new jsPDF();
-    doc.text(`Ferrano Estate - Expense Report (${timeframe})`, 14, 15);
-    
-    autoTable(doc, {
-      head: [['Date', 'Category', 'Description', 'Vendor', 'Amount']],
-      body: expenses.map(e => [e.day, e.category, e.description, e.vendor || '', naira(e.amount)]),
-      startY: 20,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [79, 70, 229] }
-    });
-    
-    doc.save(`expense_report_${timeframe}.pdf`);
-  };
-
-  if (error) return <p className="error">{error}</p>;
+  const { kpis, expense_breakdown, daily_trend, top_expenses, categories, filters } = data;
 
   return (
-    <div>
-      <h1>Reports & Analytics</h1>
-
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        <button 
-          onClick={exportCSV} 
-          disabled={!expenses.length}
-          style={{ padding: '8px 16px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', opacity: !expenses.length ? 0.5 : 1 }}
-        >
-          Export CSV
-        </button>
-        <button 
-          onClick={exportPDF} 
-          disabled={!expenses.length}
-          style={{ padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', opacity: !expenses.length ? 0.5 : 1 }}
-        >
-          Export PDF
-        </button>
+    <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 24px' }}>
+      {/* Header */}
+      <div style={{ marginBottom: '32px' }}>
+        <h1 style={{ margin: '0 0 8px 0', fontSize: '2rem', fontWeight: '700', color: '#111827', letterSpacing: '-0.02em' }}>
+          Reports & Analytics
+        </h1>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>
+          Comprehensive financial insights and expense tracking
+        </p>
       </div>
 
-      <div className="card" style={{ marginBottom: '20px' }}>
-        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div style={{ flex: 1 }}>
-            <label className="muted" style={{ display: 'block', marginBottom: '5px', fontSize: '0.9rem' }}>Timeframe</label>
-            <select 
-              value={timeframe} 
-              onChange={(e) => setTimeframe(e.target.value)}
-              style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
+      {/* Filters */}
+      <div style={{
+        background: '#fff',
+        borderRadius: '16px',
+        border: '1px solid #e5e7eb',
+        padding: '24px',
+        marginBottom: '24px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+      }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', alignItems: 'end' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>Start Date</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '0.9rem' }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>End Date</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '0.9rem' }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>Category Filter</label>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '0.9rem' }}
             >
-              <option value="monthly">Monthly</option>
-              <option value="quarterly">Quarterly</option>
-              <option value="biannual">Bi-Annual</option>
-              <option value="annual">Annual</option>
+              <option value="">All Categories</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
             </select>
           </div>
-
-          <div style={{ flex: 2 }}>
-            <label className="muted" style={{ display: 'block', marginBottom: '5px', fontSize: '0.9rem' }}>Filter by Category (Leave empty for all)</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', padding: '10px', background: '#f9fafb', borderRadius: '6px', border: '1px solid #ddd' }}>
-              {categories.map(cat => (
-                <label key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={selectedCategories.includes(cat.id)} 
-                    onChange={() => toggleCategory(cat.id)} 
-                  />
-                  {cat.name}
-                </label>
-              ))}
-              {categories.length === 0 && <span className="muted">No categories found.</span>}
-            </div>
-          </div>
         </div>
       </div>
 
-      {loading ? (
-        <div>
-          <Skeleton height="30px" width="250px" />
-          <Skeleton height="150px" width="100%" style={{ marginBottom: '20px' }} />
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '20px' }}>
-            <Skeleton height="100px" width="25%" />
-            <Skeleton height="100px" width="25%" />
-            <Skeleton height="100px" width="25%" />
-            <Skeleton height="100px" width="25%" />
-          </div>
-          <div style={{ display: 'flex', gap: '20px' }}>
-            <Skeleton height="300px" width="50%" />
-            <Skeleton height="300px" width="50%" />
-          </div>
+      {/* KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+        <KPICard
+          title="Opening Balance"
+          value={naira(kpis.opening_balance)}
+          subtitle={`As of ${filters.start_date}`}
+          color="indigo"
+          icon="💼"
+        />
+        <KPICard
+          title="Total Received"
+          value={naira(kpis.total_received)}
+          subtitle="Contributions collected"
+          color="emerald"
+          icon=""
+        />
+        <KPICard
+          title="Total Expenses"
+          value={naira(kpis.total_expenses)}
+          subtitle={`${expense_breakdown.length} categories`}
+          color="rose"
+          icon="📤"
+        />
+        <KPICard
+          title="Closing Balance"
+          value={naira(kpis.closing_balance)}
+          subtitle={`As of ${filters.end_date}`}
+          color="violet"
+          icon="💰"
+        />
+      </div>
+
+      {/* Charts Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+        {/* Expense Breakdown Pie Chart */}
+        <ChartPanel title="Expense Breakdown" subtitle="By category">
+          {expense_breakdown && expense_breakdown.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <PieChart>
+                <Pie
+                  data={expense_breakdown}
+                  dataKey="total"
+                  nameKey="name"
+                  cx="45%"
+                  cy="50%"
+                  innerRadius={75}
+                  outerRadius={110}
+                  paddingAngle={3}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {expense_breakdown.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12, fontWeight: '500' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: '1rem' }}>
+              No expenses in selected period
+            </div>
+          )}
+        </ChartPanel>
+
+        {/* Daily Expense Trend */}
+        <ChartPanel title="Daily Expense Trend" subtitle="Spending over time">
+          {daily_trend && daily_trend.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <AreaChart data={daily_trend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6b7280', fontWeight: '500' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area type="monotone" dataKey="total" name="Expenses" stroke="#ef4444" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" dot={{ r: 5, fill: '#ef4444', strokeWidth: 2, stroke: '#fff' }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: '1rem' }}>
+              No daily data available
+            </div>
+          )}
+        </ChartPanel>
+      </div>
+
+      {/* Top Expenses Table */}
+      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <div style={{ padding: '24px 28px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #f9fafb, #ffffff)' }}>
+          <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>
+            Top Expenses
+          </h3>
+          <p style={{ margin: '4px 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>Largest transactions in selected period</p>
         </div>
-      ) : data ? (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-  <div style={{ background: '#fff', padding: '20px 24px', borderRadius: '8px', border: '1px solid #e5e7eb', borderLeft: '4px solid #4f46e5', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-    <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Opening Balance</div>
-    <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#111827' }}>{naira(data.opening_balance)}</div>
-  </div>
-  <div style={{ background: '#fff', padding: '20px 24px', borderRadius: '8px', border: '1px solid #e5e7eb', borderLeft: '4px solid #10b981', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-    <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Total Received</div>
-    <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#111827' }}>{naira(data.received)}</div>
-  </div>
-  <div style={{ background: '#fff', padding: '20px 24px', borderRadius: '8px', border: '1px solid #e5e7eb', borderLeft: '4px solid #ef4444', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-    <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Total Expenses</div>
-    <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#111827' }}>{naira(data.total_expenses)}</div>
-  </div>
-  <div style={{ background: '#fff', padding: '20px 24px', borderRadius: '8px', border: '1px solid #e5e7eb', borderLeft: '4px solid #4f46e5', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-    <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Closing Balance</div>
-    <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#111827' }}>{naira(data.closing_balance)}</div>
-  </div>
-</div>
 
-          <div className="grid-2">
-            <div className="card">
-              <h3>Expense Breakdown</h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie data={data.expense_breakdown} dataKey="total" nameKey="name" innerRadius={60} outerRadius={90} paddingAngle={2}>
-                    {data.expense_breakdown.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip formatter={(v) => naira(v)} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="card">
-              <h3>Category Details</h3>
-              {/* MOBILE RESPONSIVE TABLE 1 */}
-              <table className="mobile-cards" style={{ width: '100%' }}>
-                <thead>
-                  <tr style={{ textAlign: 'left', borderBottom: '1px solid #eee' }}>
-                    <th style={{ padding: '10px' }}>Category</th>
-                    <th style={{ padding: '10px', textAlign: 'right' }}>Amount</th>
-                    <th style={{ padding: '10px', textAlign: 'right' }}>% of Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.expense_breakdown.map((item, i) => {
-                    const pct = data.total_expenses > 0 ? ((item.total / data.total_expenses) * 100).toFixed(1) : 0;
-                    return (
-                      <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-                        <td data-label="Category" style={{ padding: '10px' }}>{item.name}</td>
-                        <td data-label="Amount" style={{ padding: '10px', textAlign: 'right' }}>{naira(item.total)}</td>
-                        <td data-label="% of Total" style={{ padding: '10px', textAlign: 'right', color: '#666' }}>{pct}%</td>
-                      </tr>
-                    );
-                  })}
-                  {data.expense_breakdown.length === 0 && (
-                    <tr><td colSpan="3" className="muted" style={{ padding: '10px', textAlign: 'center' }}>No expenses found.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="card" style={{ marginTop: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h3 style={{ margin: 0 }}>Individual Expense Transactions</h3>
-              <span className="muted" style={{ fontSize: '0.9rem' }}>
-                Showing {startIndex + 1}–{Math.min(startIndex + ITEMS_PER_PAGE, expenses.length)} of {expenses.length} records
-              </span>
-            </div>
-            
-            {/* MOBILE RESPONSIVE TABLE 2 */}
-            <table className="mobile-cards" style={{ width: '100%' }}>
+        {top_expenses && top_expenses.length > 0 ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ textAlign: 'left', borderBottom: '2px solid #eee', background: '#f9fafb' }}>
-                  <th style={{ padding: '12px 10px' }}>Date</th>
-                  <th style={{ padding: '12px 10px' }}>Category</th>
-                  <th style={{ padding: '12px 10px' }}>Description</th>
-                  <th style={{ padding: '12px 10px' }}>Vendor</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'right' }}>Amount</th>
+                <tr style={{ background: '#f9fafb' }}>
+                  <th style={{ padding: '16px 28px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Date</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Description</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Category</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Vendor</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Amount</th>
                 </tr>
               </thead>
               <tbody>
-                {paginatedExpenses.map((exp, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-                    <td data-label="Date" style={{ padding: '10px' }}>{fmtDate(exp.day)}</td>
-                    <td data-label="Category" style={{ padding: '10px' }}>
-                      <span className="badge" style={{ background: '#e0e7ff', color: '#4f46e5' }}>{exp.category}</span>
+                {top_expenses.map((expense, idx) => (
+                  <tr key={expense.id} style={{ transition: 'background 0.2s' }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <td style={{ padding: '16px 28px', fontSize: '0.9rem', color: '#6b7280', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
+                      {new Date(expense.spent_on).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </td>
-                    <td data-label="Description" style={{ padding: '10px' }}>{exp.description}</td>
-                    <td data-label="Vendor" style={{ padding: '10px' }} className="muted">{exp.vendor || '—'}</td>
-                    <td data-label="Amount" style={{ padding: '10px', textAlign: 'right', fontWeight: 'bold' }}>{naira(exp.amount)}</td>
+                    <td style={{ padding: '16px 28px', fontSize: '0.9rem', fontWeight: '500', color: '#111827', borderBottom: '1px solid #f3f4f6' }}>
+                      {expense.description}
+                    </td>
+                    <td style={{ padding: '16px 28px', borderBottom: '1px solid #f3f4f6' }}>
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '4px 12px',
+                        background: COLORS[idx % COLORS.length] + '20',
+                        color: COLORS[idx % COLORS.length],
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        fontWeight: '600'
+                      }}>
+                        {expense.category_name || 'Uncategorized'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '16px 28px', fontSize: '0.9rem', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>
+                      {expense.vendor || '—'}
+                    </td>
+                    <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '700', color: '#ef4444', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
+                      {naira(expense.amount)}
+                    </td>
                   </tr>
                 ))}
-                {paginatedExpenses.length === 0 && (
-                  <tr><td colSpan="5" className="muted" style={{ padding: '20px', textAlign: 'center' }}>No individual expenses found for this selection.</td></tr>
-                )}
               </tbody>
             </table>
-
-            {totalPages > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', paddingTop: '15px', borderTop: '1px solid #eee' }}>
-                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} style={{ padding: '10px 20px', border: '1px solid #4f46e5', borderRadius: '6px', background: currentPage === 1 ? '#f3f4f6' : '#4f46e5', color: currentPage === 1 ? '#999' : 'white', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }}>Previous</button>
-                <div style={{ display: 'flex', gap: '5px' }}>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                    <button key={page} onClick={() => setCurrentPage(page)} style={{ padding: '10px 14px', border: '1px solid #ddd', borderRadius: '6px', background: currentPage === page ? '#4f46e5' : 'white', color: currentPage === page ? 'white' : '#333', cursor: 'pointer', fontWeight: currentPage === page ? 'bold' : 'normal', fontSize: '0.9rem' }}>{page}</button>
-                  ))}
-                </div>
-                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} style={{ padding: '10px 20px', border: '1px solid #4f46e5', borderRadius: '6px', background: currentPage === totalPages ? '#f3f4f6' : '#4f46e5', color: currentPage === totalPages ? '#999' : 'white', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }}>Next</button>
-              </div>
-            )}
           </div>
-        </>
-      ) : null}
+        ) : (
+          <div style={{ padding: '80px 20px', textAlign: 'center', color: '#9ca3af' }}>
+            <div style={{ fontSize: '4rem', marginBottom: '16px' }}>📊</div>
+            <p style={{ fontSize: '1.1rem', fontWeight: '600', color: '#6b7280' }}>No expenses found</p>
+            <p style={{ fontSize: '0.9rem' }}>Try adjusting your date range or category filter</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

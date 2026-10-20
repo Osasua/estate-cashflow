@@ -1,104 +1,166 @@
 const express = require('express');
 const { query } = require('../db');
-const { authenticate } = require('../auth');
+const { authenticate, staff } = require('../auth');
 
 const router = express.Router();
 router.use(authenticate);
 
-router.get('/summary', async (req, res) => {
-  const { startDate, endDate, year, month, category_ids } = req.query;
-  
-  if (!startDate || !endDate) {
-    return res.status(400).json({ error: 'startDate and endDate are required' });
-  }
-
-  // Parse category_ids if provided (e.g., "1,2,3" -> [1, 2, 3])
-  let categoryFilter = '';
-  let categoryParams = [];
-  if (category_ids) {
-    const ids = category_ids.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
-    if (ids.length > 0) {
-      categoryFilter = `AND e.category_id = ANY($${3}::int[])`;
-      categoryParams = [ids];
-    }
-  }
-
-  // 1. Opening Balance
-  const opening = await query(
-    `SELECT ((SELECT COALESCE(SUM(amount), 0) FROM payments WHERE paid_at::date < $1::date)
-             - (SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE spent_on < $1::date))::float8 AS v`,
-    [startDate]
-  );
-
-  // 2. Received (Payments)
-  const received = await query(
-    `SELECT COALESCE(SUM(amount), 0)::float8 AS v FROM payments WHERE paid_at::date >= $1::date AND paid_at::date <= $2::date`,
-    [startDate, endDate]
-  );
-
-  // 3. Expected & Members (Monthly only)
-  let expected = 0;
-  let members = [];
-  if (year && month) {
-    const expRes = await query(
-      `SELECT COALESCE(SUM(amount_due), 0)::float8 AS v FROM contributions WHERE period_year = $1 AND period_month = $2`,
-      [year, month]
-    );
-    expected = expRes.rows[0].v || 0;
+// GET /api/reports/summary - Main analytics endpoint
+router.get('/summary', staff, async (req, res) => {
+  try {
+    const { startDate, endDate, category_id } = req.query;
     
-    const memRes = await query(
-      `SELECT m.household_name, m.house_number, c.amount_due::float8, c.amount_paid::float8
-         FROM contributions c JOIN members m ON m.id = c.member_id
-        WHERE c.period_year = $1 AND c.period_month = $2
-        ORDER BY m.house_number`,
-      [year, month]
-    );
-    members = memRes.rows.map((r) => ({
-      ...r,
-      status: r.amount_paid >= r.amount_due && r.amount_due > 0 ? 'paid'
-            : r.amount_paid > 0 ? 'partial' : 'pending',
-    }));
+    // Default to current month if no dates provided
+    const now = new Date();
+    const start = startDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const end = endDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`;
+
+    // 1. Opening Balance (balance before start date)
+    const openingBalanceRes = await query(`
+      SELECT 
+        COALESCE((SELECT SUM(amount_paid) FROM contributions WHERE period_year || '-' || LPAD(period_month::text, 2, '0') < $1), 0) -
+        COALESCE((SELECT SUM(amount) FROM expenses WHERE spent_on < $1), 0) AS balance
+    `, [start]);
+
+    // 2. Total Received (contributions within date range)
+    const totalReceivedRes = await query(`
+      SELECT COALESCE(SUM(amount_paid), 0) AS total
+      FROM contributions
+      WHERE period_year || '-' || LPAD(period_month::text, 2, '0') BETWEEN $1 AND $2
+    `, [start, end]);
+
+    // 3. Total Expenses (within date range, with optional category filter)
+    let expenseQuery = `
+      SELECT COALESCE(SUM(amount), 0) AS total
+      FROM expenses
+      WHERE spent_on BETWEEN $1 AND $2
+    `;
+    const expenseParams = [start, end];
+    
+    if (category_id) {
+      expenseQuery += ` AND category_id = $3`;
+      expenseParams.push(category_id);
+    }
+    
+    const totalExpensesRes = await query(expenseQuery, expenseParams);
+
+    // 4. Closing Balance
+    const closingBalanceRes = await query(`
+      SELECT 
+        COALESCE((SELECT SUM(amount_paid) FROM contributions WHERE period_year || '-' || LPAD(period_month::text, 2, '0') <= $2), 0) -
+        COALESCE((SELECT SUM(amount) FROM expenses WHERE spent_on <= $2), 0) AS balance
+    `, [end]);
+
+    // 5. Expense Breakdown by Category (for charts)
+    let breakdownQuery = `
+      SELECT 
+        COALESCE(c.name, 'Uncategorized') AS name,
+        COALESCE(SUM(e.amount), 0) AS total,
+        COUNT(e.id)::int AS count
+      FROM expenses e
+      LEFT JOIN categories c ON e.category_id = c.id
+      WHERE e.spent_on BETWEEN $1 AND $2
+    `;
+    const breakdownParams = [start, end];
+    
+    if (category_id) {
+      breakdownQuery += ` AND e.category_id = $3`;
+      breakdownParams.push(category_id);
+    }
+    
+    breakdownQuery += ` GROUP BY c.name ORDER BY total DESC`;
+    
+    const breakdownRes = await query(breakdownQuery, breakdownParams);
+
+    // 6. Daily expense trend (for line chart)
+    let dailyTrendQuery = `
+      SELECT 
+        TO_CHAR(spent_on, 'YYYY-MM-DD') AS date,
+        TO_CHAR(spent_on, 'DD Mon') AS label,
+        COALESCE(SUM(amount), 0) AS total
+      FROM expenses
+      WHERE spent_on BETWEEN $1 AND $2
+    `;
+    const dailyTrendParams = [start, end];
+    
+    if (category_id) {
+      dailyTrendQuery += ` AND category_id = $3`;
+      dailyTrendParams.push(category_id);
+    }
+    
+    dailyTrendQuery += ` GROUP BY spent_on ORDER BY spent_on ASC`;
+    
+    const dailyTrendRes = await query(dailyTrendQuery, dailyTrendParams);
+
+    // 7. Top expenses (for table)
+    let topExpensesQuery = `
+      SELECT 
+        e.id,
+        e.description,
+        e.amount,
+        e.spent_on,
+        e.vendor,
+        c.name AS category_name
+      FROM expenses e
+      LEFT JOIN categories c ON e.category_id = c.id
+      WHERE e.spent_on BETWEEN $1 AND $2
+    `;
+    const topExpensesParams = [start, end];
+    
+    if (category_id) {
+      topExpensesQuery += ` AND e.category_id = $3`;
+      topExpensesParams.push(category_id);
+    }
+    
+    topExpensesQuery += ` ORDER BY e.amount DESC LIMIT 10`;
+    
+    const topExpensesRes = await query(topExpensesQuery, topExpensesParams);
+
+    // 8. All categories (for filter dropdown)
+    const categoriesRes = await query(`SELECT id, name FROM categories WHERE is_active = true ORDER BY name`);
+
+    const openingBalance = parseFloat(openingBalanceRes.rows[0].balance) || 0;
+    const totalReceived = parseFloat(totalReceivedRes.rows[0].total) || 0;
+    const totalExpenses = parseFloat(totalExpensesRes.rows[0].total) || 0;
+    const closingBalance = parseFloat(closingBalanceRes.rows[0].balance) || 0;
+
+    res.json({
+      kpis: {
+        opening_balance: openingBalance,
+        total_received: totalReceived,
+        total_expenses: totalExpenses,
+        closing_balance: closingBalance
+      },
+      expense_breakdown: breakdownRes.rows.map(r => ({
+        name: r.name,
+        total: parseFloat(r.total) || 0,
+        count: parseInt(r.count) || 0
+      })),
+      daily_trend: dailyTrendRes.rows.map(r => ({
+        date: r.date,
+        label: r.label,
+        total: parseFloat(r.total) || 0
+      })),
+      top_expenses: topExpensesRes.rows.map(r => ({
+        id: r.id,
+        description: r.description,
+        amount: parseFloat(r.amount) || 0,
+        spent_on: r.spent_on,
+        vendor: r.vendor,
+        category_name: r.category_name
+      })),
+      categories: categoriesRes.rows,
+      filters: {
+        start_date: start,
+        end_date: end,
+        category_id: category_id || null
+      }
+    });
+
+  } catch (err) {
+    console.error('Reports error:', err);
+    res.status(500).json({ error: err.message });
   }
-
-  // 4. Expenses (WITH CATEGORY FILTER)
-  // We use a dynamic query string here to inject the category filter safely
-  const expenseQuery = `
-    SELECT COALESCE(c.name, 'Uncategorised') AS name, SUM(e.amount)::float8 AS total
-    FROM expenses e LEFT JOIN categories c ON c.id = e.category_id
-    WHERE e.spent_on >= $1::date AND e.spent_on <= $2::date ${categoryFilter}
-    GROUP BY 1 ORDER BY 2 DESC
-  `;
-  
-  const expenseListQuery = `
-    SELECT e.spent_on::text AS day, e.amount::float8 AS amount, e.description, e.vendor,
-           COALESCE(c.name, 'Uncategorised') AS category
-    FROM expenses e LEFT JOIN categories c ON c.id = e.category_id
-    WHERE e.spent_on >= $1::date AND e.spent_on <= $2::date ${categoryFilter}
-    ORDER BY e.spent_on DESC, e.id DESC
-  `;
-
-  // Combine base params with category params
-  const baseParams = [startDate, endDate, ...categoryParams];
-
-  const expenseRows = await query(expenseQuery, baseParams);
-  const expenseList = await query(expenseListQuery, baseParams);
-
-  const openingBalance = opening.rows[0].v || 0;
-  const receivedAmount = received.rows[0].v || 0;
-  const totalExpenses = expenseRows.rows.reduce((s, r) => s + (r.total || 0), 0);
-
-  res.json({
-    startDate,
-    endDate,
-    opening_balance: openingBalance,
-    expected: expected,
-    received: receivedAmount,
-    total_expenses: totalExpenses,
-    closing_balance: openingBalance + receivedAmount - totalExpenses,
-    expense_breakdown: expenseRows.rows,
-    expenses: expenseList.rows,
-    members: members,
-  });
 });
 
 module.exports = router;
