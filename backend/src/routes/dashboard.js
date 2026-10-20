@@ -7,102 +7,166 @@ router.use(authenticate);
 
 router.get('/', async (req, res) => {
   try {
-    const [kpis, daily, weekly, categories, trend] = await Promise.all([
-      query(`
-        SELECT
-          ((SELECT COALESCE(SUM(amount), 0) FROM payments)
-           - (SELECT COALESCE(SUM(amount), 0) FROM expenses))::float8 AS balance,
-          
-          -- ✅ FIX: Strictly sum amount_paid for the CURRENT calendar month from contributions
-          (SELECT COALESCE(SUM(amount_paid), 0) FROM contributions
-            WHERE period_year = EXTRACT(YEAR FROM now())::int
-              AND period_month = EXTRACT(MONTH FROM now())::int)::float8 AS month_in,
-              
-          (SELECT COALESCE(SUM(amount), 0) FROM expenses
-            WHERE date_trunc('month', spent_on) = date_trunc('month', now()))::float8 AS month_expense,
-          
-          (SELECT COALESCE(SUM(amount_due), 0) FROM contributions
-            WHERE (type = 'monthly' OR type IS NULL)
-              AND period_year = EXTRACT(YEAR FROM now())::int
-              AND period_month = EXTRACT(MONTH FROM now())::int)::float8 AS month_due,
-          
-          (SELECT COUNT(DISTINCT c.member_id)::int FROM contributions c
-            WHERE (c.type = 'monthly' OR c.type IS NULL)
-              AND c.period_year = EXTRACT(YEAR FROM now())::int
-              AND c.period_month = EXTRACT(MONTH FROM now())::int
-              AND c.amount_paid < c.amount_due) AS pending_count
-      `),
-      query(`
-        SELECT to_char(spent_on, 'DD Mon') AS day, COALESCE(SUM(amount), 0)::float8 AS total
-          FROM expenses
-         WHERE spent_on >= CURRENT_DATE - INTERVAL '13 days'
-         GROUP BY spent_on ORDER BY spent_on
-      `),
-      query(`
-        SELECT 'Wk ' || EXTRACT(WEEK FROM spent_on) AS week, COALESCE(SUM(amount), 0)::float8 AS total
-          FROM expenses
-         WHERE spent_on >= date_trunc('week', CURRENT_DATE) - INTERVAL '7 weeks'
-         GROUP BY EXTRACT(WEEK FROM spent_on) ORDER BY EXTRACT(WEEK FROM spent_on)
-      `),
-      query(`
-        SELECT COALESCE(c.name, 'Uncategorised') AS name, COALESCE(SUM(e.amount), 0)::float8 AS total
-          FROM expenses e LEFT JOIN categories c ON c.id = e.category_id
-         WHERE date_trunc('month', e.spent_on) = date_trunc('month', CURRENT_DATE)
-         GROUP BY c.name ORDER BY total DESC
-      `),
-      query(`
-        SELECT to_char(months.m, 'YYYY-MM') AS month,
-               to_char(months.m, 'Mon') AS short_month,
-               COALESCE(p.total, 0)::float8 AS income, 
-               COALESCE(e.total, 0)::float8 AS expense
-          FROM generate_series(date_trunc('month', now()) - INTERVAL '5 months',
-                               date_trunc('month', now()), '1 month') AS months(m)
-          LEFT JOIN (SELECT date_trunc('month', paid_at) m, SUM(amount)::float8 AS total
-                       FROM payments GROUP BY 1) p ON p.m = months.m
-          LEFT JOIN (SELECT date_trunc('month', spent_on) m, SUM(amount)::float8 AS total
-                       FROM expenses GROUP BY 1) e ON e.m = months.m
-         ORDER BY months.m
-      `),
-    ]);
-    
-    // ✅ SAFETY NET: Force everything to be a strict JavaScript Number to prevent frontend NaN/blank issues
-    const safeKpis = {
-      balance: Number(kpis.rows[0].balance) || 0,
-      month_in: Number(kpis.rows[0].month_in) || 0,
-      month_expense: Number(kpis.rows[0].month_expense) || 0,
-      month_due: Number(kpis.rows[0].month_due) || 0,
-      pending_count: Number(kpis.rows[0].pending_count) || 0,
-    };
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 1-12
 
-    const safeTrend = trend.rows.map(r => ({
-      month: String(r.month),
-      short_month: String(r.short_month),
-      income: Number(r.income) || 0,
-      expense: Number(r.expense) || 0
+    // 1. KPIs - Accurate and isolated
+    const kpisQuery = await query(`
+      SELECT 
+        -- Cash Balance: Total collected - Total expenses (all time)
+        COALESCE((SELECT SUM(amount_paid) FROM contributions), 0) - 
+        COALESCE((SELECT SUM(amount) FROM expenses), 0) AS balance,
+        
+        -- Collected THIS MONTH: Only from current month's bills
+        COALESCE((
+          SELECT SUM(amount_paid) 
+          FROM contributions 
+          WHERE period_year = $1 
+            AND period_month = $2
+        ), 0) AS month_in,
+        
+        -- Expected THIS MONTH: Sum of monthly_due for active members
+        COALESCE((
+          SELECT SUM(monthly_due) 
+          FROM members 
+          WHERE active = true
+        ), 0) AS month_due,
+        
+        -- Spent THIS MONTH
+        COALESCE((
+          SELECT SUM(amount) 
+          FROM expenses 
+          WHERE EXTRACT(YEAR FROM spent_on) = $1 
+            AND EXTRACT(MONTH FROM spent_on) = $2
+        ), 0) AS month_expense,
+        
+        -- Households owing THIS MONTH
+        COALESCE((
+          SELECT COUNT(DISTINCT member_id)
+          FROM contributions
+          WHERE period_year = $1 
+            AND period_month = $2
+            AND type = 'monthly'
+            AND amount_paid < amount_due
+        ), 0)::int AS pending_count
+    `, [currentYear, currentMonth]);
+
+    const kpis = kpisQuery.rows[0];
+
+    // 2. Trend - Last 6 months with accurate data
+    const trendQuery = await query(`
+      WITH RECURSIVE months AS (
+        SELECT date_trunc('month', CURRENT_DATE) - INTERVAL '5 months' AS month_start
+        UNION ALL
+        SELECT month_start + INTERVAL '1 month'
+        FROM months
+        WHERE month_start < date_trunc('month', CURRENT_DATE)
+      )
+      SELECT 
+        TO_CHAR(m.month_start, 'YYYY-MM') AS month,
+        TO_CHAR(m.month_start, 'Mon') AS short_month,
+        TO_CHAR(m.month_start, 'Month') AS full_month,
+        EXTRACT(MONTH FROM m.month_start)::int AS month_num,
+        EXTRACT(YEAR FROM m.month_start)::int AS year_num,
+        COALESCE(SUM(DISTINCT c.amount_paid), 0) AS income,
+        COALESCE(SUM(DISTINCT e.amount), 0) AS expense
+      FROM months m
+      LEFT JOIN contributions c 
+        ON EXTRACT(YEAR FROM m.month_start) = c.period_year 
+        AND EXTRACT(MONTH FROM m.month_start) = c.period_month
+        AND c.type = 'monthly'
+      LEFT JOIN expenses e 
+        ON DATE_TRUNC('month', e.spent_on) = m.month_start
+      GROUP BY m.month_start
+      ORDER BY m.month_start ASC
+    `);
+
+    const trend = trendQuery.rows.map(r => ({
+      month: r.month,
+      short_month: r.short_month,
+      full_month: r.full_month.trim(),
+      year_num: parseInt(r.year_num),
+      month_num: parseInt(r.month_num),
+      income: parseFloat(r.income) || 0,
+      expense: parseFloat(r.expense) || 0,
+      net: (parseFloat(r.income) || 0) - (parseFloat(r.expense) || 0)
     }));
 
-    const safeDaily = daily.rows.map(r => ({
-      day: String(r.day),
-      total: Number(r.total) || 0
+    // 3. Daily Expenses - Last 14 days
+    const dailyQuery = await query(`
+      SELECT 
+        TO_CHAR(spent_on, 'DD Mon') AS day,
+        COALESCE(SUM(amount), 0) AS total
+      FROM expenses
+      WHERE spent_on >= CURRENT_DATE - INTERVAL '13 days'
+      GROUP BY spent_on
+      ORDER BY spent_on ASC
+    `);
+
+    const daily = dailyQuery.rows.map(r => ({
+      day: r.day,
+      total: parseFloat(r.total) || 0
     }));
 
-    const safeWeekly = weekly.rows.map(r => ({
-      week: String(r.week),
-      total: Number(r.total) || 0
+    // 4. Weekly Expenses - Last 8 weeks
+    const weeklyQuery = await query(`
+      SELECT 
+        'Wk ' || EXTRACT(WEEK FROM spent_on)::text AS week,
+        COALESCE(SUM(amount), 0) AS total
+      FROM expenses
+      WHERE spent_on >= CURRENT_DATE - INTERVAL '7 weeks'
+      GROUP BY EXTRACT(WEEK FROM spent_on)
+      ORDER BY EXTRACT(WEEK FROM spent_on) ASC
+    `);
+
+    const weekly = weeklyQuery.rows.map(r => ({
+      week: r.week,
+      total: parseFloat(r.total) || 0
     }));
 
-    const safeCategories = categories.rows.map(r => ({
-      name: String(r.name),
-      total: Number(r.total) || 0
+    // 5. Categories - This month
+    const categoriesQuery = await query(`
+      SELECT 
+        COALESCE(c.name, 'Uncategorized') AS name,
+        COALESCE(SUM(e.amount), 0) AS total
+      FROM expenses e
+      LEFT JOIN categories c ON e.category_id = c.id
+      WHERE EXTRACT(YEAR FROM e.spent_on) = $1 
+        AND EXTRACT(MONTH FROM e.spent_on) = $2
+      GROUP BY c.name
+      ORDER BY total DESC
+    `, [currentYear, currentMonth]);
+
+    const categories = categoriesQuery.rows.map(r => ({
+      name: r.name,
+      total: parseFloat(r.total) || 0
+    }));
+
+    // 6. Monthly Summary for Table (same as trend but formatted for table)
+    const monthlySummary = trend.map(t => ({
+      month: t.month,
+      month_name: `${t.full_month} ${t.year_num}`,
+      income: t.income,
+      expense: t.expense,
+      net: t.net
     }));
 
     res.json({
-      kpis: safeKpis,
-      daily: safeDaily,
-      weekly: safeWeekly,
-      categories: safeCategories,
-      trend: safeTrend,
+      kpis: {
+        balance: parseFloat(kpis.balance) || 0,
+        month_in: parseFloat(kpis.month_in) || 0,
+        month_due: parseFloat(kpis.month_due) || 0,
+        month_expense: parseFloat(kpis.month_expense) || 0,
+        pending_count: parseInt(kpis.pending_count) || 0
+      },
+      trend,
+      daily,
+      weekly,
+      categories,
+      monthlySummary
     });
+
   } catch (err) {
     console.error('Dashboard error:', err);
     res.status(500).json({ error: err.message });
