@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { naira } from '../format';
