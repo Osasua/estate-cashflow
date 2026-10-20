@@ -22,6 +22,38 @@ const kpiStyle = (color) => ({
   boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
 });
 
+// ✅ SHARED STYLES — ensures perfect consistency everywhere
+const inputStyle = {
+  width: '100%',
+  padding: '6px 8px',
+  border: '1px solid #d1d5db',
+  borderRadius: '6px',
+  fontSize: '0.8rem',
+  textAlign: 'center',
+  boxSizing: 'border-box',
+  height: '32px',
+  lineHeight: '20px',
+  outline: 'none',
+  color: '#374151',
+  background: '#fff',
+};
+
+const btnStyle = (bg, color, border = '1px solid #d1d5db') => ({
+  padding: '6px 14px',
+  background: bg,
+  color: color,
+  border: border,
+  borderRadius: '6px',
+  cursor: 'pointer',
+  fontSize: '0.8rem',
+  fontWeight: '500',
+  height: '32px',
+  lineHeight: '20px',
+  whiteSpace: 'nowrap',
+});
+
+const cellStyle = { padding: '8px 16px', fontSize: '0.875rem', verticalAlign: 'middle' };
+
 export default function Contributions() {
   const { user } = useAuth();
   const staff = ['admin', 'treasurer'].includes(user?.role);
@@ -51,7 +83,7 @@ export default function Contributions() {
       setMessage(`✅ ${res.generated} bill(s) generated for ${MONTHS[month - 1]} ${year}.`);
       load();
     } catch (err) {
-      setMessage(` ${err.message}`);
+      setMessage(`❌ ${err.message}`);
     }
   };
 
@@ -91,7 +123,7 @@ export default function Contributions() {
       id: row.id,
       amount_due: row.amount_due,
       amount_paid: row.amount_paid,
-      note: row.references || row.note || '',
+      note: row.note || row.references || '',
     });
   };
 
@@ -298,32 +330,35 @@ export default function Contributions() {
                 const isEditing = editing && editing.id === r.id;
                 return (
                   <tr key={r.id} style={{ borderBottom: idx !== filtered.length - 1 ? '1px solid #f3f4f6' : 'none', background: r.active === false ? '#fafafa' : 'transparent', opacity: r.active === false ? 0.7 : 1 }}>
-                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#374151' }}>{r.house_number}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#1f2937', fontWeight: '500' }}>{r.household_name}</td>
+                    <td style={{ ...cellStyle, color: '#374151' }}>{r.house_number}</td>
+                    <td style={{ ...cellStyle, color: '#1f2937', fontWeight: '500' }}>{r.household_name}</td>
                     
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', color: '#1f2937' }}>
+                    {/* Due */}
+                    <td style={{ ...cellStyle, textAlign: 'right', color: '#1f2937' }}>
                       {isEditing ? (
                         <input 
                           type="number" 
                           value={editing.amount_due} 
                           onChange={(e) => setEditing({ ...editing, amount_due: e.target.value })}
-                          style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', textAlign: 'right', boxSizing: 'border-box' }}
+                          style={{ ...inputStyle, textAlign: 'right' }}
                         />
                       ) : naira(r.amount_due)}
                     </td>
                     
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', color: '#1f2937' }}>
+                    {/* Paid */}
+                    <td style={{ ...cellStyle, textAlign: 'right', color: '#1f2937' }}>
                       {isEditing ? (
                         <input 
                           type="number" 
                           value={editing.amount_paid} 
                           onChange={(e) => setEditing({ ...editing, amount_paid: e.target.value })}
-                          style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', textAlign: 'right', boxSizing: 'border-box' }}
+                          style={{ ...inputStyle, textAlign: 'right' }}
                         />
                       ) : naira(r.amount_paid)}
                     </td>
                     
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                    {/* Status */}
+                    <td style={{ ...cellStyle, textAlign: 'center' }}>
                       <span style={{ 
                         padding: '4px 12px', 
                         borderRadius: '12px', 
@@ -336,112 +371,36 @@ export default function Contributions() {
                       </span>
                     </td>
                     
-                    <td style={{ padding: '12px 16px', textAlign: 'center', verticalAlign: 'middle' }}>
-  {isEditing ? (
-    <input 
-      type="text" 
-      value={editing.note || ''} 
-      onChange={(e) => setEditing({ ...editing, note: e.target.value })}
-      placeholder="Add reference note"
-      style={{ 
-        width: '100%', 
-        padding: '4px 8px', 
-        border: '1px solid #d1d5db', 
-        borderRadius: '4px', 
-        fontSize: '0.875rem', 
-        textAlign: 'center', 
-        boxSizing: 'border-box',
-        fontStyle: 'normal',
-        color: '#374151',
-        height: '32px',
-        lineHeight: '20px'
-      }}
-    />
-  ) : (
-    <span style={{ fontSize: '0.8rem', color: '#6b7280', fontStyle: 'italic' }}>
-      {r.references || '—'}
-    </span>
-  )}
-</td>
+                    {/* Reference */}
+                    <td style={{ ...cellStyle, textAlign: 'center' }}>
+                      {isEditing ? (
+                        <input 
+                          type="text" 
+                          value={editing.note || ''} 
+                          onChange={(e) => setEditing({ ...editing, note: e.target.value })}
+                          placeholder="Add reference note"
+                          style={inputStyle}
+                        />
+                      ) : (
+                        <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                          {r.references || '—'}
+                        </span>
+                      )}
+                    </td>
                     
+                    {/* Actions */}
                     {staff && (
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+                      <td style={{ ...cellStyle, textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
                           {isEditing ? (
                             <>
-                              <button 
-                                onClick={() => saveEdit(r.id)} 
-                                style={{ 
-                                  padding: '6px 14px', 
-                                  background: '#10b981', 
-                                  color: 'white', 
-                                  border: 'none', 
-                                  borderRadius: '6px', 
-                                  cursor: 'pointer', 
-                                  fontSize: '0.8rem',
-                                  fontWeight: '500',
-                                  height: '32px',
-                                  lineHeight: '20px',
-                                  whiteSpace: 'nowrap'
-                                }}
-                              >
-                                Save
-                              </button>
-                              <button 
-                                onClick={cancelEdit} 
-                                style={{ 
-                                  padding: '6px 14px', 
-                                  background: '#fff', 
-                                  color: '#374151', 
-                                  border: '1px solid #d1d5db', 
-                                  borderRadius: '6px', 
-                                  cursor: 'pointer', 
-                                  fontSize: '0.8rem',
-                                  fontWeight: '500',
-                                  height: '32px',
-                                  lineHeight: '20px',
-                                  whiteSpace: 'nowrap'
-                                }}
-                              >
-                                Cancel
-                              </button>
+                              <button onClick={() => saveEdit(r.id)} style={btnStyle('#10b981', 'white', 'none')}>Save</button>
+                              <button onClick={cancelEdit} style={btnStyle('#fff', '#374151')}>Cancel</button>
                             </>
                           ) : (
                             <>
-                              <button 
-                                onClick={() => startEdit(r)} 
-                                style={{ 
-                                  padding: '6px 14px', 
-                                  background: '#fef3c7', 
-                                  color: '#92400e', 
-                                  border: '1px solid #fcd34d', 
-                                  borderRadius: '6px', 
-                                  cursor: 'pointer', 
-                                  fontSize: '0.8rem',
-                                  fontWeight: '500',
-                                  height: '32px',
-                                  lineHeight: '20px',
-                                  whiteSpace: 'nowrap'
-                                }}
-                              >
-                                Edit
-                              </button>
-                              <button 
-                                onClick={() => setPaying(r)} 
-                                style={{ 
-                                  padding: '6px 14px', 
-                                  background: '#fff', 
-                                  color: '#374151', 
-                                  border: '1px solid #d1d5db', 
-                                  borderRadius: '6px', 
-                                  cursor: 'pointer', 
-                                  fontSize: '0.8rem',
-                                  fontWeight: '500',
-                                  height: '32px',
-                                  lineHeight: '20px',
-                                  whiteSpace: 'nowrap'
-                                }}
-                              >
+                              <button onClick={() => startEdit(r)} style={btnStyle('#fef3c7', '#92400e', '1px solid #fcd34d')}>Edit</button>
+                              <button onClick={() => setPaying(r)} style={btnStyle('#fff', '#374151')}>
                                 {r.status === 'paid' ? 'Add Payment' : 'Record Payment'}
                               </button>
                             </>
