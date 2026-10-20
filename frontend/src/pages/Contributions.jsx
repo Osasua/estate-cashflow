@@ -336,31 +336,33 @@ export default function Contributions() {
                       </span>
                     </td>
                     
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                      {isEditing ? (
-                        <input 
-                          type="text" 
-                          value={editing.note || ''} 
-                          onChange={(e) => setEditing({ ...editing, note: e.target.value })}
-                          placeholder="Add reference note"
-                          style={{ 
-                            width: '100%', 
-                            padding: '6px 8px', 
-                            border: '1px solid #d1d5db', 
-                            borderRadius: '4px', 
-                            fontSize: '0.8rem', 
-                            textAlign: 'center', 
-                            boxSizing: 'border-box',
-                            fontStyle: 'normal',
-                            color: '#374151'
-                          }}
-                        />
-                      ) : (
-                        <span style={{ fontSize: '0.8rem', color: '#6b7280', fontStyle: 'italic' }}>
-                          {r.references || '—'}
-                        </span>
-                      )}
-                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center', verticalAlign: 'middle' }}>
+  {isEditing ? (
+    <input 
+      type="text" 
+      value={editing.note || ''} 
+      onChange={(e) => setEditing({ ...editing, note: e.target.value })}
+      placeholder="Add reference note"
+      style={{ 
+        width: '100%', 
+        padding: '4px 8px', 
+        border: '1px solid #d1d5db', 
+        borderRadius: '4px', 
+        fontSize: '0.875rem', 
+        textAlign: 'center', 
+        boxSizing: 'border-box',
+        fontStyle: 'normal',
+        color: '#374151',
+        height: '32px',
+        lineHeight: '20px'
+      }}
+    />
+  ) : (
+    <span style={{ fontSize: '0.8rem', color: '#6b7280', fontStyle: 'italic' }}>
+      {r.references || '—'}
+    </span>
+  )}
+</td>
                     
                     {staff && (
                       <td style={{ padding: '12px 16px', textAlign: 'center' }}>
