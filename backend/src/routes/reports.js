@@ -5,35 +5,33 @@ const { authenticate, staff } = require('../auth');
 const router = express.Router();
 router.use(authenticate);
 
-// GET /api/reports/summary - Main analytics endpoint
 router.get('/summary', staff, async (req, res) => {
   try {
     const { startDate, endDate, category_id } = req.query;
     
-    // Default to current month if no dates provided
     const now = new Date();
     const start = startDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     const end = endDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`;
 
-    // 1. Opening Balance (balance before start date)
+    // 1. Opening Balance (FIXED: Cast text to date)
     const openingBalanceRes = await query(`
       SELECT 
         COALESCE((SELECT SUM(amount_paid) FROM contributions WHERE period_year || '-' || LPAD(period_month::text, 2, '0') < $1), 0) -
-        COALESCE((SELECT SUM(amount) FROM expenses WHERE spent_on < $1), 0) AS balance
+        COALESCE((SELECT SUM(amount) FROM expenses WHERE spent_on < $1::date), 0) AS balance
     `, [start]);
 
-    // 2. Total Received (contributions within date range)
+    // 2. Total Received
     const totalReceivedRes = await query(`
       SELECT COALESCE(SUM(amount_paid), 0) AS total
       FROM contributions
       WHERE period_year || '-' || LPAD(period_month::text, 2, '0') BETWEEN $1 AND $2
     `, [start, end]);
 
-    // 3. Total Expenses (within date range, with optional category filter)
+    // 3. Total Expenses (FIXED: Cast text to date)
     let expenseQuery = `
       SELECT COALESCE(SUM(amount), 0) AS total
       FROM expenses
-      WHERE spent_on BETWEEN $1 AND $2
+      WHERE spent_on BETWEEN $1::date AND $2::date
     `;
     const expenseParams = [start, end];
     
@@ -44,14 +42,14 @@ router.get('/summary', staff, async (req, res) => {
     
     const totalExpensesRes = await query(expenseQuery, expenseParams);
 
-    // 4. Closing Balance
+    // 4. Closing Balance (FIXED: Cast text to date)
     const closingBalanceRes = await query(`
       SELECT 
         COALESCE((SELECT SUM(amount_paid) FROM contributions WHERE period_year || '-' || LPAD(period_month::text, 2, '0') <= $2), 0) -
-        COALESCE((SELECT SUM(amount) FROM expenses WHERE spent_on <= $2), 0) AS balance
+        COALESCE((SELECT SUM(amount) FROM expenses WHERE spent_on <= $2::date), 0) AS balance
     `, [end]);
 
-    // 5. Expense Breakdown by Category (for charts)
+    // 5. Expense Breakdown (FIXED: Cast text to date)
     let breakdownQuery = `
       SELECT 
         COALESCE(c.name, 'Uncategorized') AS name,
@@ -59,7 +57,7 @@ router.get('/summary', staff, async (req, res) => {
         COUNT(e.id)::int AS count
       FROM expenses e
       LEFT JOIN categories c ON e.category_id = c.id
-      WHERE e.spent_on BETWEEN $1 AND $2
+      WHERE e.spent_on BETWEEN $1::date AND $2::date
     `;
     const breakdownParams = [start, end];
     
@@ -72,14 +70,14 @@ router.get('/summary', staff, async (req, res) => {
     
     const breakdownRes = await query(breakdownQuery, breakdownParams);
 
-    // 6. Daily expense trend (for line chart)
+    // 6. Daily trend (FIXED: Cast text to date)
     let dailyTrendQuery = `
       SELECT 
         TO_CHAR(spent_on, 'YYYY-MM-DD') AS date,
         TO_CHAR(spent_on, 'DD Mon') AS label,
         COALESCE(SUM(amount), 0) AS total
       FROM expenses
-      WHERE spent_on BETWEEN $1 AND $2
+      WHERE spent_on BETWEEN $1::date AND $2::date
     `;
     const dailyTrendParams = [start, end];
     
@@ -92,7 +90,7 @@ router.get('/summary', staff, async (req, res) => {
     
     const dailyTrendRes = await query(dailyTrendQuery, dailyTrendParams);
 
-    // 7. Top expenses (for table)
+    // 7. Top expenses (FIXED: Cast text to date)
     let topExpensesQuery = `
       SELECT 
         e.id,
@@ -103,7 +101,7 @@ router.get('/summary', staff, async (req, res) => {
         c.name AS category_name
       FROM expenses e
       LEFT JOIN categories c ON e.category_id = c.id
-      WHERE e.spent_on BETWEEN $1 AND $2
+      WHERE e.spent_on BETWEEN $1::date AND $2::date
     `;
     const topExpensesParams = [start, end];
     
@@ -116,7 +114,7 @@ router.get('/summary', staff, async (req, res) => {
     
     const topExpensesRes = await query(topExpensesQuery, topExpensesParams);
 
-    // 8. All categories (for filter dropdown)
+    // 8. Categories
     const categoriesRes = await query(`SELECT id, name FROM categories WHERE is_active = true ORDER BY name`);
 
     const openingBalance = parseFloat(openingBalanceRes.rows[0].balance) || 0;
