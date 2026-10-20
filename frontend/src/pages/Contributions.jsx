@@ -51,7 +51,7 @@ export default function Contributions() {
       setMessage(`✅ ${res.generated} bill(s) generated for ${MONTHS[month - 1]} ${year}.`);
       load();
     } catch (err) {
-      setMessage(`❌ ${err.message}`);
+      setMessage(` ${err.message}`);
     }
   };
 
@@ -91,6 +91,7 @@ export default function Contributions() {
       id: row.id,
       amount_due: row.amount_due,
       amount_paid: row.amount_paid,
+      note: row.references || row.note || '',
     });
   };
 
@@ -101,6 +102,7 @@ export default function Contributions() {
         body: {
           amount_due: Number(editing.amount_due),
           amount_paid: Number(editing.amount_paid),
+          note: editing.note || null,
         },
       });
       setMessage('✅ Contribution updated successfully.');
@@ -288,7 +290,7 @@ export default function Contributions() {
                 <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Paid</th>
                 <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Status</th>
                 <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Reference</th>
-                {staff && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>}
+                {staff && <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -334,22 +336,35 @@ export default function Contributions() {
                       </span>
                     </td>
                     
-                    <td style={{ 
-                      padding: '12px 16px', 
-                      fontSize: '0.8rem', 
-                      color: '#6b7280', 
-                      fontStyle: 'italic',
-                      textAlign: 'center',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {r.references || '—'}
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      {isEditing ? (
+                        <input 
+                          type="text" 
+                          value={editing.note || ''} 
+                          onChange={(e) => setEditing({ ...editing, note: e.target.value })}
+                          placeholder="Add reference note"
+                          style={{ 
+                            width: '100%', 
+                            padding: '6px 8px', 
+                            border: '1px solid #d1d5db', 
+                            borderRadius: '4px', 
+                            fontSize: '0.8rem', 
+                            textAlign: 'center', 
+                            boxSizing: 'border-box',
+                            fontStyle: 'normal',
+                            color: '#374151'
+                          }}
+                        />
+                      ) : (
+                        <span style={{ fontSize: '0.8rem', color: '#6b7280', fontStyle: 'italic' }}>
+                          {r.references || '—'}
+                        </span>
+                      )}
                     </td>
                     
                     {staff && (
-                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
                           {isEditing ? (
                             <>
                               <button 
