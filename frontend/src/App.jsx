@@ -14,6 +14,7 @@ import MyAccount from './pages/MyAccount';
 import AuditLog from './pages/AuditLog';
 import Profile from './pages/Profile';
 import Broadcast from './pages/Broadcast';
+import Minutes from './pages/Minutes';
 
 function Layout({ children }) {
   const { user, logout } = useAuth();
@@ -39,7 +40,7 @@ function Layout({ children }) {
           {/* 2. My Account (Residents Only) */}
           {!isStaff && <NavLink to="/my-account">My Account</NavLink>}
           
-          {/* 3. Staff/Admin Menu (Reordered as requested) */}
+          {/* 3. Staff/Admin Menu */}
           {isStaff && <NavLink to="/contributions">Contributions</NavLink>}
           {isStaff && <NavLink to="/expenses">Expenses</NavLink>}
           {isStaff && <NavLink to="/reports">Reports</NavLink>}
@@ -50,6 +51,9 @@ function Layout({ children }) {
           {/* 4. Admin-only links */}
           {isAdmin && <NavLink to="/users">User Management</NavLink>}
           {isAdmin && <NavLink to="/audit-log">Audit Log</NavLink>}
+          
+          {/* ✅ NEW: Minutes (Everyone - Residents & Staff) */}
+          <NavLink to="/minutes">Minutes</NavLink>
           
           {/* 5. My Profile (Everyone, at the bottom) */}
           <NavLink to="/profile">My Profile</NavLink>
@@ -95,6 +99,9 @@ function AppRoutes() {
       <Route path="/categories" element={page(<Categories />)} />
       <Route path="/members" element={page(<Members />)} />
       <Route path="/users" element={page(<Users />)} />
+      
+      {/* ✅ FIXED: Added page() wrapper so the sidebar shows up */}
+      <Route path="/minutes" element={page(<Minutes />)} />
     </Routes>
   );
 }
