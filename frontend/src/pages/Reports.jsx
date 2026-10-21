@@ -85,6 +85,34 @@ export default function Reports() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [showOpeningBalanceForm, setShowOpeningBalanceForm] = useState(false);
+const [newOpeningBalance, setNewOpeningBalance] = useState('');
+const [newEffectiveDate, setNewEffectiveDate] = useState('2026-01-01');
+const [newNotes, setNewNotes] = useState('');
+
+const handleSaveOpeningBalance = async () => {
+  if (!newOpeningBalance) {
+    alert('Please enter an amount');
+    return;
+  }
+  try {
+    await api('/reports/opening-balance', {
+      method: 'POST',
+      body: {
+        amount: parseFloat(newOpeningBalance),
+        effective_date: newEffectiveDate,
+        notes: newNotes
+      }
+    });
+    alert('✅ Opening balance updated successfully!');
+    setShowOpeningBalanceForm(false);
+    setNewOpeningBalance('');
+    setNewNotes('');
+    loadData(); // Refresh data
+  } catch (err) {
+    alert('❌ Error: ' + err.message);
+  }
+};
 
   useEffect(() => {
     const now = new Date();
@@ -208,13 +236,15 @@ export default function Reports() {
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '32px' }}>
-        <KPICard
-          title="Opening Balance"
-          value={naira(kpis.opening_balance)}
-          subtitle={`As of ${filters.start_date}`}
-          color="indigo"
-          icon=""
-        />
+       <KPICard
+  title="Opening Balance"
+  value={naira(kpis.opening_balance)}
+  subtitle={kpis.is_system_start 
+    ? "System start — no prior data" 
+    : `As of ${filters.start_date}`}
+  color="indigo"
+  icon=""
+/>
         <KPICard
           title="Total Received"
           value={naira(kpis.total_received)}
@@ -237,6 +267,113 @@ export default function Reports() {
           icon=""
         />
       </div>
+
+{/* Estate Opening Balance Card */}
+<div style={{
+  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  borderRadius: '16px',
+  padding: '24px',
+  marginBottom: '24px',
+  color: 'white',
+  boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+}}>
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+    <div>
+      <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', fontWeight: '600' }}>Estate Opening Balance</h3>
+      <p style={{ margin: 0, fontSize: '0.9rem', opacity: 0.9 }}>
+        Current: <strong>{naira(kpis.estate_opening_balance || 0)}</strong> 
+        {kpis.estate_effective_date && ` (effective ${kpis.estate_effective_date})`}
+      </p>
+    </div>
+    <button
+      onClick={() => setShowOpeningBalanceForm(true)}
+      style={{
+        padding: '10px 20px',
+        background: 'white',
+        color: '#667eea',
+        border: 'none',
+        borderRadius: '8px',
+        fontWeight: '600',
+        cursor: 'pointer',
+        fontSize: '0.9rem'
+      }}
+    >
+      Update Opening Balance
+    </button>
+  </div>
+
+  {showOpeningBalanceForm && (
+    <div style={{ 
+      marginTop: '20px', 
+      padding: '20px', 
+      background: 'rgba(255,255,255,0.1)', 
+      borderRadius: '12px',
+      backdropFilter: 'blur(10px)'
+    }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'end' }}>
+        <div>
+          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '500' }}>Amount (₦)</label>
+          <input
+            type="number"
+            value={newOpeningBalance}
+            onChange={(e) => setNewOpeningBalance(e.target.value)}
+            placeholder="e.g., 500000"
+            style={{ width: '100%', padding: '10px 12px', border: 'none', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div>
+          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '500' }}>Effective Date</label>
+          <input
+            type="date"
+            value={newEffectiveDate}
+            onChange={(e) => setNewEffectiveDate(e.target.value)}
+            style={{ width: '100%', padding: '10px 12px', border: 'none', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div>
+          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '500' }}>Notes</label>
+          <input
+            type="text"
+            value={newNotes}
+            onChange={(e) => setNewNotes(e.target.value)}
+            placeholder="e.g., Initial estate fund"
+            style={{ width: '100%', padding: '10px 12px', border: 'none', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={handleSaveOpeningBalance}
+            style={{
+              padding: '10px 20px',
+              background: '#10b981',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontWeight: '600',
+              cursor: 'pointer'
+            }}
+          >
+            Save
+          </button>
+          <button
+            onClick={() => setShowOpeningBalanceForm(false)}
+            style={{
+              padding: '10px 20px',
+              background: 'rgba(255,255,255,0.2)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontWeight: '600',
+              cursor: 'pointer'
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
+</div>
 
       {/* Charts Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '24px', marginBottom: '32px' }}>

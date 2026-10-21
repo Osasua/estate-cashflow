@@ -16,44 +16,32 @@ router.get('/summary', staff, async (req, res) => {
     const [startYear, startMonth] = start.split('-').map(Number);
     const [endYear, endMonth] = end.split('-').map(Number);
 
-    // 🔍 AUTO-DETECT: Find the earliest period with any data in the system
-    const earliestDataRes = await query(`
-      SELECT 
-        LEAST(
-          (SELECT MIN(period_year) FROM contributions),
-          (SELECT MIN(EXTRACT(YEAR FROM spent_on)::int) FROM expenses)
-        ) AS earliest_year,
-        LEAST(
-          (SELECT MIN(period_month) FROM contributions WHERE period_year = (SELECT MIN(period_year) FROM contributions)),
-          (SELECT MIN(EXTRACT(MONTH FROM spent_on)::int) FROM expenses WHERE EXTRACT(YEAR FROM spent_on) = (SELECT MIN(EXTRACT(YEAR FROM spent_on)::int) FROM expenses))
-        ) AS earliest_month
+    // Get the estate opening balance
+    const estateOpeningRes = await query(`
+      SELECT opening_balance, effective_date FROM estate_opening_balance WHERE id = 1
     `);
-    
-    const earliestYear = earliestDataRes.rows[0].earliest_year ? parseInt(earliestDataRes.rows[0].earliest_year) : startYear;
-    const earliestMonth = earliestDataRes.rows[0].earliest_month ? parseInt(earliestDataRes.rows[0].earliest_month) : startMonth;
+    const estateOpening = parseFloat(estateOpeningRes.rows[0]?.opening_balance) || 0;
+    const estateEffectiveDate = estateOpeningRes.rows[0]?.effective_date || '2026-01-01';
 
-    // ✅ FIX: If user's start date matches the system's earliest data, opening balance = 0
-    const isSystemStart = (startYear === earliestYear && startMonth === earliestMonth);
+    // Calculate balance from transactions (contributions - expenses)
+    const calculatedOpeningRes = await query(`
+      SELECT 
+        COALESCE((
+          SELECT SUM(amount_paid) 
+          FROM contributions 
+          WHERE (period_year < $1) OR (period_year = $1 AND period_month < $2)
+        ), 0) -
+        COALESCE((
+          SELECT SUM(amount) 
+          FROM expenses 
+          WHERE spent_on < $3::date
+        ), 0) AS balance
+    `, [startYear, startMonth, start]);
 
-    let openingBalance = 0;
-    
-    if (!isSystemStart) {
-      // Only calculate opening balance if we're NOT starting from the system's beginning
-      const openingBalanceRes = await query(`
-        SELECT 
-          COALESCE((
-            SELECT SUM(amount_paid) 
-            FROM contributions 
-            WHERE (period_year < $1) OR (period_year = $1 AND period_month < $2)
-          ), 0) -
-          COALESCE((
-            SELECT SUM(amount) 
-            FROM expenses 
-            WHERE spent_on < $3::date
-          ), 0) AS balance
-      `, [startYear, startMonth, start]);
-      openingBalance = parseFloat(openingBalanceRes.rows[0].balance) || 0;
-    }
+    const calculatedOpening = parseFloat(calculatedOpeningRes.rows[0].balance) || 0;
+
+    // Final opening balance = estate opening + calculated from transactions
+    const openingBalance = estateOpening + calculatedOpening;
 
     // Total Received
     const totalReceivedRes = await query(`
@@ -92,6 +80,9 @@ router.get('/summary', staff, async (req, res) => {
           WHERE spent_on <= $3::date
         ), 0) AS balance
     `, [endYear, endMonth, end]);
+
+    const calculatedClosing = parseFloat(closingBalanceRes.rows[0].balance) || 0;
+    const closingBalance = estateOpening + calculatedClosing;
 
     // Expense Breakdown
     let breakdownQuery = `
@@ -150,7 +141,6 @@ router.get('/summary', staff, async (req, res) => {
 
     const totalReceived = parseFloat(totalReceivedRes.rows[0].total) || 0;
     const totalExpenses = parseFloat(totalExpensesRes.rows[0].total) || 0;
-    const closingBalance = parseFloat(closingBalanceRes.rows[0].balance) || 0;
 
     res.json({
       kpis: {
@@ -158,8 +148,8 @@ router.get('/summary', staff, async (req, res) => {
         total_received: totalReceived,
         total_expenses: totalExpenses,
         closing_balance: closingBalance,
-        is_system_start: isSystemStart,
-        earliest_period: `${earliestYear}-${String(earliestMonth).padStart(2, '0')}`
+        estate_opening_balance: estateOpening,
+        estate_effective_date: estateEffectiveDate
       },
       expense_breakdown: breakdownRes.rows.map(r => ({
         name: r.name,
@@ -189,6 +179,36 @@ router.get('/summary', staff, async (req, res) => {
 
   } catch (err) {
     console.error('Reports error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST endpoint to update opening balance
+router.post('/opening-balance', staff, async (req, res) => {
+  try {
+    const { amount, effective_date, notes } = req.body;
+    
+    if (!amount || isNaN(amount)) {
+      return res.status(400).json({ error: 'Valid amount is required' });
+    }
+
+    const date = effective_date || '2026-01-01';
+    const note = notes || 'Manual update';
+
+    const result = await query(`
+      UPDATE estate_opening_balance 
+      SET opening_balance = $1, effective_date = $2, notes = $3, updated_at = CURRENT_TIMESTAMP
+      WHERE id = 1
+      RETURNING *
+    `, [amount, date, note]);
+
+    res.json({ 
+      success: true, 
+      opening_balance: parseFloat(result.rows[0].opening_balance),
+      effective_date: result.rows[0].effective_date
+    });
+  } catch (err) {
+    console.error('Update opening balance error:', err);
     res.status(500).json({ error: err.message });
   }
 });
