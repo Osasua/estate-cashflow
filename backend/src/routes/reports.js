@@ -16,14 +16,20 @@ router.get('/summary', staff, async (req, res) => {
     const [startYear, startMonth] = start.split('-').map(Number);
     const [endYear, endMonth] = end.split('-').map(Number);
 
+    console.log('=== REPORTS DEBUG ===');
+    console.log('Start:', start, 'End:', end);
+
     // Get the estate opening balance
     const estateOpeningRes = await query(`
       SELECT opening_balance, effective_date FROM estate_opening_balance WHERE id = 1
     `);
+    
     const estateOpening = parseFloat(estateOpeningRes.rows[0]?.opening_balance) || 0;
     const estateEffectiveDate = estateOpeningRes.rows[0]?.effective_date || '2026-01-01';
+    
+    console.log('Estate Opening Balance:', estateOpening);
 
-    // Calculate balance from transactions (contributions - expenses)
+    // Calculate balance from transactions
     const calculatedOpeningRes = await query(`
       SELECT 
         COALESCE((
@@ -39,9 +45,11 @@ router.get('/summary', staff, async (req, res) => {
     `, [startYear, startMonth, start]);
 
     const calculatedOpening = parseFloat(calculatedOpeningRes.rows[0].balance) || 0;
+    console.log('Calculated Opening:', calculatedOpening);
 
-    // Final opening balance = estate opening + calculated from transactions
+    // ✅ CRITICAL FIX: Add estate opening to calculated opening
     const openingBalance = estateOpening + calculatedOpening;
+    console.log('Final Opening Balance:', openingBalance);
 
     // Total Received
     const totalReceivedRes = await query(`
@@ -52,6 +60,9 @@ router.get('/summary', staff, async (req, res) => {
         AND 
         ((period_year < $3) OR (period_year = $3 AND period_month <= $4))
     `, [startYear, startMonth, endYear, endMonth]);
+
+    const totalReceived = parseFloat(totalReceivedRes.rows[0].total) || 0;
+    console.log('Total Received:', totalReceived);
 
     // Total Expenses
     let expenseQuery = `
@@ -65,6 +76,8 @@ router.get('/summary', staff, async (req, res) => {
       expenseParams.push(category_id);
     }
     const totalExpensesRes = await query(expenseQuery, expenseParams);
+    const totalExpenses = parseFloat(totalExpensesRes.rows[0].total) || 0;
+    console.log('Total Expenses:', totalExpenses);
 
     // Closing Balance
     const closingBalanceRes = await query(`
@@ -83,6 +96,8 @@ router.get('/summary', staff, async (req, res) => {
 
     const calculatedClosing = parseFloat(closingBalanceRes.rows[0].balance) || 0;
     const closingBalance = estateOpening + calculatedClosing;
+    console.log('Final Closing Balance:', closingBalance);
+    console.log('=== END DEBUG ===');
 
     // Expense Breakdown
     let breakdownQuery = `
@@ -138,9 +153,6 @@ router.get('/summary', staff, async (req, res) => {
 
     // Categories for filter
     const categoriesRes = await query(`SELECT id, name FROM categories WHERE is_active = true ORDER BY name`);
-
-    const totalReceived = parseFloat(totalReceivedRes.rows[0].total) || 0;
-    const totalExpenses = parseFloat(totalExpensesRes.rows[0].total) || 0;
 
     res.json({
       kpis: {
