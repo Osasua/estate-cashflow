@@ -13,27 +13,49 @@ router.get('/summary', staff, async (req, res) => {
     const start = startDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     const end = endDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`;
 
-    // Parse dates into year/month integers
     const [startYear, startMonth] = start.split('-').map(Number);
     const [endYear, endMonth] = end.split('-').map(Number);
 
-    // 1. Opening Balance: Balance BEFORE the start period
-    // This is: (all contributions before start month) - (all expenses before start date)
-    const openingBalanceRes = await query(`
+    // 🔍 AUTO-DETECT: Find the earliest period with any data in the system
+    const earliestDataRes = await query(`
       SELECT 
-        COALESCE((
-          SELECT SUM(amount_paid) 
-          FROM contributions 
-          WHERE (period_year < $1) OR (period_year = $1 AND period_month < $2)
-        ), 0) -
-        COALESCE((
-          SELECT SUM(amount) 
-          FROM expenses 
-          WHERE spent_on < $3::date
-        ), 0) AS balance
-    `, [startYear, startMonth, start]);
+        LEAST(
+          (SELECT MIN(period_year) FROM contributions),
+          (SELECT MIN(EXTRACT(YEAR FROM spent_on)::int) FROM expenses)
+        ) AS earliest_year,
+        LEAST(
+          (SELECT MIN(period_month) FROM contributions WHERE period_year = (SELECT MIN(period_year) FROM contributions)),
+          (SELECT MIN(EXTRACT(MONTH FROM spent_on)::int) FROM expenses WHERE EXTRACT(YEAR FROM spent_on) = (SELECT MIN(EXTRACT(YEAR FROM spent_on)::int) FROM expenses))
+        ) AS earliest_month
+    `);
+    
+    const earliestYear = earliestDataRes.rows[0].earliest_year ? parseInt(earliestDataRes.rows[0].earliest_year) : startYear;
+    const earliestMonth = earliestDataRes.rows[0].earliest_month ? parseInt(earliestDataRes.rows[0].earliest_month) : startMonth;
 
-    // 2. Total Received: Contributions WITHIN the period
+    // ✅ FIX: If user's start date matches the system's earliest data, opening balance = 0
+    const isSystemStart = (startYear === earliestYear && startMonth === earliestMonth);
+
+    let openingBalance = 0;
+    
+    if (!isSystemStart) {
+      // Only calculate opening balance if we're NOT starting from the system's beginning
+      const openingBalanceRes = await query(`
+        SELECT 
+          COALESCE((
+            SELECT SUM(amount_paid) 
+            FROM contributions 
+            WHERE (period_year < $1) OR (period_year = $1 AND period_month < $2)
+          ), 0) -
+          COALESCE((
+            SELECT SUM(amount) 
+            FROM expenses 
+            WHERE spent_on < $3::date
+          ), 0) AS balance
+      `, [startYear, startMonth, start]);
+      openingBalance = parseFloat(openingBalanceRes.rows[0].balance) || 0;
+    }
+
+    // Total Received
     const totalReceivedRes = await query(`
       SELECT COALESCE(SUM(amount_paid), 0) AS total
       FROM contributions
@@ -43,7 +65,7 @@ router.get('/summary', staff, async (req, res) => {
         ((period_year < $3) OR (period_year = $3 AND period_month <= $4))
     `, [startYear, startMonth, endYear, endMonth]);
 
-    // 3. Total Expenses: Expenses WITHIN the date range
+    // Total Expenses
     let expenseQuery = `
       SELECT COALESCE(SUM(amount), 0) AS total
       FROM expenses
@@ -56,8 +78,7 @@ router.get('/summary', staff, async (req, res) => {
     }
     const totalExpensesRes = await query(expenseQuery, expenseParams);
 
-    // 4. Closing Balance: Balance AT the end of the period
-    // This is: (all contributions up to end month) - (all expenses up to end date)
+    // Closing Balance
     const closingBalanceRes = await query(`
       SELECT 
         COALESCE((
@@ -72,7 +93,7 @@ router.get('/summary', staff, async (req, res) => {
         ), 0) AS balance
     `, [endYear, endMonth, end]);
 
-    // 5. Expense Breakdown
+    // Expense Breakdown
     let breakdownQuery = `
       SELECT 
         COALESCE(c.name, 'Uncategorized') AS name,
@@ -90,7 +111,7 @@ router.get('/summary', staff, async (req, res) => {
     breakdownQuery += ` GROUP BY c.name ORDER BY total DESC`;
     const breakdownRes = await query(breakdownQuery, breakdownParams);
 
-    // 6. Daily trend
+    // Daily trend
     let dailyTrendQuery = `
       SELECT 
         TO_CHAR(spent_on, 'YYYY-MM-DD') AS date,
@@ -107,7 +128,7 @@ router.get('/summary', staff, async (req, res) => {
     dailyTrendQuery += ` GROUP BY spent_on ORDER BY spent_on ASC`;
     const dailyTrendRes = await query(dailyTrendQuery, dailyTrendParams);
 
-    // 7. Top expenses
+    // Top expenses
     let topExpensesQuery = `
       SELECT 
         e.id, e.description, e.amount, e.spent_on, e.vendor,
@@ -124,28 +145,21 @@ router.get('/summary', staff, async (req, res) => {
     topExpensesQuery += ` ORDER BY e.amount DESC LIMIT 10`;
     const topExpensesRes = await query(topExpensesQuery, topExpensesParams);
 
-    // 8. Categories for filter
+    // Categories for filter
     const categoriesRes = await query(`SELECT id, name FROM categories WHERE is_active = true ORDER BY name`);
 
-    const openingBalance = parseFloat(openingBalanceRes.rows[0].balance) || 0;
     const totalReceived = parseFloat(totalReceivedRes.rows[0].total) || 0;
     const totalExpenses = parseFloat(totalExpensesRes.rows[0].total) || 0;
     const closingBalance = parseFloat(closingBalanceRes.rows[0].balance) || 0;
-
-    // Verify the math: Opening + Received - Expenses = Closing
-    const calculatedClosing = openingBalance + totalReceived - totalExpenses;
-    const discrepancy = Math.abs(calculatedClosing - closingBalance);
-    
-    if (discrepancy > 0.01) {
-      console.warn(`Balance discrepancy detected: Opening(${openingBalance}) + Received(${totalReceived}) - Expenses(${totalExpenses}) = ${calculatedClosing}, but calculated Closing = ${closingBalance}. Discrepancy: ${discrepancy}`);
-    }
 
     res.json({
       kpis: {
         opening_balance: openingBalance,
         total_received: totalReceived,
         total_expenses: totalExpenses,
-        closing_balance: closingBalance
+        closing_balance: closingBalance,
+        is_system_start: isSystemStart,
+        earliest_period: `${earliestYear}-${String(earliestMonth).padStart(2, '0')}`
       },
       expense_breakdown: breakdownRes.rows.map(r => ({
         name: r.name,
