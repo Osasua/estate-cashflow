@@ -11,12 +11,20 @@ router.get('/', async (req, res) => {
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
 
-    // 1. KPIs - Include estate opening balance
+    // 1. KPIs - Only count contributions through current month (matches Reports logic)
     const kpisRes = await query(`
       SELECT 
         COALESCE((SELECT opening_balance FROM estate_opening_balance WHERE id = 1), 0) +
-        COALESCE((SELECT SUM(amount_paid) FROM contributions), 0) -
-        COALESCE((SELECT SUM(amount) FROM expenses), 0) AS balance,
+        COALESCE((
+          SELECT SUM(amount_paid) 
+          FROM contributions 
+          WHERE (period_year < $1) OR (period_year = $1 AND period_month <= $2)
+        ), 0) -
+        COALESCE((
+          SELECT SUM(amount) 
+          FROM expenses 
+          WHERE spent_on <= CURRENT_DATE
+        ), 0) AS balance,
         
         COALESCE((
           SELECT SUM(amount_paid) 
