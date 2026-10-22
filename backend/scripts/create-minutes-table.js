@@ -13,7 +13,6 @@ require('dotenv').config();
         meeting_date DATE NOT NULL,
         content TEXT NOT NULL,
         document_link TEXT,
-        created_by INT REFERENCES users(id),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
