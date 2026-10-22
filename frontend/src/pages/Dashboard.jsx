@@ -108,31 +108,31 @@ export default function Dashboard() {
   };
 
   const handleRowClick = async (dateStr) => {
-  if (selectedMonth === dateStr) {
-    setSelectedMonth(null);
+    if (selectedMonth === dateStr) {
+      setSelectedMonth(null);
+      setMonthBreakdown(null);
+      return;
+    }
+    setSelectedMonth(dateStr);
+    setLoadingBreakdown(true);
     setMonthBreakdown(null);
-    return;
-  }
-  setSelectedMonth(dateStr);
-  setLoadingBreakdown(true);
-  setMonthBreakdown(null);
 
-  try {
-    const [year, month] = dateStr.split('-');
-    const startDate = `${year}-${month}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const endDate = `${year}-${month}-${lastDay}`;
-    
-    // ✅ Use the new dashboard-specific endpoint (no staff required)
-    const res = await api(`/dashboard/monthly-breakdown?startDate=${startDate}&endDate=${endDate}`);
-    setMonthBreakdown(res);
-  } catch (e) {
-    console.error("Failed to load breakdown", e);
-    setMonthBreakdown({ error: e.message });
-  } finally {
-    setLoadingBreakdown(false);
-  }
-};
+    try {
+      const [year, month] = dateStr.split('-');
+      const startDate = `${year}-${month}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const endDate = `${year}-${month}-${lastDay}`;
+      
+      // ✅ Use the new dashboard-specific endpoint (no staff required)
+      const res = await api(`/dashboard/monthly-breakdown?startDate=${startDate}&endDate=${endDate}`);
+      setMonthBreakdown(res);
+    } catch (e) {
+      console.error("Failed to load breakdown", e);
+      setMonthBreakdown({ error: e.message });
+    } finally {
+      setLoadingBreakdown(false);
+    }
+  };
 
   if (error) return <div style={{ padding: '40px', color: '#ef4444', textAlign: 'center' }}><h2>Error Loading Dashboard</h2><p>{error}</p></div>;
   if (!data) return <div style={{ padding: '40px' }}><Skeleton height="40px" width="300px" style={{ marginBottom: '24px' }} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>{[1,2,3,4].map(i => <Skeleton key={i} height="140px" width="100%" />)}</div></div>;
@@ -230,8 +230,16 @@ export default function Dashboard() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-              {/* ✅ FIX: Use short_month for clean labels (May, Jun, Jul...) */}
-              <XAxis dataKey="short_month" tick={{ fontSize: 12, fill: '#6b7280', fontWeight: '500' }} axisLine={false} tickLine={false} />
+              
+              {/* ✅ FIX: Added interval={0} to force all month labels to display */}
+              <XAxis 
+                dataKey="short_month" 
+                tick={{ fontSize: 12, fill: '#6b7280', fontWeight: '500' }} 
+                axisLine={false} 
+                tickLine={false} 
+                interval={0} 
+              />
+              
               <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '13px', fontWeight: '500' }} />
@@ -312,7 +320,6 @@ export default function Dashboard() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#f9fafb' }}>
-                  {/* ✅ FIX: Identical padding in header and body for perfect alignment */}
                   <th style={{ padding: '16px 28px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Month</th>
                   <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Total Contributions</th>
                   <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Total Expenses</th>
@@ -336,7 +343,6 @@ export default function Dashboard() {
                         onMouseEnter={(e) => !isSelected && (e.currentTarget.style.background = '#f9fafb')}
                         onMouseLeave={(e) => !isSelected && (e.currentTarget.style.background = 'transparent')}
                       >
-                        {/* ✅ FIX: Identical padding in body cells */}
                         <td style={{ padding: '16px 28px', fontSize: '0.95rem', fontWeight: isSelected ? '600' : '500', color: '#111827', borderBottom: '1px solid #f3f4f6' }}>
                           {formatMonthName(row.month)}
                         </td>
@@ -363,59 +369,59 @@ export default function Dashboard() {
                       </tr>
 
                       {isSelected && (
-  <tr>
-    <td colSpan="4" style={{ padding: '0', background: '#f0fdf4' }}>
-      <div style={{ padding: '24px' }}>
-        {loadingBreakdown ? (
-          <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
-            Loading breakdown...
-          </div>
-        ) : monthBreakdown?.error ? (
-          <div style={{ textAlign: 'center', padding: '20px', color: '#ef4444' }}>
-            Error loading breakdown: {monthBreakdown.error}
-          </div>
-        ) : monthBreakdown?.expense_breakdown && monthBreakdown.expense_breakdown.length > 0 ? (
-          <div>
-            <h4 style={{ marginBottom: '16px', fontSize: '1rem', fontWeight: '600', color: '#111827' }}>
-              Expense Breakdown — {formatMonthName(row.month)}
-            </h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-              {monthBreakdown.expense_breakdown.map((item, i) => {
-                const percentage = row.expense > 0 ? ((item.total / row.expense) * 100).toFixed(1) : 0;
-                return (
-                  <div key={i} style={{
-                    background: '#fff',
-                    padding: '16px 20px',
-                    borderRadius: '12px',
-                    border: '1px solid #e5e7eb',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                  }}>
-                    <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '6px', fontWeight: '500' }}>{item.name}</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>{naira(item.total)}</div>
-                    <div style={{
-                      display: 'inline-block',
-                      padding: '3px 10px',
-                      background: '#f3f4f6',
-                      color: '#6b7280',
-                      borderRadius: '6px',
-                      fontSize: '0.8rem',
-                      fontWeight: '600'
-                    }}>{percentage}% of total</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '20px', color: '#9ca3af' }}>
-            <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📊</div>
-            <p style={{ fontSize: '0.95rem', fontWeight: '500' }}>No expenses recorded for {formatMonthName(row.month)}</p>
-          </div>
-        )}
-      </div>
-    </td>
-  </tr>
-)}
+                        <tr>
+                          <td colSpan="4" style={{ padding: '0', background: '#f0fdf4' }}>
+                            <div style={{ padding: '24px' }}>
+                              {loadingBreakdown ? (
+                                <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
+                                  Loading breakdown...
+                                </div>
+                              ) : monthBreakdown?.error ? (
+                                <div style={{ textAlign: 'center', padding: '20px', color: '#ef4444' }}>
+                                  Error loading breakdown: {monthBreakdown.error}
+                                </div>
+                              ) : monthBreakdown?.expense_breakdown && monthBreakdown.expense_breakdown.length > 0 ? (
+                                <div>
+                                  <h4 style={{ marginBottom: '16px', fontSize: '1rem', fontWeight: '600', color: '#111827' }}>
+                                    Expense Breakdown — {formatMonthName(row.month)}
+                                  </h4>
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                                    {monthBreakdown.expense_breakdown.map((item, i) => {
+                                      const percentage = row.expense > 0 ? ((item.total / row.expense) * 100).toFixed(1) : 0;
+                                      return (
+                                        <div key={i} style={{
+                                          background: '#fff',
+                                          padding: '16px 20px',
+                                          borderRadius: '12px',
+                                          border: '1px solid #e5e7eb',
+                                          boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                                        }}>
+                                          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '6px', fontWeight: '500' }}>{item.name}</div>
+                                          <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>{naira(item.total)}</div>
+                                          <div style={{
+                                            display: 'inline-block',
+                                            padding: '3px 10px',
+                                            background: '#f3f4f6',
+                                            color: '#6b7280',
+                                            borderRadius: '6px',
+                                            fontSize: '0.8rem',
+                                            fontWeight: '600'
+                                          }}>{percentage}% of total</div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{ textAlign: 'center', padding: '20px', color: '#9ca3af' }}>
+                                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📊</div>
+                                  <p style={{ fontSize: '0.95rem', fontWeight: '500' }}>No expenses recorded for {formatMonthName(row.month)}</p>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                     </React.Fragment>
                   );
                 })}
