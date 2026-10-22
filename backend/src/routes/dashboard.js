@@ -157,4 +157,45 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET monthly expense breakdown (accessible to all authenticated users)
+router.get('/monthly-breakdown', authenticate, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'startDate and endDate are required' });
+    }
+
+    const breakdownRes = await query(`
+      SELECT 
+        COALESCE(c.name, 'Uncategorized') AS name,
+        COALESCE(SUM(e.amount), 0) AS total,
+        COUNT(e.id)::int AS count
+      FROM expenses e
+      LEFT JOIN categories c ON e.category_id = c.id
+      WHERE e.spent_on BETWEEN $1::date AND $2::date
+      GROUP BY c.name
+      ORDER BY total DESC
+    `, [startDate, endDate]);
+
+    const totalExpensesRes = await query(`
+      SELECT COALESCE(SUM(amount), 0) AS total
+      FROM expenses
+      WHERE spent_on BETWEEN $1::date AND $2::date
+    `, [startDate, endDate]);
+
+    res.json({
+      expense_breakdown: breakdownRes.rows.map(r => ({
+        name: r.name,
+        total: parseFloat(r.total) || 0,
+        count: parseInt(r.count) || 0
+      })),
+      total_expenses: parseFloat(totalExpensesRes.rows[0].total) || 0
+    });
+  } catch (err) {
+    console.error('Monthly breakdown error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -123,11 +123,8 @@ export default function Dashboard() {
     const lastDay = new Date(year, month, 0).getDate();
     const endDate = `${year}-${month}-${lastDay}`;
     
-    console.log('Fetching breakdown for:', startDate, 'to', endDate);
-    
-    const res = await api(`/reports/summary?startDate=${startDate}&endDate=${endDate}`);
-    console.log('Breakdown response:', res);
-    
+    // ✅ Use the new dashboard-specific endpoint (no staff required)
+    const res = await api(`/dashboard/monthly-breakdown?startDate=${startDate}&endDate=${endDate}`);
     setMonthBreakdown(res);
   } catch (e) {
     console.error("Failed to load breakdown", e);
