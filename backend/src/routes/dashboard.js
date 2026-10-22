@@ -11,20 +11,12 @@ router.get('/', async (req, res) => {
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
 
-    // 1. KPIs - Only count contributions through current month (matches Reports logic)
+    // 1. KPIs - Include estate opening balance
     const kpisRes = await query(`
       SELECT 
         COALESCE((SELECT opening_balance FROM estate_opening_balance WHERE id = 1), 0) +
-        COALESCE((
-          SELECT SUM(amount_paid) 
-          FROM contributions 
-          WHERE (period_year < $1) OR (period_year = $1 AND period_month <= $2)
-        ), 0) -
-        COALESCE((
-          SELECT SUM(amount) 
-          FROM expenses 
-          WHERE spent_on <= CURRENT_DATE
-        ), 0) AS balance,
+        COALESCE((SELECT SUM(amount_paid) FROM contributions), 0) -
+        COALESCE((SELECT SUM(amount) FROM expenses), 0) AS balance,
         
         COALESCE((
           SELECT SUM(amount_paid) 
@@ -63,12 +55,14 @@ router.get('/', async (req, res) => {
       pending_count: parseInt(kpisRes.rows[0].pending_count) || 0
     };
 
-    // 2. Trend - Last 6 months
+    // 2. Trend - Last 6 months (GUARANTEED to return all 6 months even with zero data)
     const trendRes = await query(`
       WITH RECURSIVE months AS (
-        SELECT date_trunc('month', CURRENT_DATE) - INTERVAL '5 months' AS month_start
+        SELECT date_trunc('month', CURRENT_DATE - INTERVAL '5 months') AS month_start
         UNION ALL
-        SELECT month_start + INTERVAL '1 month' FROM months WHERE month_start < date_trunc('month', CURRENT_DATE)
+        SELECT month_start + INTERVAL '1 month' 
+        FROM months 
+        WHERE month_start < date_trunc('month', CURRENT_DATE)
       ),
       contributions_agg AS (
         SELECT 
@@ -90,7 +84,6 @@ router.get('/', async (req, res) => {
       SELECT 
         TO_CHAR(m.month_start, 'YYYY-MM') AS month,
         TO_CHAR(m.month_start, 'Mon') AS short_month,
-        TO_CHAR(m.month_start, 'Month') AS full_month,
         EXTRACT(MONTH FROM m.month_start)::int AS month_num,
         EXTRACT(YEAR FROM m.month_start)::int AS year_num,
         COALESCE(c.total_paid, 0) AS income,
@@ -108,13 +101,14 @@ router.get('/', async (req, res) => {
     const trend = trendRes.rows.map(r => ({
       month: r.month,
       short_month: r.short_month,
-      full_month: r.full_month.trim(),
       year_num: parseInt(r.year_num),
       month_num: parseInt(r.month_num),
       income: parseFloat(r.income) || 0,
       expense: parseFloat(r.expense) || 0,
       net: (parseFloat(r.income) || 0) - (parseFloat(r.expense) || 0)
     }));
+
+    console.log('Trend data:', trend); // Debug log
 
     // 3. Daily Expenses
     const dailyRes = await query(`
