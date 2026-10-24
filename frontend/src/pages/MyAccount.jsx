@@ -14,6 +14,7 @@ export default function MyAccount() {
   const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [viewing, setViewing] = useState('this_month');
 
   useEffect(() => {
@@ -22,28 +23,17 @@ export default function MyAccount() {
 
   const loadData = async () => {
     setLoading(true);
+    setError('');
     try {
       const res = await api(`/my-account?viewing=${viewing}`);
       setData(res);
     } catch (err) {
       console.error('Failed to load account data:', err);
+      setError(err.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }
   };
-
-  if (loading || !data) {
-    return (
-      <div style={{ padding: '40px' }}>
-        <Skeleton height="40px" width="300px" style={{ marginBottom: '24px' }} />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
-          {[1, 2, 3].map(i => <Skeleton key={i} height="120px" width="100%" />)}
-        </div>
-      </div>
-    );
-  }
-
-  const { summary, payment_history, contributions_by_type, recent_payments } = data;
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -73,49 +63,59 @@ export default function MyAccount() {
     return null;
   };
 
+  if (loading) {
+    return (
+      <div style={{ padding: '40px' }}>
+        <Skeleton height="40px" width="300px" style={{ marginBottom: '24px' }} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+          {[1, 2, 3].map(i => <Skeleton key={i} height="120px" width="100%" />)}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <div style={{ fontSize: '3rem', marginBottom: '16px' }}>⚠️</div>
+        <h2 style={{ color: '#ef4444', marginBottom: '8px' }}>Error Loading Account</h2>
+        <p style={{ color: '#6b7280' }}>{error}</p>
+        <button 
+          onClick={loadData}
+          style={{ marginTop: '16px', padding: '10px 24px', background: '#6366f1', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>
+        <div style={{ fontSize: '3rem', marginBottom: '16px' }}>👤</div>
+        <p>No account data available</p>
+      </div>
+    );
+  }
+
+  const { member, summary, payment_history, contributions_by_type, recent_payments } = data;
+
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 24px' }}>
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ margin: '0 0 8px 0', fontSize: '2rem', fontWeight: '700', color: '#111827', letterSpacing: '-0.02em' }}>
-          My Account — {user?.household_name || 'Resident'}
+          My Account — {member?.household_name || user?.household_name || 'Resident'}
         </h1>
         <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>
           View your contribution history and account status
         </p>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '24px', marginBottom: '24px', borderBottom: '2px solid #e5e7eb' }}>
-        <button style={{
-          padding: '12px 24px',
-          background: 'transparent',
-          border: 'none',
-          borderBottom: '3px solid #6366f1',
-          color: '#6366f1',
-          fontWeight: '600',
-          fontSize: '1rem',
-          cursor: 'pointer'
-        }}>
-          Account Summary
-        </button>
-        <button style={{
-          padding: '12px 24px',
-          background: 'transparent',
-          border: 'none',
-          borderBottom: '3px solid transparent',
-          color: '#6b7280',
-          fontWeight: '500',
-          fontSize: '1rem',
-          cursor: 'pointer'
-        }}>
-          Contribution History
-        </button>
-      </div>
-
       {/* Viewing Filter */}
-      <div style={{ marginBottom: '24px' }}>
-        <label style={{ fontSize: '0.9rem', fontWeight: '600', color: '#374151', marginRight: '12px' }}>Viewing:</label>
+      <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <label style={{ fontSize: '0.9rem', fontWeight: '600', color: '#374151' }}>Viewing:</label>
         <select
           value={viewing}
           onChange={(e) => setViewing(e.target.value)}
@@ -260,7 +260,7 @@ export default function MyAccount() {
           </ResponsiveContainer>
         </div>
 
-        {/* Contributions by Type - ENHANCED */}
+        {/* Contributions by Type */}
         <div style={{
           background: '#fff',
           borderRadius: '16px',
@@ -283,8 +283,6 @@ export default function MyAccount() {
                   innerRadius={75}
                   outerRadius={110}
                   paddingAngle={3}
-                  label={({ type, percent }) => `${type} ${(percent * 100).toFixed(0)}%`}
-                  labelLine={false}
                 >
                   {contributions_by_type.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>

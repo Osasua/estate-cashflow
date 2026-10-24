@@ -34,6 +34,7 @@ app.use('/api/password', require('./routes/password'));
 app.use('/api/profile', require('./routes/profile'));
 app.use('/api/admin/broadcast', require('./routes/broadcast'));
 app.use('/api/minutes', require('./routes/minutes'));
+app.use('/api/my-account', require('./routes/my-account'));
 
 // Error handler
 app.use((err, req, res, next) => {
