@@ -23,19 +23,20 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/members', require('./routes/members'));
+app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/contributions', require('./routes/contributions'));
 app.use('/api/expenses', require('./routes/expenses'));
-app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/categories', require('./routes/categories'));
+app.use('/api/minutes', require('./routes/minutes'));
 app.use('/api/resident', require('./routes/resident'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/audit', require('./routes/audit'));
 app.use('/api/password', require('./routes/password'));
 app.use('/api/profile', require('./routes/profile'));
 app.use('/api/admin/broadcast', require('./routes/broadcast'));
-app.use('/api/minutes', require('./routes/minutes'));
 app.use('/api/my-account', require('./routes/my-account'));
-app.use('/api/categories', require('./routes/categories'));
+
 
 // Error handler
 app.use((err, req, res, next) => {
