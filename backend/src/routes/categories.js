@@ -5,11 +5,11 @@ const { authenticate, staff } = require('../auth');
 const router = express.Router();
 router.use(authenticate);
 
-// GET all categories
+// GET all categories - FIXED: removed created_at
 router.get('/', async (req, res) => {
   try {
     const { rows } = await query(`
-      SELECT id, name, is_active, created_at 
+      SELECT id, name, is_active 
       FROM categories 
       ORDER BY name ASC
     `);
@@ -43,23 +43,10 @@ router.put('/:id', staff, async (req, res) => {
     const { id } = req.params;
     const { name, is_active } = req.body;
     
-    let queryStr = 'UPDATE categories SET ';
-    const params = [];
-    let paramIndex = 1;
-    
-    if (name !== undefined) {
-      queryStr += `name = $${paramIndex++}, `;
-      params.push(name);
-    }
-    if (is_active !== undefined) {
-      queryStr += `is_active = $${paramIndex++}, `;
-      params.push(is_active);
-    }
-    
-    queryStr = queryStr.slice(0, -2) + ` WHERE id = $${paramIndex} RETURNING *`;
-    params.push(id);
-    
-    const { rows } = await query(queryStr, params);
+    const { rows } = await query(
+      `UPDATE categories SET name = $1, is_active = $2 WHERE id = $3 RETURNING *`,
+      [name, is_active, id]
+    );
     if (rows.length === 0) return res.status(404).json({ error: 'Category not found' });
     
     res.json(rows[0]);
