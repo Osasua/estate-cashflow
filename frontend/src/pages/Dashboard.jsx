@@ -13,10 +13,10 @@ const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7'
 // World-class KPI Card
 function KPICard({ title, value, subtitle, trend, color, icon }) {
   const colorMap = {
-    indigo: { bg: '#eef2ff', text: '#4f46e5', border: '#c7d2fe' },
-    emerald: { bg: '#ecfdf5', text: '#059669', border: '#a7f3d0' },
-    rose: { bg: '#fff1f2', text: '#e11d48', border: '#fecdd3' },
-    amber: { bg: '#fffbeb', text: '#d97706', border: '#fde68a' },
+    indigo: { bg: '#eef2ff', text: '#4f46e5' },
+    emerald: { bg: '#ecfdf5', text: '#059669' },
+    rose: { bg: '#fff1f2', text: '#e11d48' },
+    amber: { bg: '#fffbeb', text: '#d97706' },
   };
   const c = colorMap[color] || colorMap.indigo;
 
@@ -26,42 +26,30 @@ function KPICard({ title, value, subtitle, trend, color, icon }) {
       borderRadius: '16px',
       padding: '24px',
       border: '1px solid #e5e7eb',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)',
-      transition: 'all 0.3s ease',
-      position: 'relative',
-      overflow: 'hidden'
+      borderLeft: `4px solid ${c.text}`,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+      transition: 'all 0.3s ease'
     }}>
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        right: 0,
-        width: '120px',
-        height: '120px',
-        background: `radial-gradient(circle at top right, ${c.bg} 0%, transparent 70%)`,
-        opacity: 0.6
-      }} />
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <span style={{ fontSize: '0.875rem', fontWeight: '500', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</span>
-          <div style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '10px',
-            background: c.bg,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '1.25rem'
-          }}>{icon}</div>
-        </div>
-        <div style={{ fontSize: '2.25rem', fontWeight: '700', color: '#111827', lineHeight: 1.1, marginBottom: '8px' }}>{value}</div>
-        {subtitle && (
-          <div style={{ fontSize: '0.85rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            {trend && <span style={{ color: trend > 0 ? '#059669' : '#e11d48', fontWeight: '600' }}>{trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%</span>}
-            {subtitle}
-          </div>
-        )}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <span style={{ fontSize: '0.875rem', fontWeight: '500', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</span>
+        <div style={{
+          width: '40px',
+          height: '40px',
+          borderRadius: '10px',
+          background: c.bg,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '1.25rem'
+        }}>{icon}</div>
       </div>
+      <div style={{ fontSize: '2.25rem', fontWeight: '700', color: '#111827', lineHeight: 1.1, marginBottom: '8px' }}>{value}</div>
+      {subtitle && (
+        <div style={{ fontSize: '0.85rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {trend && <span style={{ color: trend > 0 ? '#059669' : '#e11d48', fontWeight: '600' }}>{trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%</span>}
+          {subtitle}
+        </div>
+      )}
     </div>
   );
 }
