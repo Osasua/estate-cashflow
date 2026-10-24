@@ -35,13 +35,26 @@ export default function Contributions() {
   const loadContributions = async () => {
     setLoading(true);
     try {
+      console.log('🔍 Loading contributions for tab:', activeTab);
       const res = await api(`/contributions?tab=${activeTab.toLowerCase().replace(' ', '_')}`);
-      console.log('Contributions response:', res);
+      console.log('🔍 FULL API Response:', res);
+      
       // Handle different response formats
-      const data = res.contributions || res.data || res || [];
+      let data = [];
+      if (Array.isArray(res)) {
+        data = res;
+      } else if (res && typeof res === 'object') {
+        data = res.contributions || res.data || res.rows || Object.values(res)[0] || [];
+      }
+      
+      console.log('🔍 Parsed contributions array:', data);
+      if (data.length > 0) {
+        console.log('🔍 First contribution structure:', data[0]);
+      }
+      
       setContributions(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error('Failed to load contributions:', err);
+      console.error('❌ Failed to load contributions:', err);
       setMessage('❌ Failed to load contributions: ' + err.message);
       setTimeout(() => setMessage(''), 5000);
       setContributions([]);
@@ -52,6 +65,7 @@ export default function Contributions() {
 
   const handleGenerateBills = async () => {
     try {
+      console.log('📝 Generating bills:', form);
       await api('/contributions/generate', {
         method: 'POST',
         body: {
@@ -65,18 +79,19 @@ export default function Contributions() {
       setTimeout(() => setMessage(''), 3000);
       await loadContributions();
     } catch (err) {
+      console.error('❌ Generate bills error:', err);
       setMessage('❌ ' + err.message);
       setTimeout(() => setMessage(''), 3000);
     }
   };
 
   const handleEdit = (contribution) => {
-    // Open edit modal or navigate to edit page
-    const newAmount = prompt(`Edit contribution amount for ${contribution.household}:`, contribution.due || '50000');
-    if (newAmount !== null) {
+    console.log('✏️ Editing contribution:', contribution);
+    const newAmount = prompt(`Edit contribution amount for ${contribution.household || contribution.household_name}:`, contribution.amount_due || contribution.due || '50000');
+    if (newAmount !== null && newAmount !== '') {
       api(`/contributions/${contribution.id}`, {
         method: 'PUT',
-        body: { due: parseFloat(newAmount) }
+        body: { amount_due: parseFloat(newAmount), due: parseFloat(newAmount) }
       }).then(() => {
         setMessage('✅ Contribution updated');
         setTimeout(() => setMessage(''), 3000);
@@ -89,8 +104,9 @@ export default function Contributions() {
   };
 
   const handleRecordPayment = (contribution) => {
+    console.log('💵 Recording payment for:', contribution);
     setSelectedContribution(contribution);
-    setPaymentAmount(contribution.due || '');
+    setPaymentAmount(contribution.amount_due || contribution.due || '');
     setShowPaymentModal(true);
   };
 
@@ -98,6 +114,7 @@ export default function Contributions() {
     if (!selectedContribution || !paymentAmount) return;
     
     try {
+      console.log('💰 Submitting payment:', { id: selectedContribution.id, amount: paymentAmount });
       await api(`/contributions/${selectedContribution.id}/payment`, {
         method: 'POST',
         body: { amount: parseFloat(paymentAmount) }
@@ -109,13 +126,25 @@ export default function Contributions() {
       setPaymentAmount('');
       await loadContributions();
     } catch (err) {
+      console.error('❌ Payment error:', err);
       setMessage('❌ Failed to record payment: ' + err.message);
       setTimeout(() => setMessage(''), 3000);
     }
   };
 
-  const expected = contributions.reduce((sum, c) => sum + (parseFloat(c.due) || 0), 0);
-  const collected = contributions.reduce((sum, c) => sum + (parseFloat(c.paid) || 0), 0);
+  // Helper to get amount due - handles multiple field names
+  const getDue = (c) => {
+    return parseFloat(c.amount_due || c.due || c.amount || 0) || 0;
+  };
+
+  // Helper to get amount paid - handles multiple field names
+  const getPaid = (c) => {
+    return parseFloat(c.amount_paid || c.paid || 0) || 0;
+  };
+
+  // Calculate stats
+  const expected = contributions.reduce((sum, c) => sum + getDue(c), 0);
+  const collected = contributions.reduce((sum, c) => sum + getPaid(c), 0);
   const outstanding = expected - collected;
 
   if (loading) return <div style={{ padding: '40px' }}><Skeleton height="40px" width="300px" /><div style={{ marginTop: '24px' }}>{[1,2,3].map(i => <Skeleton key={i} height="120px" width="100%" style={{ marginBottom: '12px' }} />)}</div></div>;
@@ -137,7 +166,10 @@ export default function Contributions() {
         {['Monthly', 'Float', 'Projects', 'End of Year', 'Welfare'].map(tab => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => {
+              console.log('🔄 Switching to tab:', tab);
+              setActiveTab(tab);
+            }}
             style={{
               padding: '10px 20px',
               background: activeTab === tab ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' : 'transparent',
@@ -266,7 +298,7 @@ export default function Contributions() {
           boxShadow: '0 2px 8px rgba(34, 197, 94, 0.08)'
         }}>
           <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px', fontWeight: '500' }}>Collected</div>
-          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#059669' }}>₦{collected.toLocaleString()}</div>
+          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#059669' }}>{collected.toLocaleString()}</div>
         </div>
         <div style={{
           background: '#fff',
@@ -313,7 +345,9 @@ export default function Contributions() {
               <tbody>
                 {contributions.map((c, idx) => {
                   const color = ROW_COLORS[idx % ROW_COLORS.length];
-                  const isPaid = c.status === 'paid' || (parseFloat(c.paid) || 0) > 0;
+                  const due = getDue(c);
+                  const paid = getPaid(c);
+                  const isPaid = c.status === 'paid' || paid > 0;
                   const householdName = c.household || c.household_name || 'Unknown';
                   
                   return (
@@ -351,10 +385,10 @@ export default function Contributions() {
                         </div>
                       </td>
                       <td style={{ padding: '16px 20px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '700', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>
-                        ₦{(parseFloat(c.due) || 0).toLocaleString()}
+                        ₦{due.toLocaleString()}
                       </td>
                       <td style={{ padding: '16px 20px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '700', color: isPaid ? '#059669' : '#9ca3af', borderBottom: '1px solid #f3f4f6' }}>
-                        ₦{(parseFloat(c.paid) || 0).toLocaleString()}
+                        ₦{paid.toLocaleString()}
                       </td>
                       <td style={{ padding: '16px 20px', textAlign: 'center', borderBottom: '1px solid #f3f4f6' }}>
                         <span style={{
@@ -447,7 +481,7 @@ export default function Contributions() {
               </div>
               <div style={{ fontSize: '0.9rem', color: '#6b7280', marginTop: '8px' }}>Amount Due</div>
               <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#e11d48' }}>
-                ₦{(parseFloat(selectedContribution.due) || 0).toLocaleString()}
+                ₦{getDue(selectedContribution).toLocaleString()}
               </div>
             </div>
             <div style={{ marginBottom: '24px' }}>
