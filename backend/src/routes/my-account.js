@@ -10,7 +10,61 @@ router.get('/', async (req, res) => {
     const userId = req.user.id;
     const viewing = req.query.viewing || 'this_month';
 
-    // Get member info
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    // Build date filter based on viewing parameter
+    let yearFilter = '';
+    let monthFilter = '';
+    let params = [userId];
+
+    switch (viewing) {
+      case 'this_month':
+        yearFilter = 'AND c.period_year = $2';
+        monthFilter = 'AND c.period_month = $3';
+        params.push(currentYear, currentMonth);
+        break;
+      case 'last_month':
+        const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+        const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+        yearFilter = 'AND c.period_year = $2';
+        monthFilter = 'AND c.period_month = $3';
+        params.push(lastMonthYear, lastMonth);
+        break;
+      case 'last_3_months':
+        const threeMonthsAgo = currentMonth - 3;
+        if (threeMonthsAgo <= 0) {
+          yearFilter = 'AND ((c.period_year = $2 AND c.period_month >= $3) OR c.period_year = $4)';
+          params.push(currentYear, threeMonthsAgo + 12, currentYear - 1);
+        } else {
+          yearFilter = 'AND c.period_year = $2';
+          monthFilter = 'AND c.period_month >= $3';
+          params.push(currentYear, threeMonthsAgo);
+        }
+        break;
+      case 'last_6_months':
+        const sixMonthsAgo = currentMonth - 6;
+        if (sixMonthsAgo <= 0) {
+          yearFilter = 'AND ((c.period_year = $2 AND c.period_month >= $3) OR c.period_year = $4)';
+          params.push(currentYear, sixMonthsAgo + 12, currentYear - 1);
+        } else {
+          yearFilter = 'AND c.period_year = $2';
+          monthFilter = 'AND c.period_month >= $3';
+          params.push(currentYear, sixMonthsAgo);
+        }
+        break;
+      case 'year_to_date':
+        yearFilter = 'AND c.period_year = $2';
+        params.push(currentYear);
+        break;
+      default:
+        yearFilter = 'AND c.period_year = $2';
+        monthFilter = 'AND c.period_month = $3';
+        params.push(currentYear, currentMonth);
+    }
+
+    // 1. Get member info
     const memberRes = await query(`
       SELECT id, house_number, household_name, monthly_due, active
       FROM members WHERE id = $1
@@ -22,62 +76,15 @@ router.get('/', async (req, res) => {
 
     const member = memberRes.rows[0];
 
-    // Build date filter based on viewing parameter
-    let dateFilter = '';
-    let params = [userId];
-    let paramIndex = 2;
-
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
-
-    switch (viewing) {
-      case 'this_month':
-        dateFilter = `WHERE c.period_year = $${paramIndex} AND c.period_month = $${paramIndex + 1}`;
-        params.push(currentYear, currentMonth);
-        break;
-      case 'last_month':
-        const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
-        const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
-        dateFilter = `WHERE c.period_year = $${paramIndex} AND c.period_month = $${paramIndex + 1}`;
-        params.push(lastMonthYear, lastMonth);
-        break;
-      case 'last_3_months':
-        dateFilter = `WHERE (c.period_year = $${paramIndex} AND c.period_month >= $${paramIndex + 1}) OR c.period_year < $${paramIndex}`;
-        const threeMonthsAgo = currentMonth - 3;
-        if (threeMonthsAgo <= 0) {
-          params.push(currentYear - 1, threeMonthsAgo + 12);
-        } else {
-          params.push(currentYear, threeMonthsAgo);
-        }
-        break;
-      case 'last_6_months':
-        dateFilter = `WHERE (c.period_year = $${paramIndex} AND c.period_month >= $${paramIndex + 1}) OR c.period_year < $${paramIndex}`;
-        const sixMonthsAgo = currentMonth - 6;
-        if (sixMonthsAgo <= 0) {
-          params.push(currentYear - 1, sixMonthsAgo + 12);
-        } else {
-          params.push(currentYear, sixMonthsAgo);
-        }
-        break;
-      case 'year_to_date':
-        dateFilter = `WHERE c.period_year = $${paramIndex}`;
-        params.push(currentYear);
-        break;
-      default:
-        dateFilter = `WHERE c.period_year = $${paramIndex} AND c.period_month = $${paramIndex + 1}`;
-        params.push(currentYear, currentMonth);
-    }
-
-    // 1. Summary
+    // 2. Summary - FIXED: properly alias table as 'c'
     const summaryRes = await query(`
       SELECT 
-        COALESCE(SUM(amount_due), 0) AS total_due,
-        COALESCE(SUM(amount_paid), 0) AS total_paid,
-        COALESCE(SUM(amount_due), 0) - COALESCE(SUM(amount_paid), 0) AS outstanding
-      FROM contributions
-      WHERE member_id = $1 ${dateFilter.replace('WHERE', 'AND')}
-    `, [userId, ...params.slice(1)]);
+        COALESCE(SUM(c.amount_due), 0) AS total_due,
+        COALESCE(SUM(c.amount_paid), 0) AS total_paid,
+        COALESCE(SUM(c.amount_due), 0) - COALESCE(SUM(c.amount_paid), 0) AS outstanding
+      FROM contributions c
+      WHERE c.member_id = $1 ${yearFilter} ${monthFilter}
+    `, params);
 
     const summary = {
       total_due: parseFloat(summaryRes.rows[0].total_due) || 0,
@@ -85,7 +92,7 @@ router.get('/', async (req, res) => {
       outstanding: parseFloat(summaryRes.rows[0].outstanding) || 0
     };
 
-    // 2. Payment History (Last 6 Months)
+    // 3. Payment History (Last 6 Months) - FIXED: proper JOIN
     const historyRes = await query(`
       WITH RECURSIVE months AS (
         SELECT date_trunc('month', CURRENT_DATE) - INTERVAL '5 months' AS month_start
@@ -113,28 +120,28 @@ router.get('/', async (req, res) => {
       amount_due: parseFloat(r.amount_due) || 0
     }));
 
-    // 3. Contributions by Type
+    // 4. Contributions by Type - FIXED: proper alias
     const typeRes = await query(`
       SELECT 
-        COALESCE(type, 'monthly') AS type,
-        SUM(amount_paid) AS total
-      FROM contributions
-      WHERE member_id = $1 ${dateFilter.replace('WHERE', 'AND')}
-      GROUP BY type
+        COALESCE(c.type, 'monthly') AS type,
+        SUM(c.amount_paid) AS total
+      FROM contributions c
+      WHERE c.member_id = $1 ${yearFilter} ${monthFilter}
+      GROUP BY c.type
       ORDER BY total DESC
-    `, [userId, ...params.slice(1)]);
+    `, params);
 
     const contributions_by_type = typeRes.rows.map(r => ({
       type: r.type,
       total: parseFloat(r.total) || 0
     }));
 
-    // 4. Recent Payments
+    // 5. Recent Payments - FIXED: proper JOIN
     const paymentsRes = await query(`
       SELECT 
         p.id,
         p.amount,
-        p.payment_date,
+        p.paid_at AS payment_date,
         p.status,
         p.method,
         p.reference,
@@ -145,7 +152,7 @@ router.get('/', async (req, res) => {
       FROM payments p
       JOIN contributions c ON p.contribution_id = c.id
       WHERE c.member_id = $1
-      ORDER BY p.payment_date DESC
+      ORDER BY p.paid_at DESC
       LIMIT 10
     `, [userId]);
 
