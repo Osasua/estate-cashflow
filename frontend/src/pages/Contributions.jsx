@@ -94,36 +94,51 @@ export default function Contributions() {
   };
 
   const handleEdit = (contribution) => {
-  // First prompt for amount
+  // Prompt 1: Edit amount
   const newAmount = prompt(
     `Edit amount due for ${contribution.household_name}:`,
     contribution.amount_due
   );
   
-  if (newAmount === null) return; // User cancelled
+  if (newAmount === null || newAmount === '') {
+    return; // User cancelled or empty
+  }
   
-  // Then prompt for reference/note
+  // Prompt 2: Edit reference/note
+  const currentRef = contribution.references || '';
   const newReference = prompt(
-    `Edit reference/note for ${contribution.household_name}:`,
-    contribution.references || ''
+    `Edit reference/note for ${contribution.household_name}:\n(Leave blank to clear)`,
+    currentRef
   );
   
-  if (newReference === null) return; // User cancelled
+  if (newReference === null) {
+    return; // User cancelled
+  }
   
-  // Update both fields
+  // Prepare update body
+  const updateBody = { 
+    amount_due: parseFloat(newAmount)
+  };
+  
+  // Only include note if it changed
+  if (newReference !== currentRef) {
+    updateBody.note = newReference.trim() === '' ? null : newReference;
+  }
+  
+  console.log('📝 Updating contribution:', updateBody);
+  
+  // Send update
   api(`/contributions/${contribution.id}`, {
     method: 'PUT',
-    body: { 
-      amount_due: parseFloat(newAmount),
-      note: newReference.trim() === '' ? null : newReference
-    }
+    body: updateBody
   }).then(() => {
-    setMessage('✅ Contribution updated');
+    setMessage('✅ Contribution updated successfully');
     setTimeout(() => setMessage(''), 3000);
     loadContributions();
   }).catch(err => {
-    setMessage('❌ ' + err.message);
-    setTimeout(() => setMessage(''), 3000);
+    console.error('❌ Update error:', err);
+    setMessage('❌ Failed to update: ' + err.message);
+    setTimeout(() => setMessage(''), 5000);
   });
 };
 
