@@ -94,24 +94,38 @@ export default function Contributions() {
   };
 
   const handleEdit = (contribution) => {
-    const newAmount = prompt(
-      `Edit amount due for ${contribution.household_name}:`,
-      contribution.amount_due
-    );
-    if (newAmount !== null && newAmount !== '') {
-      api(`/contributions/${contribution.id}`, {
-        method: 'PUT',
-        body: { amount_due: parseFloat(newAmount) }
-      }).then(() => {
-        setMessage('✅ Contribution updated');
-        setTimeout(() => setMessage(''), 3000);
-        loadContributions();
-      }).catch(err => {
-        setMessage('❌ ' + err.message);
-        setTimeout(() => setMessage(''), 3000);
-      });
+  // First prompt for amount
+  const newAmount = prompt(
+    `Edit amount due for ${contribution.household_name}:`,
+    contribution.amount_due
+  );
+  
+  if (newAmount === null) return; // User cancelled
+  
+  // Then prompt for reference/note
+  const newReference = prompt(
+    `Edit reference/note for ${contribution.household_name}:`,
+    contribution.references || ''
+  );
+  
+  if (newReference === null) return; // User cancelled
+  
+  // Update both fields
+  api(`/contributions/${contribution.id}`, {
+    method: 'PUT',
+    body: { 
+      amount_due: parseFloat(newAmount),
+      note: newReference.trim() === '' ? null : newReference
     }
-  };
+  }).then(() => {
+    setMessage('✅ Contribution updated');
+    setTimeout(() => setMessage(''), 3000);
+    loadContributions();
+  }).catch(err => {
+    setMessage('❌ ' + err.message);
+    setTimeout(() => setMessage(''), 3000);
+  });
+};
 
   const handleRecordPayment = (contribution) => {
     setSelectedContribution(contribution);
