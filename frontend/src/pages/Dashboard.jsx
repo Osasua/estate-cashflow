@@ -123,7 +123,6 @@ export default function Dashboard() {
       const lastDay = new Date(year, month, 0).getDate();
       const endDate = `${year}-${month}-${lastDay}`;
       
-      // ✅ Use the new dashboard-specific endpoint (no staff required)
       const res = await api(`/dashboard/monthly-breakdown?startDate=${startDate}&endDate=${endDate}`);
       setMonthBreakdown(res);
     } catch (e) {
@@ -230,8 +229,6 @@ export default function Dashboard() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-              
-              {/* ✅ FIX: Added interval={0} to force all month labels to display */}
               <XAxis 
                 dataKey="short_month" 
                 tick={{ fontSize: 12, fill: '#6b7280', fontWeight: '500' }} 
@@ -239,7 +236,6 @@ export default function Dashboard() {
                 tickLine={false} 
                 interval={0} 
               />
-              
               <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '13px', fontWeight: '500' }} />
@@ -301,6 +297,33 @@ export default function Dashboard() {
               <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `${v}`} />
               <Tooltip content={<CustomTooltip />} />
               <Bar dataKey="total" fill="#22c55e" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartPanel>
+
+        {/* Payment History (Last 6 Months) - FIXED */}
+        <ChartPanel title="Payment History (Last 6 Months)">
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={trend || []} margin={{ top: 10, right: 20, left: 0, bottom: 60 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+              <XAxis 
+                dataKey="short_month" 
+                tick={{ fontSize: 11, fill: '#6b7280' }} 
+                axisLine={false} 
+                tickLine={false}
+                interval={0}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis 
+                tick={{ fontSize: 11, fill: '#9ca3af' }} 
+                axisLine={false} 
+                tickLine={false} 
+                tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} 
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="income" name="Contributions" fill="#6366f1" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartPanel>
