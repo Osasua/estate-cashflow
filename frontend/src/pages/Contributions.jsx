@@ -12,50 +12,59 @@ const ROW_COLORS = [
   { border: '#a855f7', bg: '#f5f3ff', text: '#7c3aed' },
 ];
 
+// Map tab names to backend contribution types
+const TAB_TO_TYPE = {
+  'Monthly': 'monthly',
+  'Float': 'float',
+  'Projects': 'projects',
+  'End of Year': 'end_of_year',
+  'Welfare': 'welfare'
+};
+
 export default function Contributions() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('Monthly');
   const [contributions, setContributions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
-  const [form, setForm] = useState({
-    month: new Date().toLocaleString('default', { month: 'long' }),
-    year: new Date().getFullYear().toString(),
-    customAmount: '',
-    defaultersOnly: false
-  });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedContribution, setSelectedContribution] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentReference, setPaymentReference] = useState('');
+  
+  const [form, setForm] = useState({
+    month: (new Date().getMonth() + 1).toString(), // Backend expects number 1-12
+    year: new Date().getFullYear().toString(),
+    customAmount: ''
+  });
 
+  // ✅ Load data when tab, month, or year changes
   useEffect(() => {
     loadContributions();
-  }, [activeTab]);
+  }, [activeTab, form.month, form.year]);
 
   const loadContributions = async () => {
     setLoading(true);
     try {
-      console.log('🔍 Loading contributions for tab:', activeTab);
-      const res = await api(`/contributions?tab=${activeTab.toLowerCase().replace(' ', '_')}`);
-      console.log('🔍 FULL API Response:', res);
+      const type = TAB_TO_TYPE[activeTab];
+      const queryParams = new URLSearchParams({
+        month: form.month,
+        year: form.year,
+        type: type
+      });
+
+      console.log('🔍 Fetching:', `/contributions?${queryParams}`);
+      const res = await api(`/contributions?${queryParams}`);
       
-      // Handle different response formats
-      let data = [];
-      if (Array.isArray(res)) {
-        data = res;
-      } else if (res && typeof res === 'object') {
-        data = res.contributions || res.data || res.rows || Object.values(res)[0] || [];
-      }
+      console.log('🔍 Response:', res);
+      const data = res.contributions || [];
+      console.log(' Contributions count:', data.length);
       
-      console.log('🔍 Parsed contributions array:', data);
-      if (data.length > 0) {
-        console.log('🔍 First contribution structure:', data[0]);
-      }
-      
-      setContributions(Array.isArray(data) ? data : []);
+      setContributions(data);
     } catch (err) {
-      console.error('❌ Failed to load contributions:', err);
-      setMessage('❌ Failed to load contributions: ' + err.message);
+      console.error('❌ Load error:', err);
+      setMessage('❌ Failed to load: ' + err.message);
       setTimeout(() => setMessage(''), 5000);
       setContributions([]);
     } finally {
@@ -65,471 +74,251 @@ export default function Contributions() {
 
   const handleGenerateBills = async () => {
     try {
-      console.log('📝 Generating bills:', form);
+      const type = TAB_TO_TYPE[activeTab];
       await api('/contributions/generate', {
         method: 'POST',
         body: {
-          month: form.month,
-          year: form.year,
-          customAmount: form.customAmount ? parseFloat(form.customAmount) : null,
-          defaultersOnly: form.defaultersOnly
+          month: parseInt(form.month),
+          year: parseInt(form.year),
+          type: type,
+          amount: form.customAmount ? parseFloat(form.customAmount) : undefined
         }
       });
       setMessage('✅ Bills generated successfully');
       setTimeout(() => setMessage(''), 3000);
       await loadContributions();
     } catch (err) {
-      console.error('❌ Generate bills error:', err);
       setMessage('❌ ' + err.message);
       setTimeout(() => setMessage(''), 3000);
     }
   };
 
   const handleEdit = (contribution) => {
-    console.log('✏️ Editing contribution:', contribution);
-    const newAmount = prompt(`Edit contribution amount for ${contribution.household || contribution.household_name}:`, contribution.amount_due || contribution.due || '50000');
+    const newAmount = prompt(
+      `Edit amount due for ${contribution.household_name}:`,
+      contribution.amount_due
+    );
     if (newAmount !== null && newAmount !== '') {
       api(`/contributions/${contribution.id}`, {
         method: 'PUT',
-        body: { amount_due: parseFloat(newAmount), due: parseFloat(newAmount) }
+        body: { amount_due: parseFloat(newAmount) }
       }).then(() => {
         setMessage('✅ Contribution updated');
         setTimeout(() => setMessage(''), 3000);
         loadContributions();
       }).catch(err => {
-        setMessage('❌ Failed to update: ' + err.message);
+        setMessage('❌ ' + err.message);
         setTimeout(() => setMessage(''), 3000);
       });
     }
   };
 
   const handleRecordPayment = (contribution) => {
-    console.log('💵 Recording payment for:', contribution);
     setSelectedContribution(contribution);
-    setPaymentAmount(contribution.amount_due || contribution.due || '');
+    setPaymentAmount('');
+    setPaymentMethod('cash');
+    setPaymentReference('');
     setShowPaymentModal(true);
   };
 
   const submitPayment = async () => {
-    if (!selectedContribution || !paymentAmount) return;
-    
+    if (!selectedContribution || !paymentAmount || parseFloat(paymentAmount) <= 0) {
+      setMessage('❌ Please enter a valid amount');
+      return;
+    }
+
     try {
-      console.log('💰 Submitting payment:', { id: selectedContribution.id, amount: paymentAmount });
-      await api(`/contributions/${selectedContribution.id}/payment`, {
+      await api('/contributions/payments', {
         method: 'POST',
-        body: { amount: parseFloat(paymentAmount) }
+        body: {
+          member_id: selectedContribution.member_id,
+          month: parseInt(form.month),
+          year: parseInt(form.year),
+          type: TAB_TO_TYPE[activeTab],
+          amount: parseFloat(paymentAmount),
+          method: paymentMethod,
+          reference: paymentReference || undefined
+        }
       });
       setMessage('✅ Payment recorded successfully');
       setTimeout(() => setMessage(''), 3000);
       setShowPaymentModal(false);
-      setSelectedContribution(null);
-      setPaymentAmount('');
       await loadContributions();
     } catch (err) {
-      console.error('❌ Payment error:', err);
-      setMessage('❌ Failed to record payment: ' + err.message);
+      setMessage('❌ ' + err.message);
       setTimeout(() => setMessage(''), 3000);
     }
   };
 
-  // Helper to get amount due - handles multiple field names
-  const getDue = (c) => {
-    return parseFloat(c.amount_due || c.due || c.amount || 0) || 0;
-  };
-
-  // Helper to get amount paid - handles multiple field names
-  const getPaid = (c) => {
-    return parseFloat(c.amount_paid || c.paid || 0) || 0;
-  };
-
   // Calculate stats
-  const expected = contributions.reduce((sum, c) => sum + getDue(c), 0);
-  const collected = contributions.reduce((sum, c) => sum + getPaid(c), 0);
+  const expected = contributions.reduce((sum, c) => sum + (parseFloat(c.amount_due) || 0), 0);
+  const collected = contributions.reduce((sum, c) => sum + (parseFloat(c.amount_paid) || 0), 0);
   const outstanding = expected - collected;
 
+  const getStatus = (c) => {
+    const paid = parseFloat(c.amount_paid) || 0;
+    const due = parseFloat(c.amount_due) || 0;
+    if (due > 0 && paid >= due) return 'paid';
+    if (paid > 0) return 'partial';
+    return 'pending';
+  };
+
   if (loading) return <div style={{ padding: '40px' }}><Skeleton height="40px" width="300px" /><div style={{ marginTop: '24px' }}>{[1,2,3].map(i => <Skeleton key={i} height="120px" width="100%" style={{ marginBottom: '12px' }} />)}</div></div>;
+
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 24px' }}>
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ margin: '0 0 8px 0', fontSize: '2rem', fontWeight: '700', color: '#111827' }}>
-          Contributions
-        </h1>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>
-          Manage estate contributions and payments
-        </p>
+        <h1 style={{ margin: '0 0 8px 0', fontSize: '2rem', fontWeight: '700', color: '#111827' }}>Contributions</h1>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>Manage estate contributions and payments</p>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #e5e7eb', paddingBottom: '2px', flexWrap: 'wrap' }}>
-        {['Monthly', 'Float', 'Projects', 'End of Year', 'Welfare'].map(tab => (
-          <button
-            key={tab}
-            onClick={() => {
-              console.log('🔄 Switching to tab:', tab);
-              setActiveTab(tab);
-            }}
-            style={{
-              padding: '10px 20px',
-              background: activeTab === tab ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' : 'transparent',
-              color: activeTab === tab ? 'white' : '#6b7280',
-              border: 'none',
-              borderBottom: activeTab === tab ? '3px solid #6366f1' : '3px solid transparent',
-              fontWeight: activeTab === tab ? '600' : '500',
-              cursor: 'pointer',
-              borderRadius: '8px 8px 0 0',
-              transition: 'all 0.2s',
-              marginBottom: '-2px'
-            }}
-          >
-            {tab}
-          </button>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #e5e7eb' }}>
+        {Object.keys(TAB_TO_TYPE).map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)} style={{
+            padding: '10px 20px', background: activeTab === tab ? '#6366f1' : 'transparent',
+            color: activeTab === tab ? 'white' : '#6b7280', border: 'none', fontWeight: activeTab === tab ? '600' : '500', cursor: 'pointer',
+            borderRadius: '8px 8px 0 0'
+          }}>{tab}</button>
         ))}
       </div>
 
-      {/* Message Banner */}
+      {/* Message */}
       {message && (
-        <div style={{
-          background: message.includes('✅') ? '#ecfdf5' : '#fff1f2',
-          border: `1px solid ${message.includes('✅') ? '#a7f3d0' : '#fecdd3'}`,
-          borderLeft: `4px solid ${message.includes('✅') ? '#22c55e' : '#ef4444'}`,
-          borderRadius: '12px',
-          padding: '16px 24px',
-          marginBottom: '24px',
-          fontSize: '0.95rem',
-          fontWeight: '500',
-          color: '#111827'
-        }}>
-          {message}
-        </div>
+        <div style={{ background: message.includes('✅') ? '#ecfdf5' : '#fff1f2', border: `1px solid ${message.includes('✅') ? '#a7f3d0' : '#fecdd3'}`, borderRadius: '8px', padding: '12px', marginBottom: '20px', color: message.includes('✅') ? '#065f46' : '#991b1b' }}>{message}</div>
       )}
 
-      {/* Form Section */}
-      <div style={{
-        background: '#fff',
-        borderRadius: '16px',
-        border: '1px solid #e5e7eb',
-        borderLeft: '4px solid #6366f1',
-        padding: '24px',
-        marginBottom: '24px',
-        boxShadow: '0 2px 8px rgba(99, 102, 241, 0.08)'
-      }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', alignItems: 'end' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Month</label>
-            <select
-              value={form.month}
-              onChange={(e) => setForm({ ...form, month: e.target.value })}
-              style={{ width: '100%', padding: '10px 12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '0.95rem' }}
-            >
-              {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Year</label>
-            <input
-              type="number"
-              value={form.year}
-              onChange={(e) => setForm({ ...form, year: e.target.value })}
-              style={{ width: '100%', padding: '10px 12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '0.95rem' }}
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Custom Amount (Optional)</label>
-            <input
-              type="number"
-              value={form.customAmount}
-              onChange={(e) => setForm({ ...form, customAmount: e.target.value })}
-              placeholder="Leave blank for default"
-              style={{ width: '100%', padding: '10px 12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '0.95rem' }}
-            />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-            <input
-              type="checkbox"
-              id="defaulters"
-              checked={form.defaultersOnly}
-              onChange={(e) => setForm({ ...form, defaultersOnly: e.target.checked })}
-              style={{ width: '18px', height: '18px', marginRight: '8px', cursor: 'pointer' }}
-            />
-            <label htmlFor="defaulters" style={{ fontSize: '0.9rem', color: '#374151', cursor: 'pointer' }}>Defaulters only</label>
-          </div>
-          <button
-            onClick={handleGenerateBills}
-            style={{
-              padding: '12px 24px',
-              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontWeight: '600',
-              fontSize: '0.95rem',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
-            }}
-          >
-            Generate Bills
-          </button>
+      {/* Controls */}
+      <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', marginBottom: '24px', display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'end' }}>
+        <div>
+          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px' }}>Month</label>
+          <select value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }}>
+            {monthNames.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
         </div>
+        <div>
+          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px' }}>Year</label>
+          <input type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', width: '80px' }} />
+        </div>
+        <div>
+          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px' }}>Custom Amount (Optional)</label>
+          <input type="number" value={form.customAmount} onChange={(e) => setForm({ ...form, customAmount: e.target.value })} placeholder="Leave blank for default" style={{ padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }} />
+        </div>
+        <button onClick={handleGenerateBills} style={{ padding: '10px 20px', background: '#6366f1', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Generate Bills</button>
       </div>
 
-      {/* Stats Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-        <div style={{
-          background: '#fff',
-          borderRadius: '16px',
-          padding: '24px',
-          border: '1px solid #e5e7eb',
-          borderLeft: '4px solid #6366f1',
-          boxShadow: '0 2px 8px rgba(99, 102, 241, 0.08)'
-        }}>
-          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px', fontWeight: '500' }}>Expected</div>
-          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#4f46e5' }}>₦{expected.toLocaleString()}</div>
+      {/* Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', borderLeft: '4px solid #6366f1' }}>
+          <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>Expected</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: '700', color: '#4f46e5' }}>₦{expected.toLocaleString()}</div>
         </div>
-        <div style={{
-          background: '#fff',
-          borderRadius: '16px',
-          padding: '24px',
-          border: '1px solid #e5e7eb',
-          borderLeft: '4px solid #22c55e',
-          boxShadow: '0 2px 8px rgba(34, 197, 94, 0.08)'
-        }}>
-          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px', fontWeight: '500' }}>Collected</div>
-          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#059669' }}>{collected.toLocaleString()}</div>
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', borderLeft: '4px solid #22c55e' }}>
+          <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>Collected</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: '700', color: '#059669' }}>₦{collected.toLocaleString()}</div>
         </div>
-        <div style={{
-          background: '#fff',
-          borderRadius: '16px',
-          padding: '24px',
-          border: '1px solid #e5e7eb',
-          borderLeft: '4px solid #ef4444',
-          boxShadow: '0 2px 8px rgba(239, 68, 68, 0.08)'
-        }}>
-          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px', fontWeight: '500' }}>Outstanding</div>
-          <div style={{ fontSize: '2rem', fontWeight: '700', color: '#e11d48' }}>₦{outstanding.toLocaleString()}</div>
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', borderLeft: '4px solid #ef4444' }}>
+          <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>Outstanding</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: '700', color: '#e11d48' }}>{outstanding.toLocaleString()}</div>
         </div>
       </div>
 
       {/* Table */}
-      <div style={{
-        background: '#fff',
-        borderRadius: '16px',
-        border: '1px solid #e5e7eb',
-        borderLeft: '4px solid #6366f1',
-        overflow: 'hidden',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
-      }}>
+      <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
         {contributions.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9ca3af' }}>
-            <div style={{ fontSize: '4rem', marginBottom: '16px' }}></div>
-            <p style={{ fontSize: '1.1rem', fontWeight: '600', color: '#6b7280' }}>No contributions yet</p>
-            <p style={{ fontSize: '0.95rem' }}>Generate bills to get started</p>
+          <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>💰</div>
+            <p>No contributions for {monthNames[parseInt(form.month) - 1]} {form.year}</p>
+            <p style={{ fontSize: '0.9rem' }}>Click "Generate Bills" to create contributions</p>
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f9fafb' }}>
-                  <th style={{ padding: '16px 20px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>House</th>
-                  <th style={{ padding: '16px 20px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Household</th>
-                  <th style={{ padding: '16px 20px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Due</th>
-                  <th style={{ padding: '16px 20px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Paid</th>
-                  <th style={{ padding: '16px 20px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Status</th>
-                  <th style={{ padding: '16px 20px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Reference</th>
-                  <th style={{ padding: '16px 20px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {contributions.map((c, idx) => {
-                  const color = ROW_COLORS[idx % ROW_COLORS.length];
-                  const due = getDue(c);
-                  const paid = getPaid(c);
-                  const isPaid = c.status === 'paid' || paid > 0;
-                  const householdName = c.household || c.household_name || 'Unknown';
-                  
-                  return (
-                    <tr
-                      key={c.id}
-                      style={{
-                        borderLeft: `4px solid ${color.border}`,
-                        transition: 'all 0.2s ease'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = color.bg + '30'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <td style={{ padding: '16px 20px', fontSize: '0.95rem', fontWeight: '700', color: '#111827', borderBottom: '1px solid #f3f4f6' }}>
-                        {c.house_number || c.houseNumber || '-'}
-                      </td>
-                      <td style={{ padding: '16px 20px', borderBottom: '1px solid #f3f4f6' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{
-                            width: '40px',
-                            height: '40px',
-                            borderRadius: '10px',
-                            background: color.border,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '1.1rem',
-                            color: 'white',
-                            fontWeight: '700'
-                          }}>
-                            {householdName.charAt(0)}
-                          </div>
-                          <span style={{ fontSize: '0.95rem', fontWeight: '600', color: '#111827' }}>
-                            {householdName}
-                          </span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '16px 20px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '700', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>
-                        ₦{due.toLocaleString()}
-                      </td>
-                      <td style={{ padding: '16px 20px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '700', color: isPaid ? '#059669' : '#9ca3af', borderBottom: '1px solid #f3f4f6' }}>
-                        ₦{paid.toLocaleString()}
-                      </td>
-                      <td style={{ padding: '16px 20px', textAlign: 'center', borderBottom: '1px solid #f3f4f6' }}>
-                        <span style={{
-                          display: 'inline-block',
-                          padding: '6px 14px',
-                          background: isPaid ? '#dcfce7' : '#fee2e2',
-                          color: isPaid ? '#166534' : '#991b1b',
-                          borderRadius: '20px',
-                          fontSize: '0.8rem',
-                          fontWeight: '600'
-                        }}>
-                          {isPaid ? '✓ Paid' : '⏳ Pending'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '16px 20px', fontSize: '0.9rem', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>
-                        {c.reference || '—'}
-                      </td>
-                      <td style={{ padding: '16px 20px', borderBottom: '1px solid #f3f4f6' }}>
-                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                          <button
-                            onClick={() => handleEdit(c)}
-                            style={{
-                              padding: '6px 12px',
-                              background: '#fff',
-                              color: color.text,
-                              border: `2px solid ${color.border}`,
-                              borderRadius: '6px',
-                              fontWeight: '600',
-                              fontSize: '0.8rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            ✏️ Edit
-                          </button>
-                          <button
-                            onClick={() => handleRecordPayment(c)}
-                            style={{
-                              padding: '6px 12px',
-                              background: isPaid ? '#ecfdf5' : '#fff',
-                              color: isPaid ? '#059669' : color.text,
-                              border: `2px solid ${isPaid ? '#86efac' : color.border}`,
-                              borderRadius: '6px',
-                              fontWeight: '600',
-                              fontSize: '0.8rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {isPaid ? '➕ Add Payment' : '💵 Record Payment'}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', color: '#6b7280' }}>HOUSE</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', color: '#6b7280' }}>HOUSEHOLD</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', color: '#6b7280' }}>DUE</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', color: '#6b7280' }}>PAID</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.75rem', color: '#6b7280' }}>STATUS</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', color: '#6b7280' }}>REFERENCE</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.75rem', color: '#6b7280' }}>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {contributions.map((c, idx) => {
+                const color = ROW_COLORS[idx % ROW_COLORS.length];
+                const status = getStatus(c);
+                const isPaid = status === 'paid';
+                
+                return (
+                  <tr key={c.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '12px 16px', fontWeight: '600' }}>{c.house_number}</td>
+                    <td style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: color.border, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700' }}>
+                        {c.household_name.charAt(0)}
+                      </div>
+                      {c.household_name}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600' }}>₦{(parseFloat(c.amount_due) || 0).toLocaleString()}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: isPaid ? '#059669' : '#9ca3af' }}>₦{(parseFloat(c.amount_paid) || 0).toLocaleString()}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '600', background: isPaid ? '#dcfce7' : status === 'partial' ? '#fef3c7' : '#fee2e2', color: isPaid ? '#166534' : status === 'partial' ? '#92400e' : '#991b1b' }}>
+                        {isPaid ? '✓ Paid' : status === 'partial' ? '⚠ Partial' : '⏳ Pending'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '0.9rem', color: '#4b5563' }}>
+                      {c.references || <span style={{ color: '#d1d5db' }}>—</span>}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button onClick={() => handleEdit(c)} style={{ padding: '6px 12px', border: `1px solid ${color.border}`, color: color.text, background: 'white', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
+                        <button onClick={() => handleRecordPayment(c)} style={{ padding: '6px 12px', border: '1px solid #22c55e', color: '#22c55e', background: isPaid ? '#f0fdf4' : 'white', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                          {isPaid ? 'Add Payment' : 'Record Payment'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
 
       {/* Payment Modal */}
       {showPaymentModal && selectedContribution && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }} onClick={() => setShowPaymentModal(false)}>
-          <div style={{
-            background: '#fff',
-            borderRadius: '16px',
-            maxWidth: '400px',
-            width: '90%',
-            padding: '32px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
-          }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ margin: '0 0 24px 0', fontSize: '1.5rem', fontWeight: '700', color: '#111827' }}>
-              Record Payment
-            </h2>
-            <div style={{ marginBottom: '20px', padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
-              <div style={{ fontSize: '0.9rem', color: '#6b7280', marginBottom: '4px' }}>Household</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#111827' }}>
-                {selectedContribution.household || selectedContribution.household_name}
-              </div>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowPaymentModal(false)}>
+          <div style={{ background: 'white', padding: '24px', borderRadius: '12px', width: '400px', maxWidth: '90%' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0, marginBottom: '16px' }}>Record Payment</h3>
+            <div style={{ marginBottom: '16px', padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
+              <div style={{ fontSize: '0.9rem', color: '#6b7280' }}>Household</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: '600' }}>{selectedContribution.household_name}</div>
               <div style={{ fontSize: '0.9rem', color: '#6b7280', marginTop: '8px' }}>Amount Due</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#e11d48' }}>
-                ₦{getDue(selectedContribution).toLocaleString()}
-              </div>
+              <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#e11d48' }}>₦{(parseFloat(selectedContribution.amount_due) || 0).toLocaleString()}</div>
             </div>
-            <div style={{ marginBottom: '24px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Payment Amount</label>
-              <input
-                type="number"
-                value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '8px',
-                  fontSize: '1rem',
-                  boxSizing: 'border-box'
-                }}
-                placeholder="Enter amount"
-              />
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600' }}>Payment Amount</label>
+              <input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} style={{ width: '100%', padding: '10px', boxSizing: 'border-box', border: '1px solid #d1d5db', borderRadius: '6px' }} placeholder="Enter amount" />
             </div>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setShowPaymentModal(false)}
-                style={{
-                  padding: '10px 20px',
-                  background: '#f3f4f6',
-                  color: '#374151',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: '600',
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submitPayment}
-                style={{
-                  padding: '10px 24px',
-                  background: 'linear-gradient(135deg, #22c55e 0%, #10b981 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: '600',
-                  cursor: 'pointer'
-                }}
-              >
-                Submit Payment
-              </button>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600' }}>Payment Method</label>
+              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} style={{ width: '100%', padding: '10px', boxSizing: 'border-box', border: '1px solid #d1d5db', borderRadius: '6px' }}>
+                <option value="cash">Cash</option>
+                <option value="transfer">Bank Transfer</option>
+                <option value="cheque">Cheque</option>
+                <option value="pos">POS</option>
+              </select>
+            </div>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600' }}>Reference (Optional)</label>
+              <input type="text" value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} style={{ width: '100%', padding: '10px', boxSizing: 'border-box', border: '1px solid #d1d5db', borderRadius: '6px' }} placeholder="e.g., TXN123456" />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button onClick={() => setShowPaymentModal(false)} style={{ padding: '10px 20px', background: '#e5e7eb', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={submitPayment} style={{ padding: '10px 20px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>Submit Payment</button>
             </div>
           </div>
         </div>
