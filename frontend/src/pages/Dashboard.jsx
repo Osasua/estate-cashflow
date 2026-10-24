@@ -301,14 +301,43 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </ChartPanel>
 
-        {/* Payment History (Last 6 Months) - FIXED */}
+        {/* Payment History (Last 6 Months) - ENHANCED */}
         <ChartPanel title="Payment History (Last 6 Months)">
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={trend || []} margin={{ top: 10, right: 20, left: 0, bottom: 60 }}>
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={trend || []} margin={{ top: 20, right: 30, left: 0, bottom: 60 }}>
+              <defs>
+                <linearGradient id="grad0" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.8} />
+                </linearGradient>
+                <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#a855f7" stopOpacity={0.8} />
+                </linearGradient>
+                <linearGradient id="grad2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#a855f7" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#d946ef" stopOpacity={0.8} />
+                </linearGradient>
+                <linearGradient id="grad3" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#d946ef" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#ec4899" stopOpacity={0.8} />
+                </linearGradient>
+                <linearGradient id="grad4" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#ec4899" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#f43f5e" stopOpacity={0.8} />
+                </linearGradient>
+                <linearGradient id="grad5" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#f43f5e" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#ef4444" stopOpacity={0.8} />
+                </linearGradient>
+                <filter id="barShadow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#6366f1" floodOpacity="0.3"/>
+                </filter>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
               <XAxis 
                 dataKey="short_month" 
-                tick={{ fontSize: 11, fill: '#6b7280' }} 
+                tick={{ fontSize: 13, fill: '#6b7280', fontWeight: '700' }} 
                 axisLine={false} 
                 tickLine={false}
                 interval={0}
@@ -317,13 +346,33 @@ export default function Dashboard() {
                 height={60}
               />
               <YAxis 
-                tick={{ fontSize: 11, fill: '#9ca3af' }} 
+                tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: '600' }} 
                 axisLine={false} 
                 tickLine={false} 
                 tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} 
               />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="income" name="Contributions" fill="#6366f1" radius={[6, 6, 0, 0]} />
+              <Tooltip 
+                content={<CustomTooltip />}
+                cursor={{ fill: 'rgba(99, 102, 241, 0.08)', radius: 8 }}
+              />
+              <Bar 
+                dataKey="income" 
+                name="Contributions" 
+                radius={[16, 16, 8, 8]}
+                maxBarSize={70}
+                animationDuration={1500}
+                animationEasing="ease-out"
+              >
+                {
+                  (trend || []).map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={`url(#grad${index})`}
+                      filter="url(#barShadow)"
+                    />
+                  ))
+                }
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ChartPanel>
