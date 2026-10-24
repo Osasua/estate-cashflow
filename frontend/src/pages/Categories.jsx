@@ -22,6 +22,7 @@ const CATEGORY_ICONS = {
   'Facility Management': '🏢',
   'Fuel & Oil Purchase': '⛽',
   'Miscallenous': '📦',
+  'Miscellaneous': '📦',
   'Repairs and Maintenance': '🔧',
   'Security Service': '🛡️',
   'Waste Disposal': '🗑️',
@@ -31,6 +32,7 @@ export default function Categories() {
   const { user } = useAuth();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [newName, setNewName] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
@@ -42,15 +44,24 @@ export default function Categories() {
 
   const loadCategories = async () => {
     setLoading(true);
+    setError('');
     try {
       const res = await api('/categories');
-      // ✅ Handle both array and object responses
-      const cats = Array.isArray(res) ? res : (res.categories || res.data || []);
+      console.log('🔍 Categories API Response:', res);
+      
+      // Handle multiple response formats
+      let cats = [];
+      if (Array.isArray(res)) {
+        cats = res;
+      } else if (res && typeof res === 'object') {
+        cats = res.categories || res.data || res.rows || Object.values(res)[0] || [];
+      }
+      
+      console.log('✅ Parsed categories:', cats);
       setCategories(cats);
     } catch (err) {
-      console.error('Failed to load categories:', err);
-      setMessage('❌ Failed to load categories');
-      setTimeout(() => setMessage(''), 3000);
+      console.error('❌ Failed to load categories:', err);
+      setError('Failed to load categories: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -102,7 +113,7 @@ export default function Categories() {
     if (!window.confirm('Are you sure you want to delete this category?')) return;
     try {
       await api(`/categories/${id}`, { method: 'DELETE' });
-      setMessage('️ Category deleted!');
+      setMessage('🗑️ Category deleted!');
       setTimeout(() => setMessage(''), 3000);
       await loadCategories();
     } catch (err) {
@@ -115,6 +126,22 @@ export default function Categories() {
   const getCategoryIcon = (name) => CATEGORY_ICONS[name] || '📁';
 
   if (loading) return <div style={{ padding: '40px' }}><Skeleton height="40px" width="300px" /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginTop: '24px' }}>{[1,2,3,4,5,6].map(i => <Skeleton key={i} height="120px" width="100%" />)}</div></div>;
+
+  if (error) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <div style={{ fontSize: '3rem', marginBottom: '16px' }}>⚠️</div>
+        <h2 style={{ color: '#ef4444', marginBottom: '8px' }}>Error Loading Categories</h2>
+        <p style={{ color: '#6b7280', marginBottom: '16px' }}>{error}</p>
+        <button 
+          onClick={loadCategories}
+          style={{ padding: '10px 24px', background: '#6366f1', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
@@ -131,8 +158,8 @@ export default function Categories() {
       {/* Message Banner */}
       {message && (
         <div style={{
-          background: message.includes('✅') || message.includes('️') ? '#ecfdf5' : '#fff1f2',
-          border: `1px solid ${message.includes('✅') || message.includes('️') ? '#a7f3d0' : '#fecdd3'}`,
+          background: message.includes('✅') || message.includes('🗑️') ? '#ecfdf5' : '#fff1f2',
+          border: `1px solid ${message.includes('✅') || message.includes('🗑️') ? '#a7f3d0' : '#fecdd3'}`,
           borderLeft: `4px solid ${message.includes('✅') || message.includes('🗑️') ? '#22c55e' : '#ef4444'}`,
           borderRadius: '12px',
           padding: '16px 24px',
@@ -213,7 +240,7 @@ export default function Categories() {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>
-             Existing Categories
+            📂 Existing Categories
           </h3>
           <span style={{
             background: '#eef2ff',
@@ -230,8 +257,8 @@ export default function Categories() {
         {categories.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9ca3af' }}>
             <div style={{ fontSize: '4rem', marginBottom: '16px' }}>📁</div>
-            <p style={{ fontSize: '1.1rem', fontWeight: '600', color: '#6b7280' }}>No categories yet</p>
-            <p style={{ fontSize: '0.95rem' }}>Add your first category above to get started</p>
+            <p style={{ fontSize: '1.1rem', fontWeight: '600', color: '#6b7280' }}>No categories found</p>
+            <p style={{ fontSize: '0.95rem' }}>Try adding a category above or check your database</p>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
@@ -239,8 +266,7 @@ export default function Categories() {
               const style = getCategoryStyle(idx);
               const icon = getCategoryIcon(cat.name);
               const isEditing = editingId === cat.id;
-              // ✅ Handle both is_active and active field names
-              const isActive = cat.is_active !== undefined ? cat.is_active : cat.active;
+              const isActive = cat.is_active !== undefined ? cat.is_active : (cat.active !== undefined ? cat.active : true);
 
               return (
                 <div
@@ -371,7 +397,7 @@ export default function Categories() {
                             e.currentTarget.style.background = '#fff';
                           }}
                         >
-                          ✏️ Edit
+                          ️ Edit
                         </button>
                         <button
                           onClick={() => handleToggle(cat.id, isActive)}
