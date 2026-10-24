@@ -223,7 +223,19 @@ export default function Minutes() {
                     {m.content.substring(0, 200)}{m.content.length > 200 ? '...' : ''}
                   </p>
                 </div>
-                <div style={{ marginLeft: '24px', color: '#9ca3af', fontSize: '1.5rem', fontWeight: '300' }}>→</div>
+                <div style={{ 
+  marginLeft: '24px', 
+  display: 'flex', 
+  alignItems: 'center', 
+  gap: '8px',
+  color: COLORS[idx % COLORS.length],
+  fontWeight: '600',
+  fontSize: '0.9rem',
+  whiteSpace: 'nowrap'
+}}>
+  <span>View details</span>
+  <span style={{ fontSize: '1.3rem', fontWeight: '700' }}>→</span>
+</div>
               </div>
             </div>
           ))}
