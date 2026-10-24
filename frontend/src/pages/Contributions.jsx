@@ -4,12 +4,12 @@ import { useAuth } from '../auth';
 import Skeleton from '../components/Skeleton';
 
 const ROW_COLORS = [
-  { border: '#6366f1', bg: '#eef2ff', text: '#4f46e5', gradient: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' },
-  { border: '#22c55e', bg: '#ecfdf5', text: '#059669', gradient: 'linear-gradient(135deg, #22c55e 0%, #10b981 100%)' },
-  { border: '#f59e0b', bg: '#fffbeb', text: '#d97706', gradient: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)' },
-  { border: '#ef4444', bg: '#fff1f2', text: '#e11d48', gradient: 'linear-gradient(135deg, #ef4444 0%, #f43f5e 100%)' },
-  { border: '#06b6d4', bg: '#ecfeff', text: '#0891b2', gradient: 'linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)' },
-  { border: '#a855f7', bg: '#f5f3ff', text: '#7c3aed', gradient: 'linear-gradient(135deg, #a855f7 0%, #d946ef 100%)' },
+  { border: '#6366f1', bg: '#eef2ff', text: '#4f46e5' },
+  { border: '#22c55e', bg: '#ecfdf5', text: '#059669' },
+  { border: '#f59e0b', bg: '#fffbeb', text: '#d97706' },
+  { border: '#ef4444', bg: '#fff1f2', text: '#e11d48' },
+  { border: '#06b6d4', bg: '#ecfeff', text: '#0891b2' },
+  { border: '#a855f7', bg: '#f5f3ff', text: '#7c3aed' },
 ];
 
 export default function Contributions() {
@@ -24,6 +24,9 @@ export default function Contributions() {
     customAmount: '',
     defaultersOnly: false
   });
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedContribution, setSelectedContribution] = useState(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
 
   useEffect(() => {
     loadContributions();
@@ -33,11 +36,15 @@ export default function Contributions() {
     setLoading(true);
     try {
       const res = await api(`/contributions?tab=${activeTab.toLowerCase().replace(' ', '_')}`);
-      setContributions(res.contributions || res || []);
+      console.log('Contributions response:', res);
+      // Handle different response formats
+      const data = res.contributions || res.data || res || [];
+      setContributions(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load contributions:', err);
-      setMessage(' Failed to load contributions');
-      setTimeout(() => setMessage(''), 3000);
+      setMessage('❌ Failed to load contributions: ' + err.message);
+      setTimeout(() => setMessage(''), 5000);
+      setContributions([]);
     } finally {
       setLoading(false);
     }
@@ -63,14 +70,48 @@ export default function Contributions() {
     }
   };
 
-  const handleRecordPayment = (contribution) => {
-    // Open payment modal or redirect - existing functionality
-    console.log('Record payment for:', contribution);
+  const handleEdit = (contribution) => {
+    // Open edit modal or navigate to edit page
+    const newAmount = prompt(`Edit contribution amount for ${contribution.household}:`, contribution.due || '50000');
+    if (newAmount !== null) {
+      api(`/contributions/${contribution.id}`, {
+        method: 'PUT',
+        body: { due: parseFloat(newAmount) }
+      }).then(() => {
+        setMessage('✅ Contribution updated');
+        setTimeout(() => setMessage(''), 3000);
+        loadContributions();
+      }).catch(err => {
+        setMessage('❌ Failed to update: ' + err.message);
+        setTimeout(() => setMessage(''), 3000);
+      });
+    }
   };
 
-  const handleEdit = (contribution) => {
-    // Edit existing contribution - existing functionality
-    console.log('Edit contribution:', contribution);
+  const handleRecordPayment = (contribution) => {
+    setSelectedContribution(contribution);
+    setPaymentAmount(contribution.due || '');
+    setShowPaymentModal(true);
+  };
+
+  const submitPayment = async () => {
+    if (!selectedContribution || !paymentAmount) return;
+    
+    try {
+      await api(`/contributions/${selectedContribution.id}/payment`, {
+        method: 'POST',
+        body: { amount: parseFloat(paymentAmount) }
+      });
+      setMessage('✅ Payment recorded successfully');
+      setTimeout(() => setMessage(''), 3000);
+      setShowPaymentModal(false);
+      setSelectedContribution(null);
+      setPaymentAmount('');
+      await loadContributions();
+    } catch (err) {
+      setMessage('❌ Failed to record payment: ' + err.message);
+      setTimeout(() => setMessage(''), 3000);
+    }
   };
 
   const expected = contributions.reduce((sum, c) => sum + (parseFloat(c.due) || 0), 0);
@@ -83,7 +124,7 @@ export default function Contributions() {
     <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 24px' }}>
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ margin: '0 0 8px 0', fontSize: '2rem', fontWeight: '700', color: '#111827', letterSpacing: '-0.02em' }}>
+        <h1 style={{ margin: '0 0 8px 0', fontSize: '2rem', fontWeight: '700', color: '#111827' }}>
           Contributions
         </h1>
         <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>
@@ -109,8 +150,6 @@ export default function Contributions() {
               transition: 'all 0.2s',
               marginBottom: '-2px'
             }}
-            onMouseEnter={(e) => { if (activeTab !== tab) e.currentTarget.style.background = '#f3f4f6'; }}
-            onMouseLeave={(e) => { if (activeTab !== tab) e.currentTarget.style.background = 'transparent'; }}
           >
             {tab}
           </button>
@@ -150,14 +189,7 @@ export default function Contributions() {
             <select
               value={form.month}
               onChange={(e) => setForm({ ...form, month: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '2px solid #e5e7eb',
-                borderRadius: '8px',
-                fontSize: '0.95rem',
-                background: '#fff'
-              }}
+              style={{ width: '100%', padding: '10px 12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '0.95rem' }}
             >
               {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
                 <option key={m} value={m}>{m}</option>
@@ -170,13 +202,7 @@ export default function Contributions() {
               type="number"
               value={form.year}
               onChange={(e) => setForm({ ...form, year: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '2px solid #e5e7eb',
-                borderRadius: '8px',
-                fontSize: '0.95rem'
-              }}
+              style={{ width: '100%', padding: '10px 12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '0.95rem' }}
             />
           </div>
           <div>
@@ -186,13 +212,7 @@ export default function Contributions() {
               value={form.customAmount}
               onChange={(e) => setForm({ ...form, customAmount: e.target.value })}
               placeholder="Leave blank for default"
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '2px solid #e5e7eb',
-                borderRadius: '8px',
-                fontSize: '0.95rem'
-              }}
+              style={{ width: '100%', padding: '10px 12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '0.95rem' }}
             />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
@@ -216,12 +236,8 @@ export default function Contributions() {
               fontWeight: '600',
               fontSize: '0.95rem',
               cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap'
+              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
             }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
           >
             Generate Bills
           </button>
@@ -276,7 +292,7 @@ export default function Contributions() {
       }}>
         {contributions.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9ca3af' }}>
-            <div style={{ fontSize: '4rem', marginBottom: '16px' }}>💰</div>
+            <div style={{ fontSize: '4rem', marginBottom: '16px' }}></div>
             <p style={{ fontSize: '1.1rem', fontWeight: '600', color: '#6b7280' }}>No contributions yet</p>
             <p style={{ fontSize: '0.95rem' }}>Generate bills to get started</p>
           </div>
@@ -297,7 +313,8 @@ export default function Contributions() {
               <tbody>
                 {contributions.map((c, idx) => {
                   const color = ROW_COLORS[idx % ROW_COLORS.length];
-                  const isPaid = c.status === 'paid' || c.paid > 0;
+                  const isPaid = c.status === 'paid' || (parseFloat(c.paid) || 0) > 0;
+                  const householdName = c.household || c.household_name || 'Unknown';
                   
                   return (
                     <tr
@@ -310,7 +327,7 @@ export default function Contributions() {
                       onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                     >
                       <td style={{ padding: '16px 20px', fontSize: '0.95rem', fontWeight: '700', color: '#111827', borderBottom: '1px solid #f3f4f6' }}>
-                        {c.house_number}
+                        {c.house_number || c.houseNumber || '-'}
                       </td>
                       <td style={{ padding: '16px 20px', borderBottom: '1px solid #f3f4f6' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -318,27 +335,26 @@ export default function Contributions() {
                             width: '40px',
                             height: '40px',
                             borderRadius: '10px',
-                            background: color.gradient,
+                            background: color.border,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontSize: '1.1rem',
                             color: 'white',
-                            fontWeight: '700',
-                            boxShadow: `0 2px 6px ${color.border}40`
+                            fontWeight: '700'
                           }}>
-                            {c.household?.charAt(0) || 'H'}
+                            {householdName.charAt(0)}
                           </div>
                           <span style={{ fontSize: '0.95rem', fontWeight: '600', color: '#111827' }}>
-                            {c.household}
+                            {householdName}
                           </span>
                         </div>
                       </td>
                       <td style={{ padding: '16px 20px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '700', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>
-                        {parseFloat(c.due || 0).toLocaleString()}
+                        ₦{(parseFloat(c.due) || 0).toLocaleString()}
                       </td>
                       <td style={{ padding: '16px 20px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '700', color: isPaid ? '#059669' : '#9ca3af', borderBottom: '1px solid #f3f4f6' }}>
-                        ₦{parseFloat(c.paid || 0).toLocaleString()}
+                        ₦{(parseFloat(c.paid) || 0).toLocaleString()}
                       </td>
                       <td style={{ padding: '16px 20px', textAlign: 'center', borderBottom: '1px solid #f3f4f6' }}>
                         <span style={{
@@ -348,8 +364,7 @@ export default function Contributions() {
                           color: isPaid ? '#166534' : '#991b1b',
                           borderRadius: '20px',
                           fontSize: '0.8rem',
-                          fontWeight: '600',
-                          border: `1px solid ${isPaid ? '#86efac' : '#fecaca'}`
+                          fontWeight: '600'
                         }}>
                           {isPaid ? '✓ Paid' : '⏳ Pending'}
                         </span>
@@ -369,53 +384,26 @@ export default function Contributions() {
                               borderRadius: '6px',
                               fontWeight: '600',
                               fontSize: '0.8rem',
-                              cursor: 'pointer',
-                              transition: 'all 0.2s'
+                              cursor: 'pointer'
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = color.bg}
-                            onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
                           >
-                            ️ Edit
+                            ✏️ Edit
                           </button>
-                          {isPaid ? (
-                            <button
-                              onClick={() => handleRecordPayment(c)}
-                              style={{
-                                padding: '6px 12px',
-                                background: '#ecfdf5',
-                                color: '#059669',
-                                border: '2px solid #a7f3d0',
-                                borderRadius: '6px',
-                                fontWeight: '600',
-                                fontSize: '0.8rem',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s'
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.background = '#d1fae5'}
-                              onMouseLeave={(e) => e.currentTarget.style.background = '#ecfdf5'}
-                            >
-                              ➕ Add Payment
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleRecordPayment(c)}
-                              style={{
-                                padding: '6px 12px',
-                                background: '#fff',
-                                color: '#059669',
-                                border: '2px solid #86efac',
-                                borderRadius: '6px',
-                                fontWeight: '600',
-                                fontSize: '0.8rem',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s'
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.background = '#ecfdf5'}
-                              onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
-                            >
-                              💵 Record Payment
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleRecordPayment(c)}
+                            style={{
+                              padding: '6px 12px',
+                              background: isPaid ? '#ecfdf5' : '#fff',
+                              color: isPaid ? '#059669' : color.text,
+                              border: `2px solid ${isPaid ? '#86efac' : color.border}`,
+                              borderRadius: '6px',
+                              fontWeight: '600',
+                              fontSize: '0.8rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {isPaid ? '➕ Add Payment' : '💵 Record Payment'}
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -426,6 +414,92 @@ export default function Contributions() {
           </div>
         )}
       </div>
+
+      {/* Payment Modal */}
+      {showPaymentModal && selectedContribution && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }} onClick={() => setShowPaymentModal(false)}>
+          <div style={{
+            background: '#fff',
+            borderRadius: '16px',
+            maxWidth: '400px',
+            width: '90%',
+            padding: '32px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+          }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: '0 0 24px 0', fontSize: '1.5rem', fontWeight: '700', color: '#111827' }}>
+              Record Payment
+            </h2>
+            <div style={{ marginBottom: '20px', padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
+              <div style={{ fontSize: '0.9rem', color: '#6b7280', marginBottom: '4px' }}>Household</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#111827' }}>
+                {selectedContribution.household || selectedContribution.household_name}
+              </div>
+              <div style={{ fontSize: '0.9rem', color: '#6b7280', marginTop: '8px' }}>Amount Due</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#e11d48' }}>
+                ₦{(parseFloat(selectedContribution.due) || 0).toLocaleString()}
+              </div>
+            </div>
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Payment Amount</label>
+              <input
+                type="number"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  boxSizing: 'border-box'
+                }}
+                placeholder="Enter amount"
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                style={{
+                  padding: '10px 20px',
+                  background: '#f3f4f6',
+                  color: '#374151',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitPayment}
+                style={{
+                  padding: '10px 24px',
+                  background: 'linear-gradient(135deg, #22c55e 0%, #10b981 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Submit Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
