@@ -55,52 +55,56 @@ router.get('/', async (req, res) => {
     let params = [memberId];
 
     switch (viewing) {
-      case 'this_month':
-        yearFilter = 'AND c.period_year = $2';
-        monthFilter = 'AND c.period_month = $3';
-        params.push(currentYear, currentMonth);
-        break;
-      case 'last_month': {
-        const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
-        const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
-        yearFilter = 'AND c.period_year = $2';
-        monthFilter = 'AND c.period_month = $3';
-        params.push(lastMonthYear, lastMonth);
-        break;
-      }
-      case 'last_3_months': {
-        const threeMonthsAgo = currentMonth - 3;
-        if (threeMonthsAgo <= 0) {
-          yearFilter = 'AND ((c.period_year = $2 AND c.period_month >= $3) OR c.period_year = $4)';
-          params.push(currentYear, threeMonthsAgo + 12, currentYear - 1);
-        } else {
-          yearFilter = 'AND c.period_year = $2';
-          monthFilter = 'AND c.period_month >= $3';
-          params.push(currentYear, threeMonthsAgo);
-        }
-        break;
-      }
-      case 'last_6_months': {
-        const sixMonthsAgo = currentMonth - 6;
-        if (sixMonthsAgo <= 0) {
-          yearFilter = 'AND ((c.period_year = $2 AND c.period_month >= $3) OR c.period_year = $4)';
-          params.push(currentYear, sixMonthsAgo + 12, currentYear - 1);
-        } else {
-          yearFilter = 'AND c.period_year = $2';
-          monthFilter = 'AND c.period_month >= $3';
-          params.push(currentYear, sixMonthsAgo);
-        }
-        break;
-      }
-      case 'year_to_date':
-        yearFilter = 'AND c.period_year = $2';
-        params.push(currentYear);
-        break;
-      default:
-        yearFilter = 'AND c.period_year = $2';
-        monthFilter = 'AND c.period_month = $3';
-        params.push(currentYear, currentMonth);
+  case 'this_month':
+    yearFilter = 'AND c.period_year = $2';
+    monthFilter = 'AND c.period_month = $3';
+    params.push(currentYear, currentMonth);
+    break;
+  case 'last_month': {
+    const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+    yearFilter = 'AND c.period_year = $2';
+    monthFilter = 'AND c.period_month = $3';
+    params.push(lastMonthYear, lastMonth);
+    break;
+  }
+  case 'last_3_months': {
+    // ✅ FIX: Include current month + 2 previous months = 3 months total
+    const startMonth = currentMonth - 2;
+    if (startMonth <= 0) {
+      // Spans across year boundary
+      yearFilter = 'AND ((c.period_year = $2 AND c.period_month >= $3) OR c.period_year = $4)';
+      params.push(currentYear, startMonth + 12, currentYear - 1);
+    } else {
+      yearFilter = 'AND c.period_year = $2';
+      monthFilter = 'AND c.period_month >= $3';
+      params.push(currentYear, startMonth);
     }
+    break;
+  }
+  case 'last_6_months': {
+    // ✅ FIX: Include current month + 5 previous months = 6 months total
+    const startMonth = currentMonth - 5;
+    if (startMonth <= 0) {
+      // Spans across year boundary
+      yearFilter = 'AND ((c.period_year = $2 AND c.period_month >= $3) OR c.period_year = $4)';
+      params.push(currentYear, startMonth + 12, currentYear - 1);
+    } else {
+      yearFilter = 'AND c.period_year = $2';
+      monthFilter = 'AND c.period_month >= $3';
+      params.push(currentYear, startMonth);
+    }
+    break;
+  }
+  case 'year_to_date':
+    yearFilter = 'AND c.period_year = $2';
+    params.push(currentYear);
+    break;
+  default:
+    yearFilter = 'AND c.period_year = $2';
+    monthFilter = 'AND c.period_month = $3';
+    params.push(currentYear, currentMonth);
+}
 
     // ✅ STEP 3: Summary
     const summaryRes = await query(`
