@@ -76,7 +76,7 @@ router.get('/', async (req, res) => {
 
     const member = memberRes.rows[0];
 
-    // 2. Summary - FIXED: properly alias table as 'c'
+    // 2. Summary
     const summaryRes = await query(`
       SELECT 
         COALESCE(SUM(c.amount_due), 0) AS total_due,
@@ -92,7 +92,7 @@ router.get('/', async (req, res) => {
       outstanding: parseFloat(summaryRes.rows[0].outstanding) || 0
     };
 
-    // 3. Payment History (Last 6 Months) - FIXED: proper JOIN
+    // 3. Payment History (Last 6 Months)
     const historyRes = await query(`
       WITH RECURSIVE months AS (
         SELECT date_trunc('month', CURRENT_DATE) - INTERVAL '5 months' AS month_start
@@ -120,7 +120,7 @@ router.get('/', async (req, res) => {
       amount_due: parseFloat(r.amount_due) || 0
     }));
 
-    // 4. Contributions by Type - FIXED: proper alias
+    // 4. Contributions by Type
     const typeRes = await query(`
       SELECT 
         COALESCE(c.type, 'monthly') AS type,
@@ -136,13 +136,12 @@ router.get('/', async (req, res) => {
       total: parseFloat(r.total) || 0
     }));
 
-    // 5. Recent Payments - FIXED: proper JOIN
+    // 5. Recent Payments - FIXED: removed p.status (column doesn't exist)
     const paymentsRes = await query(`
       SELECT 
         p.id,
         p.amount,
         p.paid_at AS payment_date,
-        p.status,
         p.method,
         p.reference,
         c.period_year,
@@ -160,7 +159,7 @@ router.get('/', async (req, res) => {
       id: r.id,
       amount: parseFloat(r.amount) || 0,
       payment_date: r.payment_date,
-      status: r.status || 'completed',
+      status: 'completed', // ✅ Hardcoded since column doesn't exist
       method: r.method,
       reference: r.reference,
       period: r.period,
