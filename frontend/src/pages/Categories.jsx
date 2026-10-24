@@ -17,9 +17,9 @@ const CATEGORY_COLORS = [
 ];
 
 const CATEGORY_ICONS = {
-  'Cleaning Service': '',
-  'Electricity Payment': '',
-  'Facility Management': '',
+  'Cleaning Service': '🧹',
+  'Electricity Payment': '⚡',
+  'Facility Management': '🏢',
   'Fuel & Oil Purchase': '⛽',
   'Miscallenous': '📦',
   'Repairs and Maintenance': '🔧',
@@ -44,9 +44,13 @@ export default function Categories() {
     setLoading(true);
     try {
       const res = await api('/categories');
-      setCategories(res.categories || []);
+      // ✅ Handle both array and object responses
+      const cats = Array.isArray(res) ? res : (res.categories || res.data || []);
+      setCategories(cats);
     } catch (err) {
       console.error('Failed to load categories:', err);
+      setMessage('❌ Failed to load categories');
+      setTimeout(() => setMessage(''), 3000);
     } finally {
       setLoading(false);
     }
@@ -98,7 +102,7 @@ export default function Categories() {
     if (!window.confirm('Are you sure you want to delete this category?')) return;
     try {
       await api(`/categories/${id}`, { method: 'DELETE' });
-      setMessage('🗑️ Category deleted!');
+      setMessage('️ Category deleted!');
       setTimeout(() => setMessage(''), 3000);
       await loadCategories();
     } catch (err) {
@@ -108,7 +112,7 @@ export default function Categories() {
   };
 
   const getCategoryStyle = (index) => CATEGORY_COLORS[index % CATEGORY_COLORS.length];
-  const getCategoryIcon = (name) => CATEGORY_ICONS[name] || '';
+  const getCategoryIcon = (name) => CATEGORY_ICONS[name] || '📁';
 
   if (loading) return <div style={{ padding: '40px' }}><Skeleton height="40px" width="300px" /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginTop: '24px' }}>{[1,2,3,4,5,6].map(i => <Skeleton key={i} height="120px" width="100%" />)}</div></div>;
 
@@ -128,7 +132,7 @@ export default function Categories() {
       {message && (
         <div style={{
           background: message.includes('✅') || message.includes('️') ? '#ecfdf5' : '#fff1f2',
-          border: `1px solid ${message.includes('✅') || message.includes('🗑️') ? '#a7f3d0' : '#fecdd3'}`,
+          border: `1px solid ${message.includes('✅') || message.includes('️') ? '#a7f3d0' : '#fecdd3'}`,
           borderLeft: `4px solid ${message.includes('✅') || message.includes('🗑️') ? '#22c55e' : '#ef4444'}`,
           borderRadius: '12px',
           padding: '16px 24px',
@@ -153,7 +157,7 @@ export default function Categories() {
         boxShadow: '0 4px 12px rgba(99, 102, 241, 0.08)'
       }}>
         <h3 style={{ margin: '0 0 20px 0', fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>
-          ➕ Add New Category
+           Add New Category
         </h3>
         <form onSubmit={handleAdd} style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
           <div style={{ flex: 1 }}>
@@ -209,7 +213,7 @@ export default function Categories() {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>
-            📂 Existing Categories
+             Existing Categories
           </h3>
           <span style={{
             background: '#eef2ff',
@@ -235,6 +239,8 @@ export default function Categories() {
               const style = getCategoryStyle(idx);
               const icon = getCategoryIcon(cat.name);
               const isEditing = editingId === cat.id;
+              // ✅ Handle both is_active and active field names
+              const isActive = cat.is_active !== undefined ? cat.is_active : cat.active;
 
               return (
                 <div
@@ -295,14 +301,14 @@ export default function Categories() {
                         <div style={{
                           display: 'inline-block',
                           padding: '3px 10px',
-                          background: cat.is_active ? '#dcfce7' : '#fef3c7',
-                          color: cat.is_active ? '#166534' : '#92400e',
+                          background: isActive ? '#dcfce7' : '#fef3c7',
+                          color: isActive ? '#166534' : '#92400e',
                           borderRadius: '12px',
                           fontSize: '0.75rem',
                           fontWeight: '600',
                           marginTop: '6px'
                         }}>
-                          {cat.is_active ? '✓ Active' : '⏸ Hidden'}
+                          {isActive ? '✓ Active' : '⏸ Hidden'}
                         </div>
                       </div>
                     </div>
@@ -368,12 +374,12 @@ export default function Categories() {
                           ✏️ Edit
                         </button>
                         <button
-                          onClick={() => handleToggle(cat.id, cat.is_active)}
+                          onClick={() => handleToggle(cat.id, isActive)}
                           style={{
                             padding: '8px 16px',
-                            background: cat.is_active ? '#fff' : '#dcfce7',
-                            color: cat.is_active ? '#dc2626' : '#166534',
-                            border: `2px solid ${cat.is_active ? '#fecaca' : '#86efac'}`,
+                            background: isActive ? '#fff' : '#dcfce7',
+                            color: isActive ? '#dc2626' : '#166534',
+                            border: `2px solid ${isActive ? '#fecaca' : '#86efac'}`,
                             borderRadius: '8px',
                             fontWeight: '600',
                             fontSize: '0.85rem',
@@ -381,13 +387,13 @@ export default function Categories() {
                             transition: 'all 0.2s'
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.background = cat.is_active ? '#fef2f2' : '#dcfce7';
+                            e.currentTarget.style.background = isActive ? '#fef2f2' : '#dcfce7';
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.background = cat.is_active ? '#fff' : '#dcfce7';
+                            e.currentTarget.style.background = isActive ? '#fff' : '#dcfce7';
                           }}
                         >
-                          {cat.is_active ? '🙈 Hide' : '️ Show'}
+                          {isActive ? '🙈 Hide' : '✅ Show'}
                         </button>
                         <button
                           onClick={() => handleDelete(cat.id)}
