@@ -1,3 +1,5 @@
+// v2.1 - Fixed edit to support reference editing
+
 import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
