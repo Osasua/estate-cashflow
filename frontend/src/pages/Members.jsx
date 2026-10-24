@@ -1,295 +1,432 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
-import { naira } from '../format';
+import Skeleton from '../components/Skeleton';
+
+const MEMBER_COLORS = [
+  { bg: '#eef2ff', text: '#4f46e5', border: '#6366f1', gradient: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' },
+  { bg: '#ecfdf5', text: '#059669', border: '#22c55e', gradient: 'linear-gradient(135deg, #22c55e 0%, #10b981 100%)' },
+  { bg: '#fffbeb', text: '#d97706', border: '#f59e0b', gradient: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)' },
+  { bg: '#fff1f2', text: '#e11d48', border: '#ef4444', gradient: 'linear-gradient(135deg, #ef4444 0%, #f43f5e 100%)' },
+  { bg: '#ecfeff', text: '#0891b2', border: '#06b6d4', gradient: 'linear-gradient(135deg, #06b6d4 0%, #22d3ee 100%)' },
+  { bg: '#f5f3ff', text: '#7c3aed', border: '#a855f7', gradient: 'linear-gradient(135deg, #a855f7 0%, #d946ef 100%)' },
+  { bg: '#f8fafc', text: '#475569', border: '#64748b', gradient: 'linear-gradient(135deg, #64748b 0%, #94a3b8 100%)' },
+  { bg: '#f0fdf4', text: '#16a34a', border: '#84cc16', gradient: 'linear-gradient(135deg, #84cc16 0%, #a3e635 100%)' },
+];
 
 export default function Members() {
   const { user } = useAuth();
-  const isStaff = ['admin', 'treasurer'].includes(user?.role);
-  
   const [members, setMembers] = useState([]);
-  const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingMember, setEditingMember] = useState(null);
 
-  // Form States
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  
-  const emptyForm = { household_name: '', house_number: '', phone: '', email: '', monthly_due: 10000, opening_balance: 0 };
-  const [formData, setFormData] = useState(emptyForm);
+  useEffect(() => {
+    loadMembers();
+  }, []);
 
   const loadMembers = async () => {
     setLoading(true);
     try {
-      const data = await api('/members');
-      setMembers(data.members || []); 
-    } catch (e) {
-      setMessage(e.message);
+      const res = await api('/members');
+      setMembers(res.members || res || []);
+    } catch (err) {
+      console.error('Failed to load members:', err);
+      setMessage('❌ Failed to load members');
+      setTimeout(() => setMessage(''), 3000);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { loadMembers(); }, []);
-
-  // --- ACTIONS ---
-
- const handleAdd = async (e) => {
-  e.preventDefault();
-  try {
-    await api('/members', { method: 'POST', body: formData });
-    setMessage('✅ Member added successfully.');
-    setIsAdding(false);
-    setFormData(emptyForm);
-    loadMembers();
-  } catch (err) {
-    // Show the detailed backend error message
-    setMessage(`❌ ${err.message}`);
-  }
-};
-
-  const startEdit = (member) => {
-    setEditingId(member.id);
-    setFormData({
-      household_name: member.household_name,
-      house_number: member.house_number,
-      phone: member.phone || '',
-      email: member.email || '',
-      monthly_due: member.monthly_due || 10000,
-      opening_balance: member.opening_balance || 0
-    });
-  };
-
-  const handleSaveEdit = async (id) => {
-    try {
-      await api(`/members/${id}`, { method: 'PUT', body: formData });
-      setMessage('✅ Member updated successfully.');
-      setEditingId(null);
-      setFormData(emptyForm);
-      loadMembers();
-    } catch (err) {
-      setMessage(`❌ ${err.message}`);
-    }
-  };
-
   const handleMoveOut = async (id) => {
-    if (!window.confirm('Mark this member as moved out? Their history will be preserved, but they will be marked inactive.')) return;
+    if (!window.confirm('Are you sure you want to mark this member as moved out?')) return;
     try {
-      await api(`/members/${id}`, { method: 'PUT', body: { active: false } });
-      setMessage('✅ Member marked as moved out.');
-      loadMembers();
+      await api(`/members/${id}`, { method: 'PUT', body: { status: 'moved_out' } });
+      setMessage('✅ Member marked as moved out');
+      setTimeout(() => setMessage(''), 3000);
+      await loadMembers();
     } catch (err) {
-      setMessage(`❌ ${err.message}`);
+      setMessage('❌ ' + err.message);
+      setTimeout(() => setMessage(''), 3000);
     }
   };
 
   const handleReactivate = async (id) => {
-    if (!window.confirm('Reactivate this member?')) return;
     try {
-      await api(`/members/${id}`, { method: 'PUT', body: { active: true } });
-      setMessage('✅ Member reactivated.');
-      loadMembers();
+      await api(`/members/${id}`, { method: 'PUT', body: { status: 'active' } });
+      setMessage('✅ Member reactivated');
+      setTimeout(() => setMessage(''), 3000);
+      await loadMembers();
     } catch (err) {
-      setMessage(`❌ ${err.message}`);
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm('⚠️ PERMANENTLY DELETE this member? This cannot be undone and will fail if they have payment history.')) return;
-    try {
-      const res = await api(`/members/${id}`, { method: 'DELETE' });
-      setMessage(`✅ ${res.message}`);
-      loadMembers();
-    } catch (err) {
-      setMessage(`❌ ${err.message}`);
-    }
-  };
-
-  const handleCreateLogin = async (id) => {
-    if (!window.confirm('Create a portal login for this member?')) return;
-    try {
-      const res = await api(`/members/${id}/create-login`, { method: 'POST' });
-      alert(res.message); 
-      setMessage('✅ Login created successfully.');
-      loadMembers(); // Refresh list
-    } catch (err) {
-      setMessage(`❌ ${err.message}`);
-      loadMembers(); // ✅ CRITICAL: Refresh list even on error so the button changes to "Reset Pwd"
+      setMessage('❌ ' + err.message);
+      setTimeout(() => setMessage(''), 3000);
     }
   };
 
   const handleResetPassword = async (id) => {
     if (!window.confirm('Reset password for this member?')) return;
     try {
-      const res = await api(`/members/${id}/reset-password`, { method: 'POST' });
-      
-      // DEBUG: Log exactly what the server sent back
-      console.log(' Raw Backend Response:', res);
-      
-      // Show message, or error, or 'undefined' if the server sent nothing
-      const msg = res.message || res.error || 'No message received from server';
-      alert(msg);
-      
-      if (res.message) {
-        setMessage('✅ Password reset successfully.');
-      }
-      loadMembers();
+      await api(`/members/${id}/reset-password`, { method: 'POST' });
+      setMessage('✅ Password reset email sent');
+      setTimeout(() => setMessage(''), 3000);
     } catch (err) {
-      console.error('Frontend Catch Error:', err);
-      setMessage(`❌ ${err.message}`);
+      setMessage('❌ ' + err.message);
+      setTimeout(() => setMessage(''), 3000);
     }
   };
 
-  // --- UI HELPERS ---
-  const inputStyle = { width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' };
-  const btnPrimary = { padding: '8px 16px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '500', fontSize: '0.875rem' };
-  const btnGhost = { padding: '6px 12px', background: 'transparent', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', color: '#374151' };
+  const handleCreateLogin = async (id) => {
+    try {
+      await api(`/members/${id}/create-login`, { method: 'POST' });
+      setMessage('✅ Login created successfully');
+      setTimeout(() => setMessage(''), 3000);
+      await loadMembers();
+    } catch (err) {
+      setMessage('❌ ' + err.message);
+      setTimeout(() => setMessage(''), 3000);
+    }
+  };
+
+  const getMemberColor = (index) => MEMBER_COLORS[index % MEMBER_COLORS.length];
+
+  if (loading) return <div style={{ padding: '40px' }}><Skeleton height="40px" width="300px" /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginTop: '24px' }}>{[1,2,3,4,5,6].map(i => <Skeleton key={i} height="120px" width="100%" />)}</div></div>;
+
+  const activeCount = members.filter(m => m.status === 'active').length;
+  const movedOutCount = members.filter(m => m.status === 'moved_out').length;
+  const totalOutstanding = members.reduce((sum, m) => sum + (parseFloat(m.outstanding) || 0), 0);
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px 0' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: '#1f2937' }}>Members Directory</h1>
-        {isStaff && !isAdding && (
-          <button onClick={() => { setIsAdding(true); setFormData(emptyForm); }} style={btnPrimary}>+ Add New Member</button>
-        )}
+    <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 24px' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h1 style={{ margin: '0 0 8px 0', fontSize: '2rem', fontWeight: '700', color: '#111827', letterSpacing: '-0.02em' }}>
+            Members Directory
+          </h1>
+          <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>
+            Manage estate residents and their accounts
+          </p>
+        </div>
+        <button
+          onClick={() => setShowAddForm(!showAddForm)}
+          style={{
+            padding: '12px 24px',
+            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '10px',
+            fontWeight: '600',
+            fontSize: '0.95rem',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+          onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+        >
+          {showAddForm ? '✕ Cancel' : '+ Add New Member'}
+        </button>
       </div>
 
+      {/* Message Banner */}
       {message && (
         <div style={{
-          padding: '12px 16px', background: message.includes('✅') ? '#f0fdf4' : '#fef2f2',
-          color: message.includes('✅') ? '#166534' : '#991b1b', borderRadius: '6px', marginBottom: '20px',
-          fontSize: '0.875rem', border: `1px solid ${message.includes('✅') ? '#bbf7d0' : '#fecaca'}`
-        }}>{message}</div>
+          background: message.includes('✅') ? '#ecfdf5' : '#fff1f2',
+          border: `1px solid ${message.includes('✅') ? '#a7f3d0' : '#fecdd3'}`,
+          borderLeft: `4px solid ${message.includes('✅') ? '#22c55e' : '#ef4444'}`,
+          borderRadius: '12px',
+          padding: '16px 24px',
+          marginBottom: '24px',
+          fontSize: '0.95rem',
+          fontWeight: '500',
+          color: '#111827'
+        }}>
+          {message}
+        </div>
       )}
 
-      {/* ADD FORM */}
-      {isAdding && (
-        <form onSubmit={handleAdd} style={{ background: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '20px' }}>
-          <h3 style={{ margin: '0 0 16px 0', fontSize: '1rem' }}>Add New Member</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '16px' }}>
-            <input required placeholder="Household Name" value={formData.household_name} onChange={e => setFormData({...formData, household_name: e.target.value})} style={inputStyle} />
-            <input required placeholder="House Number" value={formData.house_number} onChange={e => setFormData({...formData, house_number: e.target.value})} style={inputStyle} />
-            <input placeholder="Phone" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} style={inputStyle} />
-            <input type="email" placeholder="Email (for portal login)" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} style={inputStyle} />
-            <input type="number" placeholder="Monthly Due" value={formData.monthly_due} onChange={e => setFormData({...formData, monthly_due: Number(e.target.value)})} style={inputStyle} />
-            <input type="number" placeholder="Previous Arrears (₦)" value={formData.opening_balance} onChange={e => setFormData({...formData, opening_balance: Number(e.target.value)})} style={inputStyle} />
-          </div>
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-            <button type="button" onClick={() => setIsAdding(false)} style={btnGhost}>Cancel</button>
-            <button type="submit" style={btnPrimary}>Save Member</button>
-          </div>
-        </form>
-      )}
+      {/* Stats Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+        <div style={{
+          background: '#fff',
+          borderRadius: '14px',
+          padding: '20px',
+          border: '1px solid #e5e7eb',
+          borderLeft: '4px solid #6366f1',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px', fontWeight: '500' }}>Total Members</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#111827' }}>{members.length}</div>
+        </div>
+        <div style={{
+          background: '#fff',
+          borderRadius: '14px',
+          padding: '20px',
+          border: '1px solid #e5e7eb',
+          borderLeft: '4px solid #22c55e',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px', fontWeight: '500' }}>Active Residents</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#059669' }}>{activeCount}</div>
+        </div>
+        <div style={{
+          background: '#fff',
+          borderRadius: '14px',
+          padding: '20px',
+          border: '1px solid #e5e7eb',
+          borderLeft: '4px solid #f59e0b',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px', fontWeight: '500' }}>Moved Out</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#d97706' }}>{movedOutCount}</div>
+        </div>
+        <div style={{
+          background: '#fff',
+          borderRadius: '14px',
+          padding: '20px',
+          border: '1px solid #e5e7eb',
+          borderLeft: '4px solid #ef4444',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+        }}>
+          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px', fontWeight: '500' }}>Total Outstanding</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#e11d48' }}>₦{totalOutstanding.toLocaleString()}</div>
+        </div>
+      </div>
 
-      {/* TABLE */}
-      <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-        {loading ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>Loading members...</div>
+      {/* Members Table */}
+      <div style={{
+        background: '#fff',
+        borderRadius: '16px',
+        border: '1px solid #e5e7eb',
+        borderLeft: '4px solid #6366f1',
+        overflow: 'hidden',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+      }}>
+        <div style={{ padding: '24px 28px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #f9fafb, #ffffff)' }}>
+          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>
+             All Members
+          </h3>
+        </div>
+
+        {members.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px', color: '#9ca3af' }}>
+            <div style={{ fontSize: '4rem', marginBottom: '16px' }}>👥</div>
+            <p style={{ fontSize: '1.1rem', fontWeight: '600', color: '#6b7280' }}>No members yet</p>
+            <p style={{ fontSize: '0.95rem' }}>Add your first member above to get started</p>
+          </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead style={{ background: '#f9fafb' }}>
-                <tr>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>House No.</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Household</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Phone</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Email</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Linked User</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Outstanding</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Status</th>
-                  {isStaff && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>}
+              <thead>
+                <tr style={{ background: '#f9fafb' }}>
+                  <th style={{ padding: '16px 20px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>House No.</th>
+                  <th style={{ padding: '16px 20px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Household</th>
+                  <th style={{ padding: '16px 20px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Phone</th>
+                  <th style={{ padding: '16px 20px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Email</th>
+                  <th style={{ padding: '16px 20px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Linked User</th>
+                  <th style={{ padding: '16px 20px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Outstanding</th>
+                  <th style={{ padding: '16px 20px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Status</th>
+                  <th style={{ padding: '16px 20px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {members.map((member, idx) => (
-                  <tr key={member.id} style={{ 
-                    borderBottom: idx !== members.length - 1 ? '1px solid #f3f4f6' : 'none',
-                    opacity: member.active === false ? 0.6 : 1,
-                    background: member.active === false ? '#fafafa' : 'transparent'
-                  }}>
-                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', fontWeight: '600', color: '#1f2937' }}>
-                      {editingId === member.id ? (
-                        <input value={formData.house_number} onChange={e => setFormData({...formData, house_number: e.target.value})} style={{...inputStyle, width: '80px'}} />
-                      ) : member.house_number}
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#4b5563' }}>
-                      {editingId === member.id ? (
-                        <input value={formData.household_name} onChange={e => setFormData({...formData, household_name: e.target.value})} style={inputStyle} />
-                      ) : member.household_name}
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#4b5563' }}>
-                      {editingId === member.id ? (
-                        <input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} style={inputStyle} />
-                      ) : member.phone || '—'}
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#4b5563' }}>
-                      {editingId === member.id ? (
-                        <input value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} style={inputStyle} />
-                      ) : member.email || '—'}
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#4b5563' }}>
-                      {member.user_name ? (
-                        <span style={{ color: '#166534', fontWeight: '500' }}>{member.user_email}</span>
-                      ) : (
-                        <span style={{ color: '#9ca3af' }}>—</span>
-                      )}
-                    </td>
-                    
-                    {/* FIXED: Added visible labels above the edit inputs */}
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', fontWeight: '600', color: (member.outstanding_balance || 0) > 0 ? '#ef4444' : '#10b981' }}>
-                      {editingId === member.id ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
-                          <div>
-                            <div style={{ fontSize: '0.65rem', color: '#6b7280', textAlign: 'right', marginBottom: '2px' }}>Monthly Due (₦)</div>
-                            <input type="number" value={formData.monthly_due} onChange={e => setFormData({...formData, monthly_due: Number(e.target.value)})} style={{...inputStyle, width: '110px', textAlign: 'right'}} />
+                {members.map((member, idx) => {
+                  const color = getMemberColor(idx);
+                  const outstanding = parseFloat(member.outstanding) || 0;
+                  const isLinked = member.linked_user || member.user_email;
+                  
+                  return (
+                    <tr
+                      key={member.id}
+                      style={{
+                        borderLeft: `4px solid ${color.border}`,
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = color.bg + '40';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      <td style={{ padding: '16px 20px', fontSize: '0.95rem', fontWeight: '700', color: '#111827', borderBottom: '1px solid #f3f4f6' }}>
+                        {member.house_number}
+                      </td>
+                      <td style={{ padding: '16px 20px', borderBottom: '1px solid #f3f4f6' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '10px',
+                            background: color.gradient,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '1rem',
+                            color: 'white',
+                            fontWeight: '700',
+                            boxShadow: `0 2px 6px ${color.border}30`
+                          }}>
+                            {member.household_name?.charAt(0) || 'M'}
                           </div>
-                          <div>
-                            <div style={{ fontSize: '0.65rem', color: '#6b7280', textAlign: 'right', marginBottom: '2px' }}>Prev. Year Arrears (₦)</div>
-                            <input type="number" value={formData.opening_balance} onChange={e => setFormData({...formData, opening_balance: Number(e.target.value)})} style={{...inputStyle, width: '110px', textAlign: 'right'}} />
-                          </div>
+                          <span style={{ fontSize: '0.95rem', fontWeight: '600', color: '#111827' }}>
+                            {member.household_name}
+                          </span>
                         </div>
-                      ) : naira(member.outstanding_balance || 0)}
-                    </td>
-
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{
-                        display: 'inline-block', padding: '4px 8px', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: '500',
-                        background: member.active === false ? '#fee2e2' : '#dcfce7',
-                        color: member.active === false ? '#991b1b' : '#166534'
-                      }}>
-                        {member.active === false ? 'Moved Out' : 'Active'}
-                      </span>
-                    </td>
-                    {isStaff && (
-                      <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        {editingId === member.id ? (
-                          <>
-                            <button onClick={() => handleSaveEdit(member.id)} style={{...btnPrimary, marginRight: '8px', padding: '6px 12px', fontSize: '0.75rem'}}>Save</button>
-                            <button onClick={() => { setEditingId(null); setFormData(emptyForm); }} style={btnGhost}>Cancel</button>
-                          </>
+                      </td>
+                      <td style={{ padding: '16px 20px', fontSize: '0.9rem', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>
+                        {member.phone}
+                      </td>
+                      <td style={{ padding: '16px 20px', fontSize: '0.9rem', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>
+                        {member.email}
+                      </td>
+                      <td style={{ padding: '16px 20px', borderBottom: '1px solid #f3f4f6' }}>
+                        {isLinked ? (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '4px 12px',
+                            background: '#eef2ff',
+                            color: '#4f46e5',
+                            borderRadius: '8px',
+                            fontSize: '0.85rem',
+                            fontWeight: '600'
+                          }}>
+                            🔗 {isLinked}
+                          </span>
                         ) : (
-                          <>
-                            <button onClick={() => startEdit(member)} style={{...btnGhost, marginRight: '8px'}}>Edit</button>
-                            
-                            {member.active !== false ? (
-                              <button onClick={() => handleMoveOut(member.id)} style={{...btnGhost, marginRight: '8px', color: '#991b1b', borderColor: '#fecaca', background: '#fef2f2'}}>Move Out</button>
-                            ) : (
-                              <button onClick={() => handleReactivate(member.id)} style={{...btnGhost, marginRight: '8px', color: '#166534', borderColor: '#bbf7d0', background: '#f0fdf4'}}>Reactivate</button>
-                            )}
-
-                            {member.user_email ? (
-                              <button onClick={() => handleResetPassword(member.id)} style={{...btnGhost, marginRight: '8px', color: '#7c3aed', borderColor: '#ddd6fe', background: '#f5f3ff'}}>Reset Pwd</button>
-                            ) : (
-                              <button onClick={() => handleCreateLogin(member.id)} style={{...btnGhost, marginRight: '8px', color: '#1d4ed8', borderColor: '#bfdbfe', background: '#eff6ff'}}>Create Login</button>
-                            )}
-
-                            <button onClick={() => handleDelete(member.id)} style={{...btnGhost, color: '#dc2626', borderColor: '#fecaca', background: '#fef2f2'}}>Remove</button>
-                          </>
+                          <span style={{ color: '#9ca3af', fontSize: '0.9rem' }}>—</span>
                         )}
                       </td>
-                    )}
-                  </tr>
-                ))}
+                      <td style={{ padding: '16px 20px', textAlign: 'right', borderBottom: '1px solid #f3f4f6' }}>
+                        <span style={{
+                          fontSize: '0.95rem',
+                          fontWeight: '700',
+                          color: outstanding > 0 ? '#e11d48' : outstanding < 0 ? '#059669' : '#6b7280',
+                          fontVariantNumeric: 'tabular-nums'
+                        }}>
+                          {outstanding > 0 ? '₦' : outstanding < 0 ? '-₦' : '₦'}{Math.abs(outstanding).toLocaleString()}
+                        </span>
+                      </td>
+                      <td style={{ padding: '16px 20px', textAlign: 'center', borderBottom: '1px solid #f3f4f6' }}>
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '6px 14px',
+                          background: member.status === 'active' ? '#dcfce7' : '#fef3c7',
+                          color: member.status === 'active' ? '#166534' : '#92400e',
+                          borderRadius: '20px',
+                          fontSize: '0.8rem',
+                          fontWeight: '600'
+                        }}>
+                          {member.status === 'active' ? '✓ Active' : '📦 Moved Out'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '16px 20px', borderBottom: '1px solid #f3f4f6' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                          <button
+                            onClick={() => setEditingMember(member)}
+                            style={{
+                              padding: '6px 12px',
+                              background: '#fff',
+                              color: color.text,
+                              border: `2px solid ${color.border}`,
+                              borderRadius: '6px',
+                              fontWeight: '600',
+                              fontSize: '0.8rem',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = color.bg}
+                            onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
+                          >
+                            ✏️ Edit
+                          </button>
+                          {member.status === 'active' ? (
+                            <button
+                              onClick={() => handleMoveOut(member.id)}
+                              style={{
+                                padding: '6px 12px',
+                                background: '#fff',
+                                color: '#dc2626',
+                                border: '2px solid #fecaca',
+                                borderRadius: '6px',
+                                fontWeight: '600',
+                                fontSize: '0.8rem',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#fef2f2'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
+                            >
+                               Move Out
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleReactivate(member.id)}
+                              style={{
+                                padding: '6px 12px',
+                                background: '#dcfce7',
+                                color: '#166534',
+                                border: '2px solid #86efac',
+                                borderRadius: '6px',
+                                fontWeight: '600',
+                                fontSize: '0.8rem',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#bbf7d0'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#dcfce7'}
+                            >
+                              ✅ Reactivate
+                            </button>
+                          )}
+                          {isLinked ? (
+                            <button
+                              onClick={() => handleResetPassword(member.id)}
+                              style={{
+                                padding: '6px 12px',
+                                background: '#fff',
+                                color: '#7c3aed',
+                                border: '2px solid #ddd6fe',
+                                borderRadius: '6px',
+                                fontWeight: '600',
+                                fontSize: '0.8rem',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#f5f3ff'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
+                            >
+                              🔑 Reset Pwd
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleCreateLogin(member.id)}
+                              style={{
+                                padding: '6px 12px',
+                                background: '#ecfdf5',
+                                color: '#059669',
+                                border: '2px solid #a7f3d0',
+                                borderRadius: '6px',
+                                fontWeight: '600',
+                                fontSize: '0.8rem',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#d1fae5'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#ecfdf5'}
+                            >
+                              👤 Create Login
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
