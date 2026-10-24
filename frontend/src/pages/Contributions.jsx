@@ -16,7 +16,7 @@ const TAB_TO_TYPE = {
   'Monthly': 'monthly',
   'Float': 'float',
   'Projects': 'projects',
-  'End of Year': 'end_of_year',
+  'End of Year': 'endofyear',
   'Welfare': 'welfare'
 };
 
