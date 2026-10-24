@@ -25,6 +25,7 @@ function KPICard({ title, value, subtitle, color, icon }) {
       borderRadius: '16px',
       padding: '24px',
       border: '1px solid #e5e7eb',
+      borderLeft: `4px solid ${c.text}`,
       boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
       position: 'relative',
       overflow: 'hidden'
