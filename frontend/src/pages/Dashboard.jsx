@@ -275,33 +275,144 @@ export default function Dashboard() {
           )}
         </ChartPanel>
 
-        {/* Daily Expenses */}
+                {/* Daily Expenses - ENHANCED */}
         <ChartPanel title="Daily Expenses" subtitle="Last 14 days">
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={daily || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={daily || []} margin={{ top: 20, right: 20, left: 0, bottom: 40 }}>
+              <defs>
+                <linearGradient id="dailyGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#06b6d4" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#3b82f6" stopOpacity={1} />
+                </linearGradient>
+                <filter id="dailyShadow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#06b6d4" floodOpacity="0.3"/>
+                </filter>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-              <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="total" fill="#6366f1" radius={[6, 6, 0, 0]} />
+              <XAxis 
+                dataKey="day" 
+                tick={{ fontSize: 11, fill: '#6b7280', fontWeight: '600' }} 
+                axisLine={false} 
+                tickLine={false}
+                angle={-45}
+                textAnchor="end"
+                height={50}
+              />
+              <YAxis 
+                tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: '600' }} 
+                axisLine={false} 
+                tickLine={false} 
+                tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} 
+              />
+              <Tooltip 
+                content={<CustomTooltip />}
+                cursor={{ fill: 'rgba(6, 182, 212, 0.1)', radius: 8 }}
+              />
+              <Bar 
+                dataKey="total" 
+                fill="url(#dailyGradient)"
+                radius={[10, 10, 4, 4]}
+                maxBarSize={60}
+                animationDuration={1200}
+                animationEasing="ease-out"
+              >
+                {
+                  (daily || []).map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill="url(#dailyGradient)"
+                      filter="url(#dailyShadow)"
+                    />
+                  ))
+                }
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ChartPanel>
 
-        {/* Weekly Expenses */}
+        {/* Weekly Expenses - ENHANCED */}
         <ChartPanel title="Weekly Expenses" subtitle="Last 8 weeks">
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={weekly || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={weekly || []} margin={{ top: 20, right: 20, left: 0, bottom: 40 }}>
+              <defs>
+                <linearGradient id="weeklyGrad0" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#22c55e" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity={0.9} />
+                </linearGradient>
+                <linearGradient id="weeklyGrad1" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#14b8a6" stopOpacity={0.9} />
+                </linearGradient>
+                <linearGradient id="weeklyGrad2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#14b8a6" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.9} />
+                </linearGradient>
+                <linearGradient id="weeklyGrad3" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#06b6d4" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.9} />
+                </linearGradient>
+                <linearGradient id="weeklyGrad4" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#6366f1" stopOpacity={0.9} />
+                </linearGradient>
+                <linearGradient id="weeklyGrad5" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.9} />
+                </linearGradient>
+                <linearGradient id="weeklyGrad6" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#a855f7" stopOpacity={0.9} />
+                </linearGradient>
+                <linearGradient id="weeklyGrad7" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#a855f7" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#d946ef" stopOpacity={0.9} />
+                </linearGradient>
+                <filter id="weeklyShadow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#22c55e" floodOpacity="0.3"/>
+                </filter>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-              <XAxis dataKey="week" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `${v}`} />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="total" fill="#22c55e" radius={[6, 6, 0, 0]} />
+              <XAxis 
+                dataKey="week" 
+                tick={{ fontSize: 11, fill: '#6b7280', fontWeight: '600' }} 
+                axisLine={false} 
+                tickLine={false}
+                angle={-45}
+                textAnchor="end"
+                height={50}
+              />
+              <YAxis 
+                tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: '600' }} 
+                axisLine={false} 
+                tickLine={false} 
+                tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `${v}`} 
+              />
+              <Tooltip 
+                content={<CustomTooltip />}
+                cursor={{ fill: 'rgba(34, 197, 94, 0.1)', radius: 8 }}
+              />
+              <Bar 
+                dataKey="total" 
+                radius={[12, 12, 6, 6]}
+                maxBarSize={70}
+                animationDuration={1500}
+                animationEasing="ease-out"
+              >
+                {
+                  (weekly || []).map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={`url(#weeklyGrad${index % 8})`}
+                      filter="url(#weeklyShadow)"
+                    />
+                  ))
+                }
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ChartPanel>
 
-        {/* Payment History (Last 6 Months) - ENHANCED */}
+               {/* Payment History (Last 6 Months) - ENHANCED */}
         <ChartPanel title="Payment History (Last 6 Months)">
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={trend || []} margin={{ top: 20, right: 30, left: 0, bottom: 60 }}>
