@@ -134,11 +134,13 @@ router.get('/monthly-breakdown', async (req, res) => {
       return res.status(400).json({ error: 'startDate and endDate are required' });
     }
 
+    // Try different column names for the date field
     const expenseBreakdown = await query(`
       SELECT c.name, COALESCE(SUM(e.amount), 0) AS total
       FROM expenses e
       LEFT JOIN categories c ON e.category_id = c.id
-      WHERE e.date >= $1::date AND e.date <= $2::date
+      WHERE COALESCE(e.expense_date, e.date, e.created_at) >= $1::date 
+        AND COALESCE(e.expense_date, e.date, e.created_at) <= $2::date
       GROUP BY c.name
       ORDER BY total DESC
     `, [startDate, endDate]);
