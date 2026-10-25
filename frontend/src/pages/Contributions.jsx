@@ -18,8 +18,6 @@ const TAB_TO_TYPE = {
   'Projects': 'projects',
   'End of Year': 'end-of-year',
   'Welfare': 'welfare',
-  'Christmas': 'christmas',
-  'Arrears': 'arrears'
 };
 
 const OCCASIONAL_TYPES = ['float', 'projects', 'end-of-year', 'welfare', 'christmas', 'arrears'];
