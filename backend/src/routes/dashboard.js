@@ -44,17 +44,19 @@ router.get('/', async (req, res) => {
     const occasionalDue = parseFloat(occasionalRes.rows[0].total_due) || 0;
     const occasionalPaid = parseFloat(occasionalRes.rows[0].total_paid) || 0;
 
-    // 4. Total expenses for current month
+    // 4. Total expenses for current month - Try different column names
     let totalExpenses = 0;
     try {
+      // Try expense_date first, then date, then created_at
       const expRes = await query(`
         SELECT COALESCE(SUM(amount), 0) AS total 
         FROM expenses 
-        WHERE EXTRACT(YEAR FROM expense_date) = $1 
-        AND EXTRACT(MONTH FROM expense_date) = $2
+        WHERE EXTRACT(YEAR FROM COALESCE(expense_date, date, created_at)) = $1 
+        AND EXTRACT(MONTH FROM COALESCE(expense_date, date, created_at)) = $2
       `, [currentYear, currentMonth]);
       totalExpenses = parseFloat(expRes.rows[0].total) || 0;
     } catch (e) {
+      console.error('Expense query error:', e.message);
       totalExpenses = 0;
     }
 
@@ -95,7 +97,7 @@ router.get('/', async (req, res) => {
           short_month: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][r.period_month - 1],
           monthly: 0,
           occasional: 0,
-          expense: 0 // You can join expenses here if needed, defaulting to 0 for simplicity or fetch separately
+          expense: 0
         };
       }
       if (r.type === 'monthly') {
@@ -105,22 +107,26 @@ router.get('/', async (req, res) => {
       }
     });
 
-    // Fetch expenses for trend
-    const expenseTrendRes = await query(`
-      SELECT 
-        TO_CHAR(expense_date, 'YYYY-MM') as month,
-        COALESCE(SUM(amount), 0) as total
-      FROM expenses
-      WHERE (EXTRACT(YEAR FROM expense_date) = $1 AND EXTRACT(MONTH FROM expense_date) >= $2)
-         OR EXTRACT(YEAR FROM expense_date) < $1
-      GROUP BY TO_CHAR(expense_date, 'YYYY-MM')
-    `, [currentYear, currentMonth]);
+    // Fetch expenses for trend - Try different column names
+    try {
+      const expenseTrendRes = await query(`
+        SELECT 
+          TO_CHAR(COALESCE(expense_date, date, created_at), 'YYYY-MM') as month,
+          COALESCE(SUM(amount), 0) as total
+        FROM expenses
+        WHERE (EXTRACT(YEAR FROM COALESCE(expense_date, date, created_at)) = $1 AND EXTRACT(MONTH FROM COALESCE(expense_date, date, created_at)) >= $2)
+           OR EXTRACT(YEAR FROM COALESCE(expense_date, date, created_at)) < $1
+        GROUP BY TO_CHAR(COALESCE(expense_date, date, created_at), 'YYYY-MM')
+      `, [currentYear, currentMonth]);
 
-    expenseTrendRes.rows.forEach(r => {
-      if (trendMap[r.month]) {
-        trendMap[r.month].expense = parseFloat(r.total) || 0;
-      }
-    });
+      expenseTrendRes.rows.forEach(r => {
+        if (trendMap[r.month]) {
+          trendMap[r.month].expense = parseFloat(r.total) || 0;
+        }
+      });
+    } catch (e) {
+      console.error('Expense trend query error:', e.message);
+    }
 
     const trend = Object.values(trendMap)
       .sort((a, b) => a.month.localeCompare(b.month))
@@ -131,22 +137,46 @@ router.get('/', async (req, res) => {
         net: (t.monthly + t.occasional) - t.expense
       }));
 
-    // 8. Daily & Weekly expenses (unchanged)
+    // 8. Daily & Weekly expenses - Try different column names
     let daily = [], weekly = [];
     try {
-      const dailyRes = await query(`SELECT TO_CHAR(expense_date, 'YYYY-MM-DD') as day, COALESCE(SUM(amount), 0) as total FROM expenses WHERE expense_date >= CURRENT_DATE - INTERVAL '14 days' GROUP BY expense_date ORDER BY expense_date`);
+      const dailyRes = await query(`
+        SELECT TO_CHAR(COALESCE(expense_date, date, created_at), 'YYYY-MM-DD') as day, COALESCE(SUM(amount), 0) as total 
+        FROM expenses 
+        WHERE COALESCE(expense_date, date, created_at) >= CURRENT_DATE - INTERVAL '14 days' 
+        GROUP BY COALESCE(expense_date, date, created_at) 
+        ORDER BY COALESCE(expense_date, date, created_at)
+      `);
       daily = dailyRes.rows.map(r => ({ day: r.day, total: parseFloat(r.total) || 0 }));
       
-      const weeklyRes = await query(`SELECT DATE_TRUNC('week', expense_date)::date as week, COALESCE(SUM(amount), 0) as total FROM expenses WHERE expense_date >= CURRENT_DATE - INTERVAL '8 weeks' GROUP BY DATE_TRUNC('week', expense_date) ORDER BY DATE_TRUNC('week', expense_date)`);
+      const weeklyRes = await query(`
+        SELECT DATE_TRUNC('week', COALESCE(expense_date, date, created_at))::date as week, COALESCE(SUM(amount), 0) as total 
+        FROM expenses 
+        WHERE COALESCE(expense_date, date, created_at) >= CURRENT_DATE - INTERVAL '8 weeks' 
+        GROUP BY DATE_TRUNC('week', COALESCE(expense_date, date, created_at)) 
+        ORDER BY DATE_TRUNC('week', COALESCE(expense_date, date, created_at))
+      `);
       weekly = weeklyRes.rows.map(r => ({ week: r.week, total: parseFloat(r.total) || 0 }));
-    } catch (e) {}
+    } catch (e) {
+      console.error('Daily/Weekly expense query error:', e.message);
+    }
 
     // 9. Spending by Category
     let categories = [];
     try {
-      const catRes = await query(`SELECT c.name, COALESCE(SUM(e.amount), 0) AS total FROM expenses e LEFT JOIN categories c ON e.category_id = c.id WHERE EXTRACT(YEAR FROM e.expense_date) = $1 AND EXTRACT(MONTH FROM e.expense_date) = $2 GROUP BY c.name ORDER BY total DESC`, [currentYear, currentMonth]);
+      const catRes = await query(`
+        SELECT c.name, COALESCE(SUM(e.amount), 0) AS total 
+        FROM expenses e 
+        LEFT JOIN categories c ON e.category_id = c.id 
+        WHERE EXTRACT(YEAR FROM COALESCE(e.expense_date, e.date, e.created_at)) = $1 
+        AND EXTRACT(MONTH FROM COALESCE(e.expense_date, e.date, e.created_at)) = $2 
+        GROUP BY c.name 
+        ORDER BY total DESC
+      `, [currentYear, currentMonth]);
       categories = catRes.rows.map(r => ({ name: r.name || 'Uncategorized', total: parseFloat(r.total) || 0 }));
-    } catch (e) {}
+    } catch (e) {
+      console.error('Category query error:', e.message);
+    }
 
     res.json({
       kpis: {
