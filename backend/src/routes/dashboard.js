@@ -48,7 +48,7 @@ router.get('/', async (req, res) => {
     const owingRes = await query(`SELECT COUNT(DISTINCT member_id) AS count FROM contributions WHERE period_year = $1 AND period_month = $2 AND type = 'monthly' AND amount_due > amount_paid`, [currentYear, currentMonth]);
     const householdsOwing = parseInt(owingRes.rows[0].count) || 0;
 
-    // 7. Trend - SEPARATE monthly and occasional
+    // 7. Trend - Add monthly/occasional split but keep income/expense for charts
     const trendRes = await query(`
       SELECT period_year, period_month, type, COALESCE(SUM(amount_paid), 0) AS contributions
       FROM contributions

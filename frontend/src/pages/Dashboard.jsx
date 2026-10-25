@@ -83,7 +83,7 @@ export default function Dashboard() {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [monthBreakdown, setMonthBreakdown] = useState(null);
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
-  const [activeView, setActiveView] = useState('monthly');
+  const [activeView, setActiveView] = useState('monthly'); // CHANGE 1: Added tab state
 
   useEffect(() => {
     api('/dashboard').then(setData).catch((e) => setError(e.message));
@@ -128,7 +128,7 @@ export default function Dashboard() {
   const { kpis, daily, weekly, categories, trend } = data;
   const isMember = user?.role === 'member';
   
-  // Dynamic KPI based on active tab
+  // CHANGE 2: Dynamic KPI based on active tab
   const currentKpi = activeView === 'monthly' 
     ? { collected: kpis.month_in, due: kpis.month_due, title: 'Collected This Month' }
     : { collected: kpis.occasional_in, due: kpis.occasional_due, title: 'Occasional Collected' };
@@ -175,7 +175,7 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* Tabs */}
+      {/* CHANGE 3: Added tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #e5e7eb', paddingBottom: '2px' }}>
         <button 
           onClick={() => setActiveView('monthly')}
@@ -245,7 +245,7 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Charts Grid - YOUR ORIGINAL CHARTS UNCHANGED */}
+      {/* Charts Grid - YOUR EXACT ORIGINAL CHARTS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '24px', marginBottom: '32px' }}>
         {/* Cash Flow Trend */}
         <ChartPanel title="Cash Flow Trend" subtitle="Last 6 months performance">
@@ -522,7 +522,7 @@ export default function Dashboard() {
         </ChartPanel>
       </div>
 
-      {/* Monthly Summary Table - UPDATED with Monthly/Occasional columns */}
+      {/* Monthly Summary Table - YOUR EXACT STRUCTURE with added Monthly/Occasional columns */}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
         <div style={{ padding: '24px 28px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #f9fafb, #ffffff)' }}>
           <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>
@@ -539,7 +539,7 @@ export default function Dashboard() {
                   <th style={{ padding: '16px 28px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Month</th>
                   <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Monthly</th>
                   <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Occasional</th>
-                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#e11d48', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Expenses</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#e11d48', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Total Expenses</th>
                   <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Net Flow</th>
                 </tr>
               </thead>
