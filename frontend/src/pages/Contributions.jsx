@@ -17,10 +17,10 @@ const TAB_TO_TYPE = {
   'Float': 'float',
   'Projects': 'projects',
   'End of Year': 'end-of-year',
-  'Welfare': 'welfare',
+  'Welfare': 'welfare'
 };
 
-const OCCASIONAL_TYPES = ['float', 'projects', 'end-of-year', 'welfare', 'christmas', 'arrears'];
+const OCCASIONAL_TYPES = ['float', 'projects', 'end-of-year', 'welfare'];
 
 export default function Contributions() {
   const { user } = useAuth();
@@ -34,7 +34,6 @@ export default function Contributions() {
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [paymentReference, setPaymentReference] = useState('');
   
-  // Edit modal state
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({ amount: '', reference: '' });
   
@@ -50,6 +49,28 @@ export default function Contributions() {
   useEffect(() => {
     loadContributions();
   }, [activeTab, form.month, form.year]);
+
+  // Load activation period for occasional contributions
+  useEffect(() => {
+    if (!isMonthly) {
+      loadActivationPeriod();
+    }
+  }, [activeTab]);
+
+  const loadActivationPeriod = async () => {
+    try {
+      const res = await api(`/contributions/activation-period?type=${currentType}`);
+      if (res) {
+        setForm({
+          ...form,
+          month: res.period_month.toString(),
+          year: res.period_year.toString()
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load activation period:', err);
+    }
+  };
 
   const loadContributions = async () => {
     setLoading(true);
@@ -84,7 +105,7 @@ export default function Contributions() {
           amount: form.customAmount ? parseFloat(form.customAmount) : undefined
         }
       });
-      setMessage(isMonthly ? '✅ Monthly bills generated successfully' : `✅ ${activeTab} contribution activated for ${form.month} ${form.year}`);
+      setMessage(isMonthly ? '✅ Monthly bills generated' : `✅ ${activeTab} activated for ${form.month}/${form.year}`);
       setTimeout(() => setMessage(''), 3000);
       await loadContributions();
     } catch (err) {
@@ -116,7 +137,7 @@ export default function Contributions() {
         note: editForm.reference.trim() === '' ? null : editForm.reference
       }
     }).then(() => {
-      setMessage('✅ Contribution updated successfully');
+      setMessage('✅ Contribution updated');
       setTimeout(() => setMessage(''), 3000);
       setEditModalOpen(false);
       loadContributions();
@@ -153,7 +174,7 @@ export default function Contributions() {
           reference: paymentReference || undefined
         }
       });
-      setMessage('✅ Payment recorded successfully');
+      setMessage('✅ Payment recorded');
       setTimeout(() => setMessage(''), 3000);
       setShowPaymentModal(false);
       await loadContributions();
@@ -175,17 +196,16 @@ export default function Contributions() {
     return 'pending';
   };
 
-  if (loading) return <div style={{ padding: '40px' }}><Skeleton height="40px" width="300px" /><div style={{ marginTop: '24px' }}>{[1,2,3].map(i => <Skeleton key={i} height="120px" width="100%" style={{ marginBottom: '12px' }} />)}</div></div>;
+  if (loading) return <div style={{ padding: '40px' }}><Skeleton height="40px" width="300px" /></div>;
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 24px' }}>
-      {/* Header */}
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ margin: '0 0 8px 0', fontSize: '2rem', fontWeight: '700', color: '#111827' }}>Contributions</h1>
         <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>
-          {isMonthly ? 'Manage monthly estate contributions' : `Manage ${activeTab.toLowerCase()} contributions (occasional event)`}
+          {isMonthly ? 'Manage monthly estate contributions' : `Manage ${activeTab} contributions (occasional event)`}
         </p>
       </div>
 
@@ -200,7 +220,7 @@ export default function Contributions() {
         ))}
       </div>
 
-      {/* Info Banner for Occasional Types */}
+      {/* Info Banner */}
       {!isMonthly && (
         <div style={{
           background: '#eff6ff',
@@ -217,15 +237,15 @@ export default function Contributions() {
                 Occasional Contribution Type
               </div>
               <div style={{ fontSize: '0.9rem', color: '#3b82f6' }}>
-                {activeTab} contributions are activated only when needed (typically 1-2 times per year). 
-                Select the period below to activate or view existing contributions.
+                {activeTab} contributions are activated only when needed (typically 1-2 times per year).
+                <br />
+                <strong>Note:</strong> Contributions are generated for currently active members. For historical accuracy, activate during the actual period.
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Message */}
       {message && (
         <div style={{ background: message.includes('✅') ? '#ecfdf5' : '#fff1f2', border: `1px solid ${message.includes('✅') ? '#a7f3d0' : '#fecdd3'}`, borderRadius: '8px', padding: '12px', marginBottom: '20px', color: message.includes('✅') ? '#065f46' : '#991b1b' }}>{message}</div>
       )}
@@ -291,19 +311,17 @@ export default function Contributions() {
       <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
         {contributions.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>
-              {isMonthly ? '💰' : '📅'}
-            </div>
+            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>{isMonthly ? '💰' : '📅'}</div>
             <p style={{ fontSize: '1.1rem', fontWeight: '600', color: '#6b7280' }}>
               {isMonthly 
                 ? `No monthly contributions for ${monthNames[parseInt(form.month) - 1]} ${form.year}`
-                : `No ${activeTab} contribution activated for ${form.month} ${form.year}`
+                : `No ${activeTab} contribution activated for ${form.month}/${form.year}`
               }
             </p>
             <p style={{ fontSize: '0.9rem' }}>
               {isMonthly 
                 ? 'Click "Generate Monthly Bills" to create contributions'
-                : `Click "Activate ${activeTab}" to create this occasional contribution for the selected period`
+                : `Click "Activate ${activeTab}" to create this occasional contribution`
               }
             </p>
           </div>
@@ -336,10 +354,10 @@ export default function Contributions() {
                       {c.household_name}
                     </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600' }}>₦{(parseFloat(c.amount_due) || 0).toLocaleString()}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: isPaid ? '#059669' : '#9ca3af' }}>₦{(parseFloat(c.amount_paid) || 0).toLocaleString()}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: isPaid ? '#059669' : '#9ca3af' }}>{(parseFloat(c.amount_paid) || 0).toLocaleString()}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                       <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '600', background: isPaid ? '#dcfce7' : status === 'partial' ? '#fef3c7' : '#fee2e2', color: isPaid ? '#166534' : status === 'partial' ? '#92400e' : '#991b1b' }}>
-                        {isPaid ? '✓ Paid' : status === 'partial' ? '⚠ Partial' : '⏳ Pending'}
+                        {isPaid ? '✓ Paid' : status === 'partial' ? ' Partial' : '⏳ Pending'}
                       </span>
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: '0.9rem', color: '#4b5563' }}>

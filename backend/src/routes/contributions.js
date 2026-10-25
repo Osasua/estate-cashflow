@@ -13,7 +13,7 @@ const statusOf = (r) => {
   return 'pending';
 };
 
-// GET contributions (now includes payment references or custom note)
+// GET contributions
 router.get('/', async (req, res) => {
   const year = +req.query.year || new Date().getFullYear();
   const month = +req.query.month || new Date().getMonth() + 1;
@@ -39,59 +39,74 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET defaulters list
-router.get('/defaulters', async (req, res) => {
-  const monthsBack = Math.min(+req.query.months || 3, 24);
+// GET occasional contribution activation period
+router.get('/activation-period', async (req, res) => {
+  const type = req.query.type;
+  if (!type) return res.status(400).json({ error: 'Type required' });
+
   try {
     const { rows } = await query(
-      `SELECT m.household_name, m.house_number,
-              COUNT(*)::int AS unpaid_months,
-              SUM(c.amount_due - c.amount_paid) AS total_owed
-         FROM contributions c JOIN members m ON m.id = c.member_id
-        WHERE c.amount_due > c.amount_paid
-          AND m.active = true
-          AND make_date(c.period_year, c.period_month, 1)
-              >= date_trunc('month', CURRENT_DATE) - ($1 || ' months')::interval
-        GROUP BY m.id ORDER BY total_owed DESC`,
-      [monthsBack]
+      `SELECT DISTINCT period_year, period_month 
+         FROM contributions 
+        WHERE type = $1 
+        ORDER BY period_year DESC, period_month DESC 
+        LIMIT 1`,
+      [type]
     );
-    res.json({ defaulters: rows });
+    res.json(rows[0] || null);
   } catch (err) {
-    console.error('GET defaulters error:', err);
+    console.error('GET activation period error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST generate monthly bills
+// POST generate bills (improved for occasional contributions)
 router.post('/generate', staff, async (req, res) => {
   const { month, year, type = 'monthly', amount } = req.body || {};
   if (!(month >= 1 && month <= 12) || !(year >= 2000 && year <= 2100))
     return res.status(400).json({ error: 'Valid month (1-12) and year are required' });
 
   try {
-    const { rowCount } = await query(
+    let rowCount;
+    
+    // For occasional contributions, check if already activated
+    if (type !== 'monthly') {
+      const { rows: existing } = await query(
+        `SELECT COUNT(*) as count FROM contributions WHERE type = $1 AND period_year = $2 AND period_month = $3`,
+        [type, year, month]
+      );
+      
+      if (existing[0].count > 0) {
+        return res.status(409).json({ 
+          error: `${type} contribution already activated for ${month}/${year}. Use Edit to modify amounts.` 
+        });
+      }
+    }
+
+    // Generate for currently active members
+    const { rowCount: generated } = await query(
       `INSERT INTO contributions (member_id, type, period_year, period_month, amount_due)
          SELECT id, $1, $2, $3, CASE WHEN $4 > 0 THEN $4 ELSE monthly_due END FROM members WHERE active = true
        ON CONFLICT (member_id, type, period_year, period_month) DO NOTHING`,
       [type, year, month, Number(amount) || 0]
     );
-    console.log(`✅ Generated ${rowCount} bills for ${type} ${month}/${year}`);
-    res.json({ generated: rowCount });
+    
+    console.log(`✅ Generated ${generated} bills for ${type} ${month}/${year}`);
+    res.json({ generated });
   } catch (err) {
     console.error('❌ Generate bills failed:', err);
     if (err.message.includes('invalid input value for enum')) {
-      return res.status(400).json({ error: `Type '${type}' not allowed. Run fix-contribution-types script.` });
+      return res.status(400).json({ error: `Type '${type}' not allowed.` });
     }
     res.status(500).json({ error: err.message });
   }
 });
 
-// ✅ UPDATED: EDIT a contribution directly (now includes 'note' for Reference)
+// PUT edit contribution
 router.put('/:id', staff, async (req, res) => {
   try {
     const { amount_due, amount_paid, note } = req.body || {};
     
-    // Validate
     const newDue = amount_due !== undefined ? Number(amount_due) : null;
     const newPaid = amount_paid !== undefined ? Number(amount_paid) : null;
     
@@ -119,7 +134,7 @@ router.put('/:id', staff, async (req, res) => {
   }
 });
 
-// POST record payment (HYBRID WATERFALL ALLOCATION)
+// POST record payment
 router.post('/payments', staff, async (req, res) => {
   const { member_id, month, year, type = 'monthly', amount, method = 'cash', reference, note } = req.body || {};
   const amt = Number(amount);
@@ -148,7 +163,7 @@ router.post('/payments', staff, async (req, res) => {
     let remaining = amt;
     const allocations = []; 
 
-    // 1. FIRST: Clear Previous-Year Arrears
+    // 1. Clear Previous-Year Arrears
     const { rows: [arrearsRow] } = await client.query(
       `SELECT id, period_year, period_month, amount_due, amount_paid
          FROM contributions
@@ -164,7 +179,7 @@ router.post('/payments', staff, async (req, res) => {
       }
     }
 
-    // 2. Then allocate to oldest unpaid months of this type
+    // 2. Allocate to oldest unpaid months
     const { rows: existingContribs } = await client.query(
       `SELECT id, period_year, period_month, amount_due, amount_paid
          FROM contributions
@@ -182,7 +197,7 @@ router.post('/payments', staff, async (req, res) => {
       }
     }
 
-    // 3. Then future months (monthly only, up to 24 ahead)
+    // 3. Future months
     if (remaining > 0 && type === 'monthly') {
       let anchorDate = new Date(year, month - 1, 1);
       const today = new Date(); today.setDate(1);
