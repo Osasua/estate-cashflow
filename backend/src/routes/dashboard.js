@@ -153,17 +153,19 @@ router.get('/monthly-breakdown', async (req, res) => {
     `);
 
     const dateColumn = columnRes.rows[0]?.column_name || 'created_at';
-    console.log('Using date column:', dateColumn);
+    console.log('Using date column for breakdown:', dateColumn);
 
-    // Use the actual column name dynamically
+    // Use the actual column name with proper date casting
     const expenseBreakdown = await query(`
       SELECT c.name, COALESCE(SUM(e.amount), 0) AS total
       FROM expenses e
       LEFT JOIN categories c ON e.category_id = c.id
-      WHERE e.${dateColumn} >= $1::date AND e.${dateColumn} <= $2::date
+      WHERE e.${dateColumn}::date >= $1::date AND e.${dateColumn}::date <= $2::date
       GROUP BY c.name
       ORDER BY total DESC
     `, [startDate, endDate]);
+
+    console.log('Breakdown results:', expenseBreakdown.rows);
 
     res.json({
       expense_breakdown: expenseBreakdown.rows.map(r => ({
