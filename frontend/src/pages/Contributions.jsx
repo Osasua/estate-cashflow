@@ -20,8 +20,6 @@ const TAB_TO_TYPE = {
   'Welfare': 'welfare'
 };
 
-const OCCASIONAL_TYPES = ['float', 'projects', 'end-of-year', 'welfare'];
-
 export default function Contributions() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('Monthly');
@@ -35,7 +33,7 @@ export default function Contributions() {
   const [paymentReference, setPaymentReference] = useState('');
   
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ amount: '', reference: '' });
+  const [editForm, setEditForm] = useState({ amount: '', paid: '', reference: '' });
   
   const [form, setForm] = useState({
     month: (new Date().getMonth() + 1).toString(),
@@ -45,12 +43,12 @@ export default function Contributions() {
 
   const isMonthly = activeTab === 'Monthly';
   const currentType = TAB_TO_TYPE[activeTab];
+  const isActivated = contributions.length > 0;
 
   useEffect(() => {
     loadContributions();
   }, [activeTab, form.month, form.year]);
 
-  // Load activation period for occasional contributions
   useEffect(() => {
     if (!isMonthly) {
       loadActivationPeriod();
@@ -61,11 +59,11 @@ export default function Contributions() {
     try {
       const res = await api(`/contributions/activation-period?type=${currentType}`);
       if (res) {
-        setForm({
-          ...form,
+        setForm(prev => ({
+          ...prev,
           month: res.period_month.toString(),
           year: res.period_year.toString()
-        });
+        }));
       }
     } catch (err) {
       console.error('Failed to load activation period:', err);
@@ -95,6 +93,12 @@ export default function Contributions() {
   };
 
   const handleGenerateBills = async () => {
+    if (isActivated && !isMonthly) {
+      setMessage('⚠️ Already activated for this period. Use Edit to modify individual contributions.');
+      setTimeout(() => setMessage(''), 3000);
+      return;
+    }
+    
     try {
       await api('/contributions/generate', {
         method: 'POST',
@@ -117,6 +121,7 @@ export default function Contributions() {
   const handleEdit = (contribution) => {
     setEditForm({
       amount: contribution.amount_due || '',
+      paid: contribution.amount_paid || '',
       reference: contribution.references || ''
     });
     setSelectedContribution(contribution);
@@ -125,7 +130,7 @@ export default function Contributions() {
 
   const handleEditSave = () => {
     if (!editForm.amount || parseFloat(editForm.amount) <= 0) {
-      setMessage('❌ Amount must be greater than 0');
+      setMessage('❌ Amount due must be greater than 0');
       setTimeout(() => setMessage(''), 3000);
       return;
     }
@@ -134,6 +139,7 @@ export default function Contributions() {
       method: 'PUT',
       body: { 
         amount_due: parseFloat(editForm.amount),
+        amount_paid: parseFloat(editForm.paid) || 0,
         note: editForm.reference.trim() === '' ? null : editForm.reference
       }
     }).then(() => {
@@ -209,7 +215,6 @@ export default function Contributions() {
         </p>
       </div>
 
-      {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #e5e7eb' }}>
         {Object.keys(TAB_TO_TYPE).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
@@ -220,7 +225,6 @@ export default function Contributions() {
         ))}
       </div>
 
-      {/* Info Banner */}
       {!isMonthly && (
         <div style={{
           background: '#eff6ff',
@@ -247,15 +251,14 @@ export default function Contributions() {
       )}
 
       {message && (
-        <div style={{ background: message.includes('✅') ? '#ecfdf5' : '#fff1f2', border: `1px solid ${message.includes('✅') ? '#a7f3d0' : '#fecdd3'}`, borderRadius: '8px', padding: '12px', marginBottom: '20px', color: message.includes('✅') ? '#065f46' : '#991b1b' }}>{message}</div>
+        <div style={{ background: message.includes('✅') ? '#ecfdf5' : message.includes('⚠️') ? '#fffbeb' : '#fff1f2', border: `1px solid ${message.includes('✅') ? '#a7f3d0' : message.includes('️') ? '#fde68a' : '#fecdd3'}`, borderRadius: '8px', padding: '12px', marginBottom: '20px', color: message.includes('✅') ? '#065f46' : message.includes('️') ? '#92400e' : '#991b1b' }}>{message}</div>
       )}
 
-      {/* Controls */}
       <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', marginBottom: '24px' }}>
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'end' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px' }}>
-              {isMonthly ? 'Month' : 'Activation Period - Month'}
+              Month
             </label>
             <select value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }}>
               {monthNames.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
@@ -263,7 +266,7 @@ export default function Contributions() {
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px' }}>
-              {isMonthly ? 'Year' : 'Activation Period - Year'}
+              Year
             </label>
             <input type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', width: '80px' }} />
           </div>
@@ -275,31 +278,32 @@ export default function Contributions() {
           )}
           <button 
             onClick={handleGenerateBills} 
+            disabled={isActivated && !isMonthly}
             style={{ 
               padding: '10px 20px', 
-              background: isMonthly ? '#6366f1' : 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)', 
+              background: isActivated && !isMonthly ? '#9ca3af' : (isMonthly ? '#6366f1' : 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)'), 
               color: 'white', 
               border: 'none', 
               borderRadius: '6px', 
               fontWeight: '600', 
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)'
+              cursor: isActivated && !isMonthly ? 'not-allowed' : 'pointer',
+              boxShadow: isActivated && !isMonthly ? 'none' : '0 2px 8px rgba(245, 158, 11, 0.3)',
+              opacity: isActivated && !isMonthly ? 0.6 : 1
             }}
           >
-            {isMonthly ? 'Generate Monthly Bills' : `Activate ${activeTab}`}
+            {isActivated && !isMonthly ? `✓ ${activeTab} Activated` : (isMonthly ? 'Generate Monthly Bills' : `Activate ${activeTab}`)}
           </button>
         </div>
       </div>
 
-      {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
         <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', borderLeft: '4px solid #6366f1' }}>
           <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>Expected</div>
-          <div style={{ fontSize: '1.8rem', fontWeight: '700', color: '#4f46e5' }}>₦{expected.toLocaleString()}</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: '700', color: '#4f46e5' }}>{expected.toLocaleString()}</div>
         </div>
         <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', borderLeft: '4px solid #22c55e' }}>
           <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>Collected</div>
-          <div style={{ fontSize: '1.8rem', fontWeight: '700', color: '#059669' }}>₦{collected.toLocaleString()}</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: '700', color: '#059669' }}>{collected.toLocaleString()}</div>
         </div>
         <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', borderLeft: '4px solid #ef4444' }}>
           <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>Outstanding</div>
@@ -307,7 +311,6 @@ export default function Contributions() {
         </div>
       </div>
 
-      {/* Table */}
       <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
         {contributions.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>
@@ -357,7 +360,7 @@ export default function Contributions() {
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: isPaid ? '#059669' : '#9ca3af' }}>{(parseFloat(c.amount_paid) || 0).toLocaleString()}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                       <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '600', background: isPaid ? '#dcfce7' : status === 'partial' ? '#fef3c7' : '#fee2e2', color: isPaid ? '#166534' : status === 'partial' ? '#92400e' : '#991b1b' }}>
-                        {isPaid ? '✓ Paid' : status === 'partial' ? ' Partial' : '⏳ Pending'}
+                        {isPaid ? '✓ Paid' : status === 'partial' ? '⚠ Partial' : '⏳ Pending'}
                       </span>
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: '0.9rem', color: '#4b5563' }}>
@@ -379,7 +382,6 @@ export default function Contributions() {
         )}
       </div>
 
-      {/* Edit Modal */}
       {editModalOpen && selectedContribution && (
         <div style={{
           position: 'fixed',
@@ -403,7 +405,7 @@ export default function Contributions() {
             boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
           }} onClick={e => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 24px 0', fontSize: '1.5rem', fontWeight: '700', color: '#111827' }}>
-              ✏️ Edit Contribution
+              ️ Edit Contribution
             </h3>
             
             <div style={{ marginBottom: '20px', padding: '16px', background: '#f9fafb', borderRadius: '12px' }}>
@@ -432,9 +434,32 @@ export default function Contributions() {
                   fontSize: '1rem',
                   boxSizing: 'border-box'
                 }}
-                placeholder="Enter amount"
+                placeholder="Enter amount due"
                 autoFocus
               />
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: '600', color: '#374151' }}>
+                Amount Paid (₦)
+              </label>
+              <input
+                type="number"
+                value={editForm.paid}
+                onChange={(e) => setEditForm({...editForm, paid: e.target.value})}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  boxSizing: 'border-box'
+                }}
+                placeholder="Enter amount paid"
+              />
+              <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '6px' }}>
+                Use this to correct overpayments or underpayments
+              </div>
             </div>
 
             <div style={{ marginBottom: '24px' }}>
@@ -494,7 +519,6 @@ export default function Contributions() {
         </div>
       )}
 
-      {/* Payment Modal */}
       {showPaymentModal && selectedContribution && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowPaymentModal(false)}>
           <div style={{ background: 'white', padding: '24px', borderRadius: '12px', width: '400px', maxWidth: '90%' }} onClick={e => e.stopPropagation()}>
