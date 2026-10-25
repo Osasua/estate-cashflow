@@ -5,6 +5,29 @@ const { authenticate } = require('../auth');
 const router = express.Router();
 router.use(authenticate);
 
+// Helper: detect the actual date column in expenses table
+async function getExpenseDateColumn() {
+  try {
+    const res = await query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'expenses' 
+      AND column_name IN ('expense_date', 'date', 'created_at', 'paid_date', 'payment_date', 'transaction_date')
+      ORDER BY CASE column_name 
+        WHEN 'expense_date' THEN 1 
+        WHEN 'date' THEN 2 
+        WHEN 'created_at' THEN 3 
+        WHEN 'paid_date' THEN 4 
+        WHEN 'payment_date' THEN 5 
+        WHEN 'transaction_date' THEN 6 
+      END
+      LIMIT 1
+    `);
+    return res.rows[0]?.column_name || 'created_at';
+  } catch (e) {
+    return 'created_at';
+  }
+}
+
 // Helper: get KPIs for a specific contribution type
 async function getTypeKpis(type, year, month) {
   const res = await query(`
@@ -26,16 +49,17 @@ async function getTypeKpis(type, year, month) {
   };
 }
 
-// Helper: get 6-month trend for a specific contribution type
-async function getTypeTrend(type) {
+// Helper: get 6-month trend for a specific contribution type (up to current month only)
+async function getTypeTrend(type, currentYear, currentMonth) {
   const res = await query(`
     SELECT period_year, period_month, COALESCE(SUM(amount_paid), 0) AS contributions
     FROM contributions
-    WHERE type = $1
+    WHERE type = $1 
+      AND (period_year < $2 OR (period_year = $2 AND period_month <= $3))
     GROUP BY period_year, period_month
     ORDER BY period_year DESC, period_month DESC
     LIMIT 6
-  `, [type]);
+  `, [type, currentYear, currentMonth]);
   
   const trendMap = {};
   res.rows.forEach(r => {
@@ -70,27 +94,28 @@ router.get('/', async (req, res) => {
       kpis[type] = await getTypeKpis(type, currentYear, currentMonth);
     }
 
-    // 3. Total cash balance (all types combined)
+    // 3. Total cash balance
     const totalPaid = Object.values(kpis).reduce((sum, k) => sum + k.paid, 0);
     
     // 4. Expenses for current month
+    const dateCol = await getExpenseDateColumn();
     let totalExpenses = 0;
     try {
-      const expRes = await query(`SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE EXTRACT(YEAR FROM date) = $1 AND EXTRACT(MONTH FROM date) = $2`, [currentYear, currentMonth]);
+      const expRes = await query(`SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE EXTRACT(YEAR FROM ${dateCol}) = $1 AND EXTRACT(MONTH FROM ${dateCol}) = $2`, [currentYear, currentMonth]);
       totalExpenses = parseFloat(expRes.rows[0].total) || 0;
     } catch (e) {}
 
     const cashBalance = openingBalance + totalPaid - totalExpenses;
 
-    // 5. Get trends for each type
+    // 5. Get trends for each type (filtered to current month and earlier)
     const trend = {};
     for (const type of types) {
-      trend[type] = await getTypeTrend(type);
+      trend[type] = await getTypeTrend(type, currentYear, currentMonth);
     }
 
     // 6. Merge expenses into each type's trend
     try {
-      const expTrendRes = await query(`SELECT TO_CHAR(date, 'YYYY-MM') as month, COALESCE(SUM(amount), 0) as total FROM expenses GROUP BY TO_CHAR(date, 'YYYY-MM')`);
+      const expTrendRes = await query(`SELECT TO_CHAR(${dateCol}, 'YYYY-MM') as month, COALESCE(SUM(amount), 0) as total FROM expenses GROUP BY TO_CHAR(${dateCol}, 'YYYY-MM')`);
       const expMap = {};
       expTrendRes.rows.forEach(r => { expMap[r.month] = parseFloat(r.total) || 0; });
       
@@ -105,21 +130,21 @@ router.get('/', async (req, res) => {
     // 7. Daily expenses
     let daily = [];
     try {
-      const dailyRes = await query(`SELECT TO_CHAR(date, 'YYYY-MM-DD') as day, COALESCE(SUM(amount), 0) as total FROM expenses WHERE date >= CURRENT_DATE - INTERVAL '14 days' GROUP BY date ORDER BY date`);
+      const dailyRes = await query(`SELECT TO_CHAR(${dateCol}, 'YYYY-MM-DD') as day, COALESCE(SUM(amount), 0) as total FROM expenses WHERE ${dateCol} >= CURRENT_DATE - INTERVAL '14 days' GROUP BY ${dateCol} ORDER BY ${dateCol}`);
       daily = dailyRes.rows.map(r => ({ day: r.day, total: parseFloat(r.total) || 0 }));
     } catch (e) {}
 
     // 8. Weekly expenses
     let weekly = [];
     try {
-      const weeklyRes = await query(`SELECT DATE_TRUNC('week', date)::date as week, COALESCE(SUM(amount), 0) as total FROM expenses WHERE date >= CURRENT_DATE - INTERVAL '8 weeks' GROUP BY DATE_TRUNC('week', date) ORDER BY DATE_TRUNC('week', date)`);
+      const weeklyRes = await query(`SELECT DATE_TRUNC('week', ${dateCol})::date as week, COALESCE(SUM(amount), 0) as total FROM expenses WHERE ${dateCol} >= CURRENT_DATE - INTERVAL '8 weeks' GROUP BY DATE_TRUNC('week', ${dateCol}) ORDER BY DATE_TRUNC('week', ${dateCol})`);
       weekly = weeklyRes.rows.map(r => ({ week: r.week, total: parseFloat(r.total) || 0 }));
     } catch (e) {}
 
     // 9. Categories
     let categories = [];
     try {
-      const catRes = await query(`SELECT c.name, COALESCE(SUM(e.amount), 0) AS total FROM expenses e LEFT JOIN categories c ON e.category_id = c.id WHERE EXTRACT(YEAR FROM e.date) = $1 AND EXTRACT(MONTH FROM e.date) = $2 GROUP BY c.name ORDER BY total DESC`, [currentYear, currentMonth]);
+      const catRes = await query(`SELECT c.name, COALESCE(SUM(e.amount), 0) AS total FROM expenses e LEFT JOIN categories c ON e.category_id = c.id WHERE EXTRACT(YEAR FROM e.${dateCol}) = $1 AND EXTRACT(MONTH FROM e.${dateCol}) = $2 GROUP BY c.name ORDER BY total DESC`, [currentYear, currentMonth]);
       categories = catRes.rows.map(r => ({ name: r.name || 'Uncategorized', total: parseFloat(r.total) || 0 }));
     } catch (e) {}
 
@@ -147,22 +172,19 @@ router.get('/monthly-breakdown', async (req, res) => {
       return res.status(400).json({ error: 'startDate and endDate are required' });
     }
 
-    const columnRes = await query(`
-      SELECT column_name FROM information_schema.columns 
-      WHERE table_name = 'expenses' AND column_name IN ('expense_date', 'date', 'created_at', 'paid_date', 'payment_date', 'transaction_date')
-      ORDER BY CASE column_name WHEN 'expense_date' THEN 1 WHEN 'date' THEN 2 WHEN 'created_at' THEN 3 WHEN 'paid_date' THEN 4 WHEN 'payment_date' THEN 5 WHEN 'transaction_date' THEN 6 END
-      LIMIT 1
-    `);
-    const dateColumn = columnRes.rows[0]?.column_name || 'created_at';
+    const dateCol = await getExpenseDateColumn();
+    console.log('Breakdown using column:', dateCol, 'for dates:', startDate, 'to', endDate);
 
     const expenseBreakdown = await query(`
       SELECT c.name, COALESCE(SUM(e.amount), 0) AS total
       FROM expenses e
       LEFT JOIN categories c ON e.category_id = c.id
-      WHERE e.${dateColumn}::date >= $1::date AND e.${dateColumn}::date <= $2::date
+      WHERE ${dateCol} >= $1::date AND ${dateCol} <= $2::date
       GROUP BY c.name
       ORDER BY total DESC
     `, [startDate, endDate]);
+
+    console.log('Breakdown results:', expenseBreakdown.rows);
 
     res.json({
       expense_breakdown: expenseBreakdown.rows.map(r => ({
