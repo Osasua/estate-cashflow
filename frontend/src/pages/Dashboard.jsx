@@ -1,3 +1,5 @@
+//Dashboard.jsx
+
 import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
@@ -83,7 +85,6 @@ export default function Dashboard() {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [monthBreakdown, setMonthBreakdown] = useState(null);
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
-  const [activeView, setActiveView] = useState('monthly');
 
   useEffect(() => {
     api('/dashboard').then(setData).catch((e) => setError(e.message));
@@ -127,13 +128,7 @@ export default function Dashboard() {
 
   const { kpis, daily, weekly, categories, trend } = data;
   const isMember = user?.role === 'member';
-  
-  // Dynamic KPI based on active tab
-  const currentKpi = activeView === 'monthly' 
-    ? { collected: kpis.month_in, due: kpis.month_due, title: 'Collected This Month' }
-    : { collected: kpis.occasional_in, due: kpis.occasional_due, title: 'Occasional Collected' };
-  
-  const collectionRate = currentKpi.due > 0 ? ((currentKpi.collected / currentKpi.due) * 100).toFixed(1) : 0;
+  const collectionRate = kpis.month_due > 0 ? ((kpis.month_in / kpis.month_due) * 100).toFixed(1) : 0;
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -175,44 +170,6 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #e5e7eb', paddingBottom: '2px' }}>
-        <button 
-          onClick={() => setActiveView('monthly')}
-          style={{
-            padding: '10px 20px',
-            background: activeView === 'monthly' ? '#6366f1' : 'transparent',
-            color: activeView === 'monthly' ? 'white' : '#6b7280',
-            border: 'none',
-            borderBottom: activeView === 'monthly' ? '3px solid #6366f1' : '3px solid transparent',
-            fontWeight: activeView === 'monthly' ? '600' : '500',
-            cursor: 'pointer',
-            borderRadius: '8px 8px 0 0',
-            marginBottom: '-2px',
-            transition: 'all 0.2s'
-          }}
-        >
-          Monthly Contributions
-        </button>
-        <button 
-          onClick={() => setActiveView('occasional')}
-          style={{
-            padding: '10px 20px',
-            background: activeView === 'occasional' ? '#6366f1' : 'transparent',
-            color: activeView === 'occasional' ? 'white' : '#6b7280',
-            border: 'none',
-            borderBottom: activeView === 'occasional' ? '3px solid #6366f1' : '3px solid transparent',
-            fontWeight: activeView === 'occasional' ? '600' : '500',
-            cursor: 'pointer',
-            borderRadius: '8px 8px 0 0',
-            marginBottom: '-2px',
-            transition: 'all 0.2s'
-          }}
-        >
-          Occasional Contributions
-        </button>
-      </div>
-
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '32px' }}>
         <KPICard
@@ -223,9 +180,9 @@ export default function Dashboard() {
           icon="💰"
         />
         <KPICard
-          title={currentKpi.title}
-          value={naira(currentKpi.collected)}
-          subtitle={`${collectionRate}% of ${naira(currentKpi.due)} expected`}
+          title="Collected This Month"
+          value={naira(kpis.month_in)}
+          subtitle={`${collectionRate}% of ${naira(kpis.month_due)} expected`}
           color="emerald"
           icon="📥"
         />
@@ -245,7 +202,7 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Charts Grid - YOUR EXACT ORIGINAL CHARTS */}
+      {/* Charts Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '24px', marginBottom: '32px' }}>
         {/* Cash Flow Trend */}
         <ChartPanel title="Cash Flow Trend" subtitle="Last 6 months performance">
@@ -308,7 +265,7 @@ export default function Dashboard() {
           )}
         </ChartPanel>
 
-        {/* Daily Expenses */}
+                {/* Daily Expenses - ENHANCED */}
         <ChartPanel title="Daily Expenses" subtitle="Last 14 days">
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={daily || []} margin={{ top: 20, right: 20, left: 0, bottom: 40 }}>
@@ -363,7 +320,7 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </ChartPanel>
 
-        {/* Weekly Expenses */}
+        {/* Weekly Expenses - ENHANCED */}
         <ChartPanel title="Weekly Expenses" subtitle="Last 8 weeks">
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={weekly || []} margin={{ top: 20, right: 20, left: 0, bottom: 40 }}>
@@ -418,7 +375,7 @@ export default function Dashboard() {
                 tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: '600' }} 
                 axisLine={false} 
                 tickLine={false} 
-                tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : `${v}`} 
+                tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `${v}`} 
               />
               <Tooltip 
                 content={<CustomTooltip />}
@@ -445,7 +402,7 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </ChartPanel>
 
-        {/* Payment History (Last 6 Months) */}
+               {/* Payment History (Last 6 Months) - ENHANCED */}
         <ChartPanel title="Payment History (Last 6 Months)">
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={trend || []} margin={{ top: 20, right: 30, left: 0, bottom: 60 }}>
@@ -493,7 +450,7 @@ export default function Dashboard() {
                 tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: '600' }} 
                 axisLine={false} 
                 tickLine={false} 
-                tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : `₦${v}`} 
+                tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} 
               />
               <Tooltip 
                 content={<CustomTooltip />}
@@ -522,7 +479,7 @@ export default function Dashboard() {
         </ChartPanel>
       </div>
 
-      {/* Monthly Summary Table - with Monthly/Occasional columns */}
+      {/* Monthly Summary Table */}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
         <div style={{ padding: '24px 28px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #f9fafb, #ffffff)' }}>
           <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>
@@ -537,9 +494,8 @@ export default function Dashboard() {
               <thead>
                 <tr style={{ background: '#f9fafb' }}>
                   <th style={{ padding: '16px 28px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Month</th>
-                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Monthly</th>
-                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Occasional</th>
-                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#e11d48', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Total Expenses</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Total Contributions</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Total Expenses</th>
                   <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Net Flow</th>
                 </tr>
               </thead>
@@ -563,11 +519,8 @@ export default function Dashboard() {
                         <td style={{ padding: '16px 28px', fontSize: '0.95rem', fontWeight: isSelected ? '600' : '500', color: '#111827', borderBottom: '1px solid #f3f4f6' }}>
                           {formatMonthName(row.month)}
                         </td>
-                        <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#6366f1', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
-                          {naira(row.monthly)}
-                        </td>
-                        <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#f59e0b', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
-                          {naira(row.occasional)}
+                        <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#059669', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
+                          {naira(row.income)}
                         </td>
                         <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#e11d48', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
                           {naira(row.expense)}
@@ -590,7 +543,7 @@ export default function Dashboard() {
 
                       {isSelected && (
                         <tr>
-                          <td colSpan="5" style={{ padding: '0', background: '#f0fdf4' }}>
+                          <td colSpan="4" style={{ padding: '0', background: '#f0fdf4' }}>
                             <div style={{ padding: '24px' }}>
                               {loadingBreakdown ? (
                                 <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
@@ -634,7 +587,7 @@ export default function Dashboard() {
                                 </div>
                               ) : (
                                 <div style={{ textAlign: 'center', padding: '20px', color: '#9ca3af' }}>
-                                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}></div>
+                                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📊</div>
                                   <p style={{ fontSize: '0.95rem', fontWeight: '500' }}>No expenses recorded for {formatMonthName(row.month)}</p>
                                 </div>
                               )}
@@ -650,7 +603,7 @@ export default function Dashboard() {
           </div>
         ) : (
           <div style={{ padding: '80px 20px', textAlign: 'center', color: '#9ca3af' }}>
-            <div style={{ fontSize: '4rem', marginBottom: '16px' }}></div>
+            <div style={{ fontSize: '4rem', marginBottom: '16px' }}>📊</div>
             <p style={{ fontSize: '1.1rem', fontWeight: '600', color: '#6b7280' }}>No financial data yet</p>
             <p style={{ fontSize: '0.9rem' }}>Data will appear here once contributions and expenses are recorded</p>
           </div>
