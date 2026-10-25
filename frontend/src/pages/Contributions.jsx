@@ -17,8 +17,12 @@ const TAB_TO_TYPE = {
   'Float': 'float',
   'Projects': 'projects',
   'End of Year': 'end-of-year',
-  'Welfare': 'welfare'
+  'Welfare': 'welfare',
+  'Christmas': 'christmas',
+  'Arrears': 'arrears'
 };
+
+const OCCASIONAL_TYPES = ['float', 'projects', 'end-of-year', 'welfare', 'christmas', 'arrears'];
 
 export default function Contributions() {
   const { user } = useAuth();
@@ -42,6 +46,9 @@ export default function Contributions() {
     customAmount: ''
   });
 
+  const isMonthly = activeTab === 'Monthly';
+  const currentType = TAB_TO_TYPE[activeTab];
+
   useEffect(() => {
     loadContributions();
   }, [activeTab, form.month, form.year]);
@@ -49,11 +56,10 @@ export default function Contributions() {
   const loadContributions = async () => {
     setLoading(true);
     try {
-      const type = TAB_TO_TYPE[activeTab];
       const queryParams = new URLSearchParams({
         month: form.month,
         year: form.year,
-        type: type
+        type: currentType
       });
 
       const res = await api(`/contributions?${queryParams}`);
@@ -71,17 +77,16 @@ export default function Contributions() {
 
   const handleGenerateBills = async () => {
     try {
-      const type = TAB_TO_TYPE[activeTab];
       await api('/contributions/generate', {
         method: 'POST',
         body: {
           month: parseInt(form.month),
           year: parseInt(form.year),
-          type: type,
+          type: currentType,
           amount: form.customAmount ? parseFloat(form.customAmount) : undefined
         }
       });
-      setMessage('✅ Bills generated successfully');
+      setMessage(isMonthly ? '✅ Monthly bills generated successfully' : `✅ ${activeTab} contribution activated for ${form.month} ${form.year}`);
       setTimeout(() => setMessage(''), 3000);
       await loadContributions();
     } catch (err) {
@@ -144,7 +149,7 @@ export default function Contributions() {
           member_id: selectedContribution.member_id,
           month: parseInt(form.month),
           year: parseInt(form.year),
-          type: TAB_TO_TYPE[activeTab],
+          type: currentType,
           amount: parseFloat(paymentAmount),
           method: paymentMethod,
           reference: paymentReference || undefined
@@ -181,7 +186,9 @@ export default function Contributions() {
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ margin: '0 0 8px 0', fontSize: '2rem', fontWeight: '700', color: '#111827' }}>Contributions</h1>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>Manage estate contributions and payments</p>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>
+          {isMonthly ? 'Manage monthly estate contributions' : `Manage ${activeTab.toLowerCase()} contributions (occasional event)`}
+        </p>
       </div>
 
       {/* Tabs */}
@@ -195,28 +202,75 @@ export default function Contributions() {
         ))}
       </div>
 
+      {/* Info Banner for Occasional Types */}
+      {!isMonthly && (
+        <div style={{
+          background: '#eff6ff',
+          border: '1px solid #bfdbfe',
+          borderLeft: '4px solid #3b82f6',
+          borderRadius: '8px',
+          padding: '16px',
+          marginBottom: '24px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '1.5rem' }}>ℹ️</span>
+            <div>
+              <div style={{ fontWeight: '600', color: '#1e40af', marginBottom: '4px' }}>
+                Occasional Contribution Type
+              </div>
+              <div style={{ fontSize: '0.9rem', color: '#3b82f6' }}>
+                {activeTab} contributions are activated only when needed (typically 1-2 times per year). 
+                Select the period below to activate or view existing contributions.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Message */}
       {message && (
         <div style={{ background: message.includes('✅') ? '#ecfdf5' : '#fff1f2', border: `1px solid ${message.includes('✅') ? '#a7f3d0' : '#fecdd3'}`, borderRadius: '8px', padding: '12px', marginBottom: '20px', color: message.includes('✅') ? '#065f46' : '#991b1b' }}>{message}</div>
       )}
 
       {/* Controls */}
-      <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', marginBottom: '24px', display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'end' }}>
-        <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px' }}>Month</label>
-          <select value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }}>
-            {monthNames.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-          </select>
+      <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'end' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px' }}>
+              {isMonthly ? 'Month' : 'Activation Period - Month'}
+            </label>
+            <select value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }}>
+              {monthNames.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px' }}>
+              {isMonthly ? 'Year' : 'Activation Period - Year'}
+            </label>
+            <input type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', width: '80px' }} />
+          </div>
+          {!isMonthly && (
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px' }}>Custom Amount (Optional)</label>
+              <input type="number" value={form.customAmount} onChange={(e) => setForm({ ...form, customAmount: e.target.value })} placeholder="Leave blank for default" style={{ padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }} />
+            </div>
+          )}
+          <button 
+            onClick={handleGenerateBills} 
+            style={{ 
+              padding: '10px 20px', 
+              background: isMonthly ? '#6366f1' : 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)', 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '6px', 
+              fontWeight: '600', 
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)'
+            }}
+          >
+            {isMonthly ? 'Generate Monthly Bills' : `Activate ${activeTab}`}
+          </button>
         </div>
-        <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px' }}>Year</label>
-          <input type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', width: '80px' }} />
-        </div>
-        <div>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px' }}>Custom Amount (Optional)</label>
-          <input type="number" value={form.customAmount} onChange={(e) => setForm({ ...form, customAmount: e.target.value })} placeholder="Leave blank for default" style={{ padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }} />
-        </div>
-        <button onClick={handleGenerateBills} style={{ padding: '10px 20px', background: '#6366f1', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}>Generate Bills</button>
       </div>
 
       {/* Stats */}
@@ -239,9 +293,21 @@ export default function Contributions() {
       <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
         {contributions.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>💰</div>
-            <p>No contributions for {monthNames[parseInt(form.month) - 1]} {form.year}</p>
-            <p style={{ fontSize: '0.9rem' }}>Click "Generate Bills" to create contributions</p>
+            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>
+              {isMonthly ? '💰' : '📅'}
+            </div>
+            <p style={{ fontSize: '1.1rem', fontWeight: '600', color: '#6b7280' }}>
+              {isMonthly 
+                ? `No monthly contributions for ${monthNames[parseInt(form.month) - 1]} ${form.year}`
+                : `No ${activeTab} contribution activated for ${form.month} ${form.year}`
+              }
+            </p>
+            <p style={{ fontSize: '0.9rem' }}>
+              {isMonthly 
+                ? 'Click "Generate Monthly Bills" to create contributions'
+                : `Click "Activate ${activeTab}" to create this occasional contribution for the selected period`
+              }
+            </p>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -328,6 +394,9 @@ export default function Contributions() {
               <div style={{ fontSize: '0.9rem', color: '#6b7280', marginBottom: '4px' }}>Household</div>
               <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#111827' }}>
                 {selectedContribution.household_name}
+              </div>
+              <div style={{ fontSize: '0.85rem', color: '#9ca3af', marginTop: '8px' }}>
+                Type: {activeTab} • {monthNames[parseInt(form.month) - 1]} {form.year}
               </div>
             </div>
 
