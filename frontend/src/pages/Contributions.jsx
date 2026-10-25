@@ -129,29 +129,39 @@ export default function Contributions() {
   };
 
   const handleEditSave = () => {
-    if (!editForm.amount || parseFloat(editForm.amount) <= 0) {
-      setMessage('❌ Amount due must be greater than 0');
-      setTimeout(() => setMessage(''), 3000);
-      return;
-    }
+  const dueAmount = parseFloat(editForm.amount);
+  const paidAmount = parseFloat(editForm.paid) || 0;
 
-    api(`/contributions/${selectedContribution.id}`, {
-      method: 'PUT',
-      body: { 
-        amount_due: parseFloat(editForm.amount),
-        amount_paid: parseFloat(editForm.paid) || 0,
-        note: editForm.reference.trim() === '' ? null : editForm.reference
-      }
-    }).then(() => {
-      setMessage('✅ Contribution updated');
-      setTimeout(() => setMessage(''), 3000);
-      setEditModalOpen(false);
-      loadContributions();
-    }).catch(err => {
-      setMessage('❌ Failed to update: ' + err.message);
-      setTimeout(() => setMessage(''), 5000);
-    });
-  };
+  // Allow 0 (for non-members/exempt), but block negative values
+  if (isNaN(dueAmount) || dueAmount < 0) {
+    setMessage('❌ Amount due cannot be negative');
+    setTimeout(() => setMessage(''), 3000);
+    return;
+  }
+
+  if (paidAmount < 0) {
+    setMessage('❌ Amount paid cannot be negative');
+    setTimeout(() => setMessage(''), 3000);
+    return;
+  }
+
+  api(`/contributions/${selectedContribution.id}`, {
+    method: 'PUT',
+    body: { 
+      amount_due: dueAmount,
+      amount_paid: paidAmount,
+      note: editForm.reference.trim() === '' ? null : editForm.reference
+    }
+  }).then(() => {
+    setMessage('✅ Contribution updated');
+    setTimeout(() => setMessage(''), 3000);
+    setEditModalOpen(false);
+    loadContributions();
+  }).catch(err => {
+    setMessage('❌ Failed to update: ' + err.message);
+    setTimeout(() => setMessage(''), 5000);
+  });
+};
 
   const handleRecordPayment = (contribution) => {
     setSelectedContribution(contribution);
