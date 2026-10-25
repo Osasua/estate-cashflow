@@ -125,8 +125,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET monthly expense breakdown
-router.get('/monthly-breakdown', async (req, res) => {
+// GET monthly expense breakdown (accessible to all authenticated users)
+router.get('/monthly-breakdown', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
@@ -134,50 +134,37 @@ router.get('/monthly-breakdown', async (req, res) => {
       return res.status(400).json({ error: 'startDate and endDate are required' });
     }
 
-    // Find the actual date column name in expenses table
-    const columnRes = await query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'expenses' 
-      AND column_name IN ('expense_date', 'date', 'created_at', 'paid_date', 'payment_date', 'transaction_date')
-      ORDER BY 
-        CASE column_name 
-          WHEN 'expense_date' THEN 1 
-          WHEN 'date' THEN 2 
-          WHEN 'created_at' THEN 3 
-          WHEN 'paid_date' THEN 4 
-          WHEN 'payment_date' THEN 5 
-          WHEN 'transaction_date' THEN 6 
-        END
-      LIMIT 1
-    `);
-
-    const dateColumn = columnRes.rows[0]?.column_name || 'created_at';
-    console.log('Using date column for breakdown:', dateColumn);
-
-    // Use the actual column name with proper date casting
-    const expenseBreakdown = await query(`
-      SELECT c.name, COALESCE(SUM(e.amount), 0) AS total
+    const breakdownRes = await query(`
+      SELECT 
+        COALESCE(c.name, 'Uncategorized') AS name,
+        COALESCE(SUM(e.amount), 0) AS total,
+        COUNT(e.id)::int AS count
       FROM expenses e
       LEFT JOIN categories c ON e.category_id = c.id
-      WHERE e.${dateColumn}::date >= $1::date AND e.${dateColumn}::date <= $2::date
+      WHERE e.spent_on BETWEEN $1::date AND $2::date
       GROUP BY c.name
       ORDER BY total DESC
     `, [startDate, endDate]);
 
-    console.log('Breakdown results:', expenseBreakdown.rows);
+    const totalExpensesRes = await query(`
+      SELECT COALESCE(SUM(amount), 0) AS total
+      FROM expenses
+      WHERE spent_on BETWEEN $1::date AND $2::date
+    `, [startDate, endDate]);
 
     res.json({
-      expense_breakdown: expenseBreakdown.rows.map(r => ({
-        name: r.name || 'Uncategorized',
-        total: parseFloat(r.total) || 0
-      }))
+      expense_breakdown: breakdownRes.rows.map(r => ({
+        name: r.name,
+        total: parseFloat(r.total) || 0,
+        count: parseInt(r.count) || 0
+      })),
+      total_expenses: parseFloat(totalExpensesRes.rows[0].total) || 0
     });
-
   } catch (err) {
     console.error('Monthly breakdown error:', err);
     res.status(500).json({ error: err.message });
   }
 });
+
 
 module.exports = router;
