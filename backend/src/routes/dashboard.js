@@ -134,13 +134,33 @@ router.get('/monthly-breakdown', async (req, res) => {
       return res.status(400).json({ error: 'startDate and endDate are required' });
     }
 
-    // Try different column names for the date field
+    // Find the actual date column name in expenses table
+    const columnRes = await query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'expenses' 
+      AND column_name IN ('expense_date', 'date', 'created_at', 'paid_date', 'payment_date', 'transaction_date')
+      ORDER BY 
+        CASE column_name 
+          WHEN 'expense_date' THEN 1 
+          WHEN 'date' THEN 2 
+          WHEN 'created_at' THEN 3 
+          WHEN 'paid_date' THEN 4 
+          WHEN 'payment_date' THEN 5 
+          WHEN 'transaction_date' THEN 6 
+        END
+      LIMIT 1
+    `);
+
+    const dateColumn = columnRes.rows[0]?.column_name || 'created_at';
+    console.log('Using date column:', dateColumn);
+
+    // Use the actual column name dynamically
     const expenseBreakdown = await query(`
       SELECT c.name, COALESCE(SUM(e.amount), 0) AS total
       FROM expenses e
       LEFT JOIN categories c ON e.category_id = c.id
-      WHERE COALESCE(e.expense_date, e.date, e.created_at) >= $1::date 
-        AND COALESCE(e.expense_date, e.date, e.created_at) <= $2::date
+      WHERE e.${dateColumn} >= $1::date AND e.${dateColumn} <= $2::date
       GROUP BY c.name
       ORDER BY total DESC
     `, [startDate, endDate]);
