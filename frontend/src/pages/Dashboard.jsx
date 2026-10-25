@@ -1,3 +1,5 @@
+//Dashboard.jsx
+
 import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
@@ -83,7 +85,6 @@ export default function Dashboard() {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [monthBreakdown, setMonthBreakdown] = useState(null);
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
-  const [activeView, setActiveView] = useState('monthly'); // 'monthly' or 'occasional'
 
   useEffect(() => {
     api('/dashboard').then(setData).catch((e) => setError(e.message));
@@ -127,13 +128,7 @@ export default function Dashboard() {
 
   const { kpis, daily, weekly, categories, trend } = data;
   const isMember = user?.role === 'member';
-  
-  // Determine which data to show based on active view
-  const currentData = activeView === 'monthly' 
-    ? { collected: kpis.month_in, due: kpis.month_due }
-    : { collected: kpis.occasional_in, due: kpis.occasional_due };
-  
-  const collectionRate = currentData.due > 0 ? ((currentData.collected / currentData.due) * 100).toFixed(1) : 0;
+  const collectionRate = kpis.month_due > 0 ? ((kpis.month_in / kpis.month_due) * 100).toFixed(1) : 0;
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -175,44 +170,6 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* View Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #e5e7eb', paddingBottom: '2px' }}>
-        <button 
-          onClick={() => setActiveView('monthly')}
-          style={{
-            padding: '10px 20px',
-            background: activeView === 'monthly' ? '#6366f1' : 'transparent',
-            color: activeView === 'monthly' ? 'white' : '#6b7280',
-            border: 'none',
-            borderBottom: activeView === 'monthly' ? '3px solid #6366f1' : '3px solid transparent',
-            fontWeight: activeView === 'monthly' ? '600' : '500',
-            cursor: 'pointer',
-            borderRadius: '8px 8px 0 0',
-            marginBottom: '-2px',
-            transition: 'all 0.2s'
-          }}
-        >
-          Monthly Contributions
-        </button>
-        <button 
-          onClick={() => setActiveView('occasional')}
-          style={{
-            padding: '10px 20px',
-            background: activeView === 'occasional' ? '#6366f1' : 'transparent',
-            color: activeView === 'occasional' ? 'white' : '#6b7280',
-            border: 'none',
-            borderBottom: activeView === 'occasional' ? '3px solid #6366f1' : '3px solid transparent',
-            fontWeight: activeView === 'occasional' ? '600' : '500',
-            cursor: 'pointer',
-            borderRadius: '8px 8px 0 0',
-            marginBottom: '-2px',
-            transition: 'all 0.2s'
-          }}
-        >
-          Occasional Contributions
-        </button>
-      </div>
-
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '32px' }}>
         <KPICard
@@ -223,9 +180,9 @@ export default function Dashboard() {
           icon="💰"
         />
         <KPICard
-          title={activeView === 'monthly' ? 'Monthly Collected' : 'Occasional Collected'}
-          value={naira(currentData.collected)}
-          subtitle={`${collectionRate}% of ${naira(currentData.due)} expected`}
+          title="Collected This Month"
+          value={naira(kpis.month_in)}
+          subtitle={`${collectionRate}% of ${naira(kpis.month_due)} expected`}
           color="emerald"
           icon="📥"
         />
@@ -247,18 +204,14 @@ export default function Dashboard() {
 
       {/* Charts Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '24px', marginBottom: '32px' }}>
-        {/* Cash Flow Trend - Updated to show both monthly and occasional */}
+        {/* Cash Flow Trend */}
         <ChartPanel title="Cash Flow Trend" subtitle="Last 6 months performance">
           <ResponsiveContainer width="100%" height={320}>
             <AreaChart data={trend || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <defs>
-                <linearGradient id="colorMonthly" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4}/>
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="colorOccasional" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4}/>
-                  <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4}/>
+                  <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
                 </linearGradient>
                 <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4}/>
@@ -276,8 +229,7 @@ export default function Dashboard() {
               <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '13px', fontWeight: '500' }} />
-              <Area type="monotone" dataKey="monthly" name="Monthly" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorMonthly)" dot={{ r: 5, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }} />
-              <Area type="monotone" dataKey="occasional" name="Occasional" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorOccasional)" dot={{ r: 5, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff' }} />
+              <Area type="monotone" dataKey="income" name="Contributions" stroke="#22c55e" strokeWidth={3} fillOpacity={1} fill="url(#colorIncome)" dot={{ r: 5, fill: '#22c55e', strokeWidth: 2, stroke: '#fff' }} />
               <Area type="monotone" dataKey="expense" name="Expenses" stroke="#ef4444" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" dot={{ r: 5, fill: '#ef4444', strokeWidth: 2, stroke: '#fff' }} />
             </AreaChart>
           </ResponsiveContainer>
@@ -313,7 +265,7 @@ export default function Dashboard() {
           )}
         </ChartPanel>
 
-        {/* Daily Expenses */}
+                {/* Daily Expenses - ENHANCED */}
         <ChartPanel title="Daily Expenses" subtitle="Last 14 days">
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={daily || []} margin={{ top: 20, right: 20, left: 0, bottom: 40 }}>
@@ -322,6 +274,9 @@ export default function Dashboard() {
                   <stop offset="0%" stopColor="#06b6d4" stopOpacity={1} />
                   <stop offset="100%" stopColor="#3b82f6" stopOpacity={1} />
                 </linearGradient>
+                <filter id="dailyShadow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#06b6d4" floodOpacity="0.3"/>
+                </filter>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
               <XAxis 
@@ -337,18 +292,75 @@ export default function Dashboard() {
                 tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: '600' }} 
                 axisLine={false} 
                 tickLine={false} 
-                tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : `₦${v}`} 
+                tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} 
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(6, 182, 212, 0.1)', radius: 8 }} />
-              <Bar dataKey="total" fill="url(#dailyGradient)" radius={[10, 10, 4, 4]} maxBarSize={60} />
+              <Tooltip 
+                content={<CustomTooltip />}
+                cursor={{ fill: 'rgba(6, 182, 212, 0.1)', radius: 8 }}
+              />
+              <Bar 
+                dataKey="total" 
+                fill="url(#dailyGradient)"
+                radius={[10, 10, 4, 4]}
+                maxBarSize={60}
+                animationDuration={1200}
+                animationEasing="ease-out"
+              >
+                {
+                  (daily || []).map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill="url(#dailyGradient)"
+                      filter="url(#dailyShadow)"
+                    />
+                  ))
+                }
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ChartPanel>
 
-        {/* Weekly Expenses */}
+        {/* Weekly Expenses - ENHANCED */}
         <ChartPanel title="Weekly Expenses" subtitle="Last 8 weeks">
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={weekly || []} margin={{ top: 20, right: 20, left: 0, bottom: 40 }}>
+              <defs>
+                <linearGradient id="weeklyGrad0" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#22c55e" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity={0.9} />
+                </linearGradient>
+                <linearGradient id="weeklyGrad1" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#14b8a6" stopOpacity={0.9} />
+                </linearGradient>
+                <linearGradient id="weeklyGrad2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#14b8a6" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.9} />
+                </linearGradient>
+                <linearGradient id="weeklyGrad3" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#06b6d4" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.9} />
+                </linearGradient>
+                <linearGradient id="weeklyGrad4" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#6366f1" stopOpacity={0.9} />
+                </linearGradient>
+                <linearGradient id="weeklyGrad5" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.9} />
+                </linearGradient>
+                <linearGradient id="weeklyGrad6" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#a855f7" stopOpacity={0.9} />
+                </linearGradient>
+                <linearGradient id="weeklyGrad7" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#a855f7" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#d946ef" stopOpacity={0.9} />
+                </linearGradient>
+                <filter id="weeklyShadow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#22c55e" floodOpacity="0.3"/>
+                </filter>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
               <XAxis 
                 dataKey="week" 
@@ -365,16 +377,64 @@ export default function Dashboard() {
                 tickLine={false} 
                 tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `${v}`} 
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(34, 197, 94, 0.1)', radius: 8 }} />
-              <Bar dataKey="total" fill="#22c55e" radius={[12, 12, 6, 6]} maxBarSize={70} />
+              <Tooltip 
+                content={<CustomTooltip />}
+                cursor={{ fill: 'rgba(34, 197, 94, 0.1)', radius: 8 }}
+              />
+              <Bar 
+                dataKey="total" 
+                radius={[12, 12, 6, 6]}
+                maxBarSize={70}
+                animationDuration={1500}
+                animationEasing="ease-out"
+              >
+                {
+                  (weekly || []).map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={`url(#weeklyGrad${index % 8})`}
+                      filter="url(#weeklyShadow)"
+                    />
+                  ))
+                }
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ChartPanel>
 
-        {/* Payment History */}
+               {/* Payment History (Last 6 Months) - ENHANCED */}
         <ChartPanel title="Payment History (Last 6 Months)">
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={trend || []} margin={{ top: 20, right: 30, left: 0, bottom: 60 }}>
+              <defs>
+                <linearGradient id="grad0" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.8} />
+                </linearGradient>
+                <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#a855f7" stopOpacity={0.8} />
+                </linearGradient>
+                <linearGradient id="grad2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#a855f7" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#d946ef" stopOpacity={0.8} />
+                </linearGradient>
+                <linearGradient id="grad3" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#d946ef" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#ec4899" stopOpacity={0.8} />
+                </linearGradient>
+                <linearGradient id="grad4" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#ec4899" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#f43f5e" stopOpacity={0.8} />
+                </linearGradient>
+                <linearGradient id="grad5" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#f43f5e" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#ef4444" stopOpacity={0.8} />
+                </linearGradient>
+                <filter id="barShadow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#6366f1" floodOpacity="0.3"/>
+                </filter>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
               <XAxis 
                 dataKey="short_month" 
@@ -392,8 +452,28 @@ export default function Dashboard() {
                 tickLine={false} 
                 tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} 
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99, 102, 241, 0.08)', radius: 8 }} />
-              <Bar dataKey="income" name="Total Contributions" fill="#6366f1" radius={[16, 16, 8, 8]} maxBarSize={70} />
+              <Tooltip 
+                content={<CustomTooltip />}
+                cursor={{ fill: 'rgba(99, 102, 241, 0.08)', radius: 8 }}
+              />
+              <Bar 
+                dataKey="income" 
+                name="Contributions" 
+                radius={[16, 16, 8, 8]}
+                maxBarSize={70}
+                animationDuration={1500}
+                animationEasing="ease-out"
+              >
+                {
+                  (trend || []).map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={`url(#grad${index})`}
+                      filter="url(#barShadow)"
+                    />
+                  ))
+                }
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ChartPanel>
@@ -414,10 +494,8 @@ export default function Dashboard() {
               <thead>
                 <tr style={{ background: '#f9fafb' }}>
                   <th style={{ padding: '16px 28px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Month</th>
-                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Monthly</th>
-                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Occasional</th>
-                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Total</th>
-                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Expenses</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Total Contributions</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Total Expenses</th>
                   <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Net Flow</th>
                 </tr>
               </thead>
@@ -440,12 +518,6 @@ export default function Dashboard() {
                       >
                         <td style={{ padding: '16px 28px', fontSize: '0.95rem', fontWeight: isSelected ? '600' : '500', color: '#111827', borderBottom: '1px solid #f3f4f6' }}>
                           {formatMonthName(row.month)}
-                        </td>
-                        <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#6366f1', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
-                          {naira(row.monthly)}
-                        </td>
-                        <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#f59e0b', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
-                          {naira(row.occasional)}
                         </td>
                         <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#059669', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
                           {naira(row.income)}
@@ -471,7 +543,7 @@ export default function Dashboard() {
 
                       {isSelected && (
                         <tr>
-                          <td colSpan="6" style={{ padding: '0', background: '#f0fdf4' }}>
+                          <td colSpan="4" style={{ padding: '0', background: '#f0fdf4' }}>
                             <div style={{ padding: '24px' }}>
                               {loadingBreakdown ? (
                                 <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
