@@ -4,7 +4,7 @@ import { useAuth } from '../auth';
 import { naira } from '../format';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
-  PieChart, Pie, Cell, Legend, AreaChart, Area,
+  PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area,
 } from 'recharts';
 import Skeleton from '../components/Skeleton';
 
@@ -83,7 +83,7 @@ export default function Dashboard() {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [monthBreakdown, setMonthBreakdown] = useState(null);
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
-  const [activeView, setActiveView] = useState('monthly'); // NEW: Tab state
+  const [activeView, setActiveView] = useState('monthly');
 
   useEffect(() => {
     api('/dashboard').then(setData).catch((e) => setError(e.message));
@@ -128,7 +128,7 @@ export default function Dashboard() {
   const { kpis, daily, weekly, categories, trend } = data;
   const isMember = user?.role === 'member';
   
-  // NEW: Dynamic KPI based on active tab
+  // Dynamic KPI based on active tab
   const currentKpi = activeView === 'monthly' 
     ? { collected: kpis.month_in, due: kpis.month_due, title: 'Collected This Month' }
     : { collected: kpis.occasional_in, due: kpis.occasional_due, title: 'Occasional Collected' };
@@ -175,7 +175,7 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* NEW: View Tabs */}
+      {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #e5e7eb', paddingBottom: '2px' }}>
         <button 
           onClick={() => setActiveView('monthly')}
@@ -245,7 +245,7 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Charts Grid - YOUR ORIGINAL CHARTS */}
+      {/* Charts Grid - YOUR ORIGINAL CHARTS UNCHANGED */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '24px', marginBottom: '32px' }}>
         {/* Cash Flow Trend */}
         <ChartPanel title="Cash Flow Trend" subtitle="Last 6 months performance">
@@ -418,7 +418,7 @@ export default function Dashboard() {
                 tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: '600' }} 
                 axisLine={false} 
                 tickLine={false} 
-                tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `${v}`} 
+                tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : `${v}`} 
               />
               <Tooltip 
                 content={<CustomTooltip />}
@@ -493,7 +493,7 @@ export default function Dashboard() {
                 tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: '600' }} 
                 axisLine={false} 
                 tickLine={false} 
-                tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} 
+                tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : `₦${v}`} 
               />
               <Tooltip 
                 content={<CustomTooltip />}
@@ -522,7 +522,7 @@ export default function Dashboard() {
         </ChartPanel>
       </div>
 
-      {/* Monthly Summary Table */}
+      {/* Monthly Summary Table - UPDATED with Monthly/Occasional columns */}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
         <div style={{ padding: '24px 28px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #f9fafb, #ffffff)' }}>
           <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>
@@ -537,8 +537,9 @@ export default function Dashboard() {
               <thead>
                 <tr style={{ background: '#f9fafb' }}>
                   <th style={{ padding: '16px 28px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Month</th>
-                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Total Contributions</th>
-                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Total Expenses</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Monthly</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Occasional</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#e11d48', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Expenses</th>
                   <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Net Flow</th>
                 </tr>
               </thead>
@@ -562,8 +563,11 @@ export default function Dashboard() {
                         <td style={{ padding: '16px 28px', fontSize: '0.95rem', fontWeight: isSelected ? '600' : '500', color: '#111827', borderBottom: '1px solid #f3f4f6' }}>
                           {formatMonthName(row.month)}
                         </td>
-                        <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#059669', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
-                          {naira(row.income)}
+                        <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#6366f1', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
+                          {naira(row.monthly)}
+                        </td>
+                        <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#f59e0b', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
+                          {naira(row.occasional)}
                         </td>
                         <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#e11d48', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
                           {naira(row.expense)}
@@ -586,7 +590,7 @@ export default function Dashboard() {
 
                       {isSelected && (
                         <tr>
-                          <td colSpan="4" style={{ padding: '0', background: '#f0fdf4' }}>
+                          <td colSpan="5" style={{ padding: '0', background: '#f0fdf4' }}>
                             <div style={{ padding: '24px' }}>
                               {loadingBreakdown ? (
                                 <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
@@ -630,7 +634,7 @@ export default function Dashboard() {
                                 </div>
                               ) : (
                                 <div style={{ textAlign: 'center', padding: '20px', color: '#9ca3af' }}>
-                                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📊</div>
+                                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}></div>
                                   <p style={{ fontSize: '0.95rem', fontWeight: '500' }}>No expenses recorded for {formatMonthName(row.month)}</p>
                                 </div>
                               )}
