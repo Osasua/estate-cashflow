@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
-import Skeleton from '../components/Skeleton';
+import { naira } from '../format';
 import {
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
-  PieChart, Pie, Cell, Legend
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
+  PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area,
 } from 'recharts';
+import Skeleton from '../components/Skeleton';
 
-const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7'];
+const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#64748b', '#84cc16', '#ec4899', '#14b8a6'];
 
-function KPICard({ title, value, subtitle, color, icon }) {
+// World-class KPI Card
+function KPICard({ title, value, subtitle, trend, color, icon }) {
   const colorMap = {
     indigo: { bg: '#eef2ff', text: '#4f46e5' },
     emerald: { bg: '#ecfdf5', text: '#059669' },
@@ -25,10 +27,11 @@ function KPICard({ title, value, subtitle, color, icon }) {
       padding: '24px',
       border: '1px solid #e5e7eb',
       borderLeft: `4px solid ${c.text}`,
-      boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+      transition: 'all 0.3s ease'
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-        <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</span>
+        <span style={{ fontSize: '0.875rem', fontWeight: '500', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</span>
         <div style={{
           width: '40px',
           height: '40px',
@@ -41,7 +44,34 @@ function KPICard({ title, value, subtitle, color, icon }) {
         }}>{icon}</div>
       </div>
       <div style={{ fontSize: '2.25rem', fontWeight: '700', color: '#111827', lineHeight: 1.1, marginBottom: '8px' }}>{value}</div>
-      {subtitle && <div style={{ fontSize: '0.85rem', color: '#9ca3af' }}>{subtitle}</div>}
+      {subtitle && (
+        <div style={{ fontSize: '0.85rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {trend && <span style={{ color: trend > 0 ? '#059669' : '#e11d48', fontWeight: '600' }}>{trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%</span>}
+          {subtitle}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Chart Panel
+function ChartPanel({ title, subtitle, children, action }) {
+  return (
+    <div style={{
+      background: '#fff',
+      borderRadius: '16px',
+      border: '1px solid #e5e7eb',
+      padding: '24px',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>{title}</h3>
+          {subtitle && <p style={{ margin: '4px 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>{subtitle}</p>}
+        </div>
+        {action}
+      </div>
+      <div style={{ minHeight: '300px' }}>{children}</div>
     </div>
   );
 }
@@ -49,74 +79,61 @@ function KPICard({ title, value, subtitle, color, icon }) {
 export default function Dashboard() {
   const { user } = useAuth();
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeView, setActiveView] = useState('monthly');
+  const [selectedMonth, setSelectedMonth] = useState(null);
+  const [monthBreakdown, setMonthBreakdown] = useState(null);
+  const [loadingBreakdown, setLoadingBreakdown] = useState(false);
+  const [activeView, setActiveView] = useState('monthly'); // 'monthly' or 'occasional'
 
   useEffect(() => {
-    loadData();
+    api('/dashboard').then(setData).catch((e) => setError(e.message));
   }, []);
 
-  const loadData = async () => {
-    setLoading(true);
-    setError('');
+  const formatMonthName = (dateStr) => {
+    if (!dateStr) return '';
+    const [year, month] = dateStr.split('-');
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    return `${monthNames[parseInt(month) - 1]} ${year}`;
+  };
+
+  const handleRowClick = async (dateStr) => {
+    if (selectedMonth === dateStr) {
+      setSelectedMonth(null);
+      setMonthBreakdown(null);
+      return;
+    }
+    setSelectedMonth(dateStr);
+    setLoadingBreakdown(true);
+    setMonthBreakdown(null);
+
     try {
-      const res = await api('/dashboard');
-      console.log('Dashboard data:', res);
-      setData(res);
-    } catch (err) {
-      console.error('Dashboard error:', err);
-      setError(err.message || 'Failed to load dashboard');
+      const [year, month] = dateStr.split('-');
+      const startDate = `${year}-${month}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const endDate = `${year}-${month}-${lastDay}`;
+      
+      const res = await api(`/dashboard/monthly-breakdown?startDate=${startDate}&endDate=${endDate}`);
+      setMonthBreakdown(res);
+    } catch (e) {
+      console.error("Failed to load breakdown", e);
+      setMonthBreakdown({ error: e.message });
     } finally {
-      setLoading(false);
+      setLoadingBreakdown(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div style={{ padding: '40px' }}>
-        <Skeleton height="40px" width="400px" style={{ marginBottom: '24px' }} />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} height="120px" width="100%" />)}
-        </div>
-      </div>
-    );
-  }
+  if (error) return <div style={{ padding: '40px', color: '#ef4444', textAlign: 'center' }}><h2>Error Loading Dashboard</h2><p>{error}</p></div>;
+  if (!data) return <div style={{ padding: '40px' }}><Skeleton height="40px" width="300px" style={{ marginBottom: '24px' }} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>{[1,2,3,4].map(i => <Skeleton key={i} height="140px" width="100%" />)}</div></div>;
 
-  if (error) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center' }}>
-        <div style={{ fontSize: '3rem', marginBottom: '16px' }}>⚠️</div>
-        <h2 style={{ color: '#ef4444' }}>Error Loading Dashboard</h2>
-        <p style={{ color: '#6b7280' }}>{error}</p>
-        <button onClick={loadData} style={{ marginTop: '16px', padding: '10px 24px', background: '#6366f1', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>
-          Try Again
-        </button>
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>
-        <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📊</div>
-        <p>No dashboard data available</p>
-      </div>
-    );
-  }
-
-  // Destructure with proper names
-  const cashBalance = data.cash_balance || 0;
-  const monthlyData = data.monthly || { due: 0, paid: 0 };
-  const occasionalData = data.occasional || { due: 0, paid: 0 };
-  const spentThisMonth = data.spent_this_month || 0;
-  const householdsOwing = data.households_owing || 0;
-  const trend = data.trend || [];
-  const categories = data.categories || [];
-
+  const { kpis, daily, weekly, categories, trend } = data;
+  const isMember = user?.role === 'member';
+  
   // Determine which data to show based on active view
-  const currentData = activeView === 'monthly' ? monthlyData : occasionalData;
-  const collectionRate = currentData.due > 0 ? ((currentData.paid / currentData.due) * 100).toFixed(1) : 0;
+  const currentData = activeView === 'monthly' 
+    ? { collected: kpis.month_in, due: kpis.month_due }
+    : { collected: kpis.occasional_in, due: kpis.occasional_due };
+  
+  const collectionRate = currentData.due > 0 ? ((currentData.collected / currentData.due) * 100).toFixed(1) : 0;
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -130,14 +147,14 @@ export default function Dashboard() {
           fontSize: '0.875rem',
           minWidth: '180px'
         }}>
-          <p style={{ margin: '0 0 10px 0', fontWeight: '600', color: '#111827' }}>{label}</p>
+          <p style={{ margin: '0 0 10px 0', fontWeight: '600', color: '#111827', fontSize: '0.9rem' }}>{label}</p>
           {payload.map((entry, index) => (
-            <div key={index} style={{ display: 'flex', justifyContent: 'space-between', margin: '6px 0', gap: '20px' }}>
+            <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0', gap: '20px' }}>
               <span style={{ color: '#6b7280', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: entry.color, display: 'inline-block' }}></span>
                 {entry.name}
               </span>
-              <span style={{ fontWeight: '600', color: '#111827' }}>₦{entry.value.toLocaleString()}</span>
+              <span style={{ fontWeight: '600', color: '#111827' }}>{naira(entry.value)}</span>
             </div>
           ))}
         </div>
@@ -151,15 +168,15 @@ export default function Dashboard() {
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ margin: '0 0 8px 0', fontSize: '2rem', fontWeight: '700', color: '#111827', letterSpacing: '-0.02em' }}>
-          Financial Dashboard
+          {isMember ? `Welcome back, ${user?.name || 'Resident'}` : 'Financial Dashboard'}
         </h1>
         <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>
-          Real-time overview of estate finances • {new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          Real-time overview of estate finances • {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </p>
       </div>
 
       {/* View Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #e5e7eb' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #e5e7eb', paddingBottom: '2px' }}>
         <button 
           onClick={() => setActiveView('monthly')}
           style={{
@@ -167,9 +184,12 @@ export default function Dashboard() {
             background: activeView === 'monthly' ? '#6366f1' : 'transparent',
             color: activeView === 'monthly' ? 'white' : '#6b7280',
             border: 'none',
+            borderBottom: activeView === 'monthly' ? '3px solid #6366f1' : '3px solid transparent',
             fontWeight: activeView === 'monthly' ? '600' : '500',
             cursor: 'pointer',
-            borderRadius: '8px 8px 0 0'
+            borderRadius: '8px 8px 0 0',
+            marginBottom: '-2px',
+            transition: 'all 0.2s'
           }}
         >
           Monthly Contributions
@@ -181,9 +201,12 @@ export default function Dashboard() {
             background: activeView === 'occasional' ? '#6366f1' : 'transparent',
             color: activeView === 'occasional' ? 'white' : '#6b7280',
             border: 'none',
+            borderBottom: activeView === 'occasional' ? '3px solid #6366f1' : '3px solid transparent',
             fontWeight: activeView === 'occasional' ? '600' : '500',
             cursor: 'pointer',
-            borderRadius: '8px 8px 0 0'
+            borderRadius: '8px 8px 0 0',
+            marginBottom: '-2px',
+            transition: 'all 0.2s'
           }}
         >
           Occasional Contributions
@@ -191,32 +214,32 @@ export default function Dashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '32px' }}>
         <KPICard
           title="Cash Balance"
-          value={`₦${cashBalance.toLocaleString()}`}
+          value={naira(kpis.balance)}
           subtitle="Total available funds"
           color="indigo"
           icon="💰"
         />
         <KPICard
           title={activeView === 'monthly' ? 'Monthly Collected' : 'Occasional Collected'}
-          value={`₦${currentData.paid.toLocaleString()}`}
-          subtitle={`${collectionRate}% of ₦${currentData.due.toLocaleString()} expected`}
+          value={naira(currentData.collected)}
+          subtitle={`${collectionRate}% of ${naira(currentData.due)} expected`}
           color="emerald"
-          icon=""
+          icon="📥"
         />
         <KPICard
           title="Spent This Month"
-          value={`₦${spentThisMonth.toLocaleString()}`}
+          value={naira(kpis.month_expense)}
           subtitle="Total expenses"
           color="rose"
           icon="📤"
         />
         <KPICard
           title="Households Owing"
-          value={householdsOwing.toString()}
-          subtitle="Behind on monthly payments"
+          value={kpis.pending_count}
+          subtitle="Behind on payments"
           color="amber"
           icon="⚠️"
         />
@@ -224,63 +247,45 @@ export default function Dashboard() {
 
       {/* Charts Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '24px', marginBottom: '32px' }}>
-        {/* Cash Flow Trend */}
-        <div style={{
-          background: '#fff',
-          borderRadius: '16px',
-          border: '1px solid #e5e7eb',
-          padding: '24px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-        }}>
-          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>
-            Cash Flow Trend
-          </h3>
-          <p style={{ margin: '0 0 24px 0', fontSize: '0.9rem', color: '#6b7280' }}>
-            Last 6 months performance
-          </p>
-          {trend.length > 0 ? (
-            <ResponsiveContainer width="100%" height={320}>
-              <AreaChart data={trend} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorMonthly" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorOccasional" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 12, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} />
-                <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="Monthly" stroke="#6366f1" strokeWidth={2} fill="url(#colorMonthly)" dot={{ r: 4, fill: '#6366f1' }} />
-                <Area type="monotone" dataKey="Occasional" stroke="#f59e0b" strokeWidth={2} fill="url(#colorOccasional)" dot={{ r: 4, fill: '#f59e0b' }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '320px', color: '#9ca3af' }}>
-              No trend data available
-            </div>
-          )}
-        </div>
+        {/* Cash Flow Trend - Updated to show both monthly and occasional */}
+        <ChartPanel title="Cash Flow Trend" subtitle="Last 6 months performance">
+          <ResponsiveContainer width="100%" height={320}>
+            <AreaChart data={trend || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="colorMonthly" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4}/>
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                </linearGradient>
+                <linearGradient id="colorOccasional" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4}/>
+                  <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                </linearGradient>
+                <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4}/>
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+              <XAxis 
+                dataKey="short_month" 
+                tick={{ fontSize: 12, fill: '#6b7280', fontWeight: '500' }} 
+                axisLine={false} 
+                tickLine={false} 
+                interval={0} 
+              />
+              <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '13px', fontWeight: '500' }} />
+              <Area type="monotone" dataKey="monthly" name="Monthly" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorMonthly)" dot={{ r: 5, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }} />
+              <Area type="monotone" dataKey="occasional" name="Occasional" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorOccasional)" dot={{ r: 5, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff' }} />
+              <Area type="monotone" dataKey="expense" name="Expenses" stroke="#ef4444" strokeWidth={3} fillOpacity={1} fill="url(#colorExpense)" dot={{ r: 5, fill: '#ef4444', strokeWidth: 2, stroke: '#fff' }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartPanel>
 
         {/* Spending by Category */}
-        <div style={{
-          background: '#fff',
-          borderRadius: '16px',
-          border: '1px solid #e5e7eb',
-          padding: '24px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-        }}>
-          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>
-            Spending by Category
-          </h3>
-          <p style={{ margin: '0 0 24px 0', fontSize: '0.9rem', color: '#6b7280' }}>
-            This month's breakdown
-          </p>
-          {categories.length > 0 ? (
+        <ChartPanel title="Spending by Category" subtitle="This month's breakdown">
+          {categories && categories.length > 0 ? (
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
                 <Pie
@@ -292,6 +297,8 @@ export default function Dashboard() {
                   innerRadius={75}
                   outerRadius={110}
                   paddingAngle={3}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
                 >
                   {categories.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
@@ -300,42 +307,235 @@ export default function Dashboard() {
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '320px', color: '#9ca3af', fontSize: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: '1rem' }}>
               No expenses recorded this month
             </div>
           )}
-        </div>
+        </ChartPanel>
+
+        {/* Daily Expenses */}
+        <ChartPanel title="Daily Expenses" subtitle="Last 14 days">
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={daily || []} margin={{ top: 20, right: 20, left: 0, bottom: 40 }}>
+              <defs>
+                <linearGradient id="dailyGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#06b6d4" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#3b82f6" stopOpacity={1} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+              <XAxis 
+                dataKey="day" 
+                tick={{ fontSize: 11, fill: '#6b7280', fontWeight: '600' }} 
+                axisLine={false} 
+                tickLine={false}
+                angle={-45}
+                textAnchor="end"
+                height={50}
+              />
+              <YAxis 
+                tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: '600' }} 
+                axisLine={false} 
+                tickLine={false} 
+                tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : `₦${v}`} 
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(6, 182, 212, 0.1)', radius: 8 }} />
+              <Bar dataKey="total" fill="url(#dailyGradient)" radius={[10, 10, 4, 4]} maxBarSize={60} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartPanel>
+
+        {/* Weekly Expenses */}
+        <ChartPanel title="Weekly Expenses" subtitle="Last 8 weeks">
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={weekly || []} margin={{ top: 20, right: 20, left: 0, bottom: 40 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+              <XAxis 
+                dataKey="week" 
+                tick={{ fontSize: 11, fill: '#6b7280', fontWeight: '600' }} 
+                axisLine={false} 
+                tickLine={false}
+                angle={-45}
+                textAnchor="end"
+                height={50}
+              />
+              <YAxis 
+                tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: '600' }} 
+                axisLine={false} 
+                tickLine={false} 
+                tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `${v}`} 
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(34, 197, 94, 0.1)', radius: 8 }} />
+              <Bar dataKey="total" fill="#22c55e" radius={[12, 12, 6, 6]} maxBarSize={70} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartPanel>
+
+        {/* Payment History */}
+        <ChartPanel title="Payment History (Last 6 Months)">
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={trend || []} margin={{ top: 20, right: 30, left: 0, bottom: 60 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+              <XAxis 
+                dataKey="short_month" 
+                tick={{ fontSize: 13, fill: '#6b7280', fontWeight: '700' }} 
+                axisLine={false} 
+                tickLine={false}
+                interval={0}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis 
+                tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: '600' }} 
+                axisLine={false} 
+                tickLine={false} 
+                tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} 
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99, 102, 241, 0.08)', radius: 8 }} />
+              <Bar dataKey="income" name="Total Contributions" fill="#6366f1" radius={[16, 16, 8, 8]} maxBarSize={70} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartPanel>
       </div>
 
-      {/* Collection Progress Bar */}
-      <div style={{
-        background: '#fff',
-        borderRadius: '16px',
-        border: '1px solid #e5e7eb',
-        padding: '24px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+      {/* Monthly Summary Table */}
+      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <div style={{ padding: '24px 28px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #f9fafb, #ffffff)' }}>
           <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>
-            {activeView === 'monthly' ? 'Monthly' : 'Occasional'} Collection Progress
+            Monthly Financial Summary
           </h3>
-          <span style={{ fontSize: '1.5rem', fontWeight: '700', color: collectionRate >= 80 ? '#059669' : collectionRate >= 50 ? '#d97706' : '#e11d48' }}>
-            {collectionRate}%
-          </span>
+          <p style={{ margin: '4px 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>Click any month to view detailed expense breakdown</p>
         </div>
-        <div style={{ background: '#f3f4f6', borderRadius: '12px', height: '16px', overflow: 'hidden' }}>
-          <div style={{
-            width: `${Math.min(collectionRate, 100)}%`,
-            height: '100%',
-            background: collectionRate >= 80 ? 'linear-gradient(90deg, #22c55e 0%, #10b981 100%)' : collectionRate >= 50 ? 'linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%)' : 'linear-gradient(90deg, #ef4444 0%, #f43f5e 100%)',
-            borderRadius: '12px',
-            transition: 'width 0.5s ease'
-          }}></div>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', fontSize: '0.9rem', color: '#6b7280' }}>
-          <span>₦{currentData.paid.toLocaleString()} collected</span>
-          <span>₦{currentData.due.toLocaleString()} expected</span>
-        </div>
+
+        {trend && trend.length > 0 ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f9fafb' }}>
+                  <th style={{ padding: '16px 28px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Month</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Monthly</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Occasional</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Total</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Expenses</th>
+                  <th style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Net Flow</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trend.map((row) => {
+                  const isSelected = selectedMonth === row.month;
+                  const netColor = row.net >= 0 ? '#059669' : '#e11d48';
+                  const netBg = row.net >= 0 ? '#ecfdf5' : '#fff1f2';
+                  return (
+                    <React.Fragment key={row.month}>
+                      <tr
+                        onClick={() => handleRowClick(row.month)}
+                        style={{
+                          cursor: 'pointer',
+                          background: isSelected ? '#f0fdf4' : 'transparent',
+                          transition: 'background 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => !isSelected && (e.currentTarget.style.background = '#f9fafb')}
+                        onMouseLeave={(e) => !isSelected && (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <td style={{ padding: '16px 28px', fontSize: '0.95rem', fontWeight: isSelected ? '600' : '500', color: '#111827', borderBottom: '1px solid #f3f4f6' }}>
+                          {formatMonthName(row.month)}
+                        </td>
+                        <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#6366f1', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
+                          {naira(row.monthly)}
+                        </td>
+                        <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#f59e0b', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
+                          {naira(row.occasional)}
+                        </td>
+                        <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#059669', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
+                          {naira(row.income)}
+                        </td>
+                        <td style={{ padding: '16px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#e11d48', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
+                          {naira(row.expense)}
+                        </td>
+                        <td style={{ padding: '16px 28px', textAlign: 'right', borderBottom: '1px solid #f3f4f6' }}>
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '6px 14px',
+                            background: netBg,
+                            color: netColor,
+                            borderRadius: '8px',
+                            fontSize: '0.9rem',
+                            fontWeight: '700',
+                            fontVariantNumeric: 'tabular-nums'
+                          }}>
+                            {row.net >= 0 ? '+' : ''}{naira(row.net)}
+                          </span>
+                        </td>
+                      </tr>
+
+                      {isSelected && (
+                        <tr>
+                          <td colSpan="6" style={{ padding: '0', background: '#f0fdf4' }}>
+                            <div style={{ padding: '24px' }}>
+                              {loadingBreakdown ? (
+                                <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
+                                  Loading breakdown...
+                                </div>
+                              ) : monthBreakdown?.error ? (
+                                <div style={{ textAlign: 'center', padding: '20px', color: '#ef4444' }}>
+                                  Error loading breakdown: {monthBreakdown.error}
+                                </div>
+                              ) : monthBreakdown?.expense_breakdown && monthBreakdown.expense_breakdown.length > 0 ? (
+                                <div>
+                                  <h4 style={{ marginBottom: '16px', fontSize: '1rem', fontWeight: '600', color: '#111827' }}>
+                                    Expense Breakdown — {formatMonthName(row.month)}
+                                  </h4>
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                                    {monthBreakdown.expense_breakdown.map((item, i) => {
+                                      const percentage = row.expense > 0 ? ((item.total / row.expense) * 100).toFixed(1) : 0;
+                                      return (
+                                        <div key={i} style={{
+                                          background: '#fff',
+                                          padding: '16px 20px',
+                                          borderRadius: '12px',
+                                          border: '1px solid #e5e7eb',
+                                          boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                                        }}>
+                                          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '6px', fontWeight: '500' }}>{item.name}</div>
+                                          <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>{naira(item.total)}</div>
+                                          <div style={{
+                                            display: 'inline-block',
+                                            padding: '3px 10px',
+                                            background: '#f3f4f6',
+                                            color: '#6b7280',
+                                            borderRadius: '6px',
+                                            fontSize: '0.8rem',
+                                            fontWeight: '600'
+                                          }}>{percentage}% of total</div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{ textAlign: 'center', padding: '20px', color: '#9ca3af' }}>
+                                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📊</div>
+                                  <p style={{ fontSize: '0.95rem', fontWeight: '500' }}>No expenses recorded for {formatMonthName(row.month)}</p>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ padding: '80px 20px', textAlign: 'center', color: '#9ca3af' }}>
+            <div style={{ fontSize: '4rem', marginBottom: '16px' }}>📊</div>
+            <p style={{ fontSize: '1.1rem', fontWeight: '600', color: '#6b7280' }}>No financial data yet</p>
+            <p style={{ fontSize: '0.9rem' }}>Data will appear here once contributions and expenses are recorded</p>
+          </div>
+        )}
       </div>
     </div>
   );

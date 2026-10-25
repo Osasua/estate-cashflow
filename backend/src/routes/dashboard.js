@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
       openingBalance = 0;
     }
 
-    // 2. Get Monthly contributions for current month
+    // 2. Monthly contributions for current month
     const monthlyRes = await query(`
       SELECT 
         COALESCE(SUM(amount_due), 0) AS total_due,
@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
     const monthlyDue = parseFloat(monthlyRes.rows[0].total_due) || 0;
     const monthlyPaid = parseFloat(monthlyRes.rows[0].total_paid) || 0;
 
-    // 3. Get Occasional contributions for current month (all non-monthly types)
+    // 3. Occasional contributions for current month
     const occasionalRes = await query(`
       SELECT 
         COALESCE(SUM(amount_due), 0) AS total_due,
@@ -45,7 +45,6 @@ router.get('/', async (req, res) => {
     const occasionalPaid = parseFloat(occasionalRes.rows[0].total_paid) || 0;
 
     // 4. Total collections
-    const totalDue = monthlyDue + occasionalDue;
     const totalPaid = monthlyPaid + occasionalPaid;
 
     // 5. Get total expenses for current month
@@ -62,10 +61,10 @@ router.get('/', async (req, res) => {
       totalExpenses = 0;
     }
 
-    // 6. Cash balance = opening + all collected - all expenses
+    // 6. Cash balance
     const cashBalance = openingBalance + totalPaid - totalExpenses;
 
-    // 7. Households owing (monthly only for current month)
+    // 7. Households owing (monthly only)
     const owingRes = await query(`
       SELECT COUNT(DISTINCT member_id) AS count
       FROM contributions
@@ -90,30 +89,77 @@ router.get('/', async (req, res) => {
       ORDER BY period_year DESC, period_month DESC
     `, [currentYear, currentMonth]);
 
-    // Group by month and separate monthly vs occasional
+    // Group by month
     const trendMap = {};
     trendRes.rows.forEach(r => {
-      const key = `${r.period_year}-${r.period_month}`;
+      const key = `${r.period_year}-${String(r.period_month).padStart(2, '0')}`;
       if (!trendMap[key]) {
-        trendMap[key] = { year: r.period_year, month: r.period_month, monthly: 0, occasional: 0 };
+        trendMap[key] = { 
+          month: key, 
+          short_month: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][r.period_month - 1],
+          income: 0, 
+          expense: 0,
+          monthly: 0,
+          occasional: 0
+        };
       }
       if (r.type === 'monthly') {
         trendMap[key].monthly += parseFloat(r.contributions) || 0;
       } else {
         trendMap[key].occasional += parseFloat(r.contributions) || 0;
       }
+      trendMap[key].income = trendMap[key].monthly + trendMap[key].occasional;
     });
 
     const trend = Object.values(trendMap)
-      .sort((a, b) => a.year - b.year || a.month - b.month)
+      .sort((a, b) => a.month.localeCompare(b.month))
       .slice(-6)
       .map(t => ({
-        month: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][t.month - 1],
-        Monthly: t.monthly,
-        Occasional: t.occasional
+        ...t,
+        net: t.income - t.expense
       }));
 
-    // 9. Spending by Category
+    // 9. Daily expenses
+    let daily = [];
+    try {
+      const dailyRes = await query(`
+        SELECT 
+          TO_CHAR(expense_date, 'YYYY-MM-DD') as day,
+          COALESCE(SUM(amount), 0) as total
+        FROM expenses
+        WHERE expense_date >= CURRENT_DATE - INTERVAL '14 days'
+        GROUP BY expense_date
+        ORDER BY expense_date
+      `);
+      daily = dailyRes.rows.map(r => ({
+        day: r.day,
+        total: parseFloat(r.total) || 0
+      }));
+    } catch (e) {
+      daily = [];
+    }
+
+    // 10. Weekly expenses
+    let weekly = [];
+    try {
+      const weeklyRes = await query(`
+        SELECT 
+          DATE_TRUNC('week', expense_date)::date as week,
+          COALESCE(SUM(amount), 0) as total
+        FROM expenses
+        WHERE expense_date >= CURRENT_DATE - INTERVAL '8 weeks'
+        GROUP BY DATE_TRUNC('week', expense_date)
+        ORDER BY DATE_TRUNC('week', expense_date)
+      `);
+      weekly = weeklyRes.rows.map(r => ({
+        week: r.week,
+        total: parseFloat(r.total) || 0
+      }));
+    } catch (e) {
+      weekly = [];
+    }
+
+    // 11. Spending by Category
     let categories = [];
     try {
       const catRes = await query(`
@@ -134,24 +180,19 @@ router.get('/', async (req, res) => {
     }
 
     res.json({
-      cash_balance: cashBalance,
-      monthly: {
-        due: monthlyDue,
-        paid: monthlyPaid
+      kpis: {
+        balance: cashBalance,
+        month_in: monthlyPaid,
+        month_due: monthlyDue,
+        month_expense: totalExpenses,
+        pending_count: householdsOwing,
+        occasional_in: occasionalPaid,
+        occasional_due: occasionalDue
       },
-      occasional: {
-        due: occasionalDue,
-        paid: occasionalPaid
-      },
-      total: {
-        due: totalDue,
-        paid: totalPaid
-      },
-      spent_this_month: totalExpenses,
-      households_owing: householdsOwing,
       trend,
-      categories,
-      date: now.toISOString()
+      daily,
+      weekly,
+      categories
     });
 
   } catch (err) {
