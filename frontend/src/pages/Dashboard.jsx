@@ -83,7 +83,7 @@ export default function Dashboard() {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [monthBreakdown, setMonthBreakdown] = useState(null);
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
-  const [activeView, setActiveView] = useState('monthly'); // CHANGE 1: Added tab state
+  const [activeView, setActiveView] = useState('monthly');
 
   useEffect(() => {
     api('/dashboard').then(setData).catch((e) => setError(e.message));
@@ -128,7 +128,7 @@ export default function Dashboard() {
   const { kpis, daily, weekly, categories, trend } = data;
   const isMember = user?.role === 'member';
   
-  // CHANGE 2: Dynamic KPI based on active tab
+  // Dynamic KPI based on active tab
   const currentKpi = activeView === 'monthly' 
     ? { collected: kpis.month_in, due: kpis.month_due, title: 'Collected This Month' }
     : { collected: kpis.occasional_in, due: kpis.occasional_due, title: 'Occasional Collected' };
@@ -175,7 +175,7 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* CHANGE 3: Added tabs */}
+      {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #e5e7eb', paddingBottom: '2px' }}>
         <button 
           onClick={() => setActiveView('monthly')}
@@ -308,7 +308,7 @@ export default function Dashboard() {
           )}
         </ChartPanel>
 
-        {/* Daily Expenses - ENHANCED */}
+        {/* Daily Expenses */}
         <ChartPanel title="Daily Expenses" subtitle="Last 14 days">
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={daily || []} margin={{ top: 20, right: 20, left: 0, bottom: 40 }}>
@@ -363,7 +363,7 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </ChartPanel>
 
-        {/* Weekly Expenses - ENHANCED */}
+        {/* Weekly Expenses */}
         <ChartPanel title="Weekly Expenses" subtitle="Last 8 weeks">
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={weekly || []} margin={{ top: 20, right: 20, left: 0, bottom: 40 }}>
@@ -445,7 +445,7 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </ChartPanel>
 
-        {/* Payment History (Last 6 Months) - ENHANCED */}
+        {/* Payment History (Last 6 Months) */}
         <ChartPanel title="Payment History (Last 6 Months)">
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={trend || []} margin={{ top: 20, right: 30, left: 0, bottom: 60 }}>
@@ -522,7 +522,7 @@ export default function Dashboard() {
         </ChartPanel>
       </div>
 
-      {/* Monthly Summary Table - YOUR EXACT STRUCTURE with added Monthly/Occasional columns */}
+      {/* Monthly Summary Table - with Monthly/Occasional columns */}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
         <div style={{ padding: '24px 28px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #f9fafb, #ffffff)' }}>
           <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>
@@ -650,7 +650,7 @@ export default function Dashboard() {
           </div>
         ) : (
           <div style={{ padding: '80px 20px', textAlign: 'center', color: '#9ca3af' }}>
-            <div style={{ fontSize: '4rem', marginBottom: '16px' }}>📊</div>
+            <div style={{ fontSize: '4rem', marginBottom: '16px' }}></div>
             <p style={{ fontSize: '1.1rem', fontWeight: '600', color: '#6b7280' }}>No financial data yet</p>
             <p style={{ fontSize: '0.9rem' }}>Data will appear here once contributions and expenses are recorded</p>
           </div>
