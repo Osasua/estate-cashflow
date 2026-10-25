@@ -106,7 +106,7 @@ export default function Dashboard() {
     );
   }
 
-  const { cash_balance, monthly, occasional, total, spent_this_month, households_owing, trend, categories } = data;
+  const householdsOwing = households_owing || 0;
 
   // Determine which data to show based on active view
   const currentData = activeView === 'monthly' ? monthly : occasional;
