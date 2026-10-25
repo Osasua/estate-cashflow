@@ -15,7 +15,6 @@ function KPICard({ title, value, subtitle, color, icon }) {
     emerald: { bg: '#ecfdf5', text: '#059669' },
     rose: { bg: '#fff1f2', text: '#e11d48' },
     amber: { bg: '#fffbeb', text: '#d97706' },
-    cyan: { bg: '#ecfeff', text: '#0891b2' },
   };
   const c = colorMap[color] || colorMap.indigo;
 
@@ -106,10 +105,17 @@ export default function Dashboard() {
     );
   }
 
-  const householdsOwing = households_owing || 0;
+  // Destructure with proper names
+  const cashBalance = data.cash_balance || 0;
+  const monthlyData = data.monthly || { due: 0, paid: 0 };
+  const occasionalData = data.occasional || { due: 0, paid: 0 };
+  const spentThisMonth = data.spent_this_month || 0;
+  const householdsOwing = data.households_owing || 0;
+  const trend = data.trend || [];
+  const categories = data.categories || [];
 
   // Determine which data to show based on active view
-  const currentData = activeView === 'monthly' ? monthly : occasional;
+  const currentData = activeView === 'monthly' ? monthlyData : occasionalData;
   const collectionRate = currentData.due > 0 ? ((currentData.paid / currentData.due) * 100).toFixed(1) : 0;
 
   const CustomTooltip = ({ active, payload, label }) => {
@@ -188,7 +194,7 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '32px' }}>
         <KPICard
           title="Cash Balance"
-          value={`₦${cash_balance.toLocaleString()}`}
+          value={`₦${cashBalance.toLocaleString()}`}
           subtitle="Total available funds"
           color="indigo"
           icon="💰"
@@ -198,14 +204,14 @@ export default function Dashboard() {
           value={`₦${currentData.paid.toLocaleString()}`}
           subtitle={`${collectionRate}% of ₦${currentData.due.toLocaleString()} expected`}
           color="emerald"
-          icon="📥"
+          icon=""
         />
         <KPICard
           title="Spent This Month"
-          value={`₦${spent_this_month.toLocaleString()}`}
+          value={`₦${spentThisMonth.toLocaleString()}`}
           subtitle="Total expenses"
           color="rose"
-          icon=""
+          icon="📤"
         />
         <KPICard
           title="Households Owing"
@@ -232,7 +238,7 @@ export default function Dashboard() {
           <p style={{ margin: '0 0 24px 0', fontSize: '0.9rem', color: '#6b7280' }}>
             Last 6 months performance
           </p>
-          {trend && trend.length > 0 ? (
+          {trend.length > 0 ? (
             <ResponsiveContainer width="100%" height={320}>
               <AreaChart data={trend} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                 <defs>
@@ -274,7 +280,7 @@ export default function Dashboard() {
           <p style={{ margin: '0 0 24px 0', fontSize: '0.9rem', color: '#6b7280' }}>
             This month's breakdown
           </p>
-          {categories && categories.length > 0 ? (
+          {categories.length > 0 ? (
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
                 <Pie
@@ -328,7 +334,7 @@ export default function Dashboard() {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', fontSize: '0.9rem', color: '#6b7280' }}>
           <span>₦{currentData.paid.toLocaleString()} collected</span>
-          <span>{currentData.due.toLocaleString()} expected</span>
+          <span>₦{currentData.due.toLocaleString()} expected</span>
         </div>
       </div>
     </div>
