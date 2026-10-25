@@ -44,19 +44,17 @@ router.get('/', async (req, res) => {
     const occasionalDue = parseFloat(occasionalRes.rows[0].total_due) || 0;
     const occasionalPaid = parseFloat(occasionalRes.rows[0].total_paid) || 0;
 
-    // 4. Total expenses for current month - Try different column names
+    // 4. Total expenses for current month - USE YOUR ORIGINAL COLUMN
     let totalExpenses = 0;
     try {
-      // Try expense_date first, then date, then created_at
       const expRes = await query(`
         SELECT COALESCE(SUM(amount), 0) AS total 
         FROM expenses 
-        WHERE EXTRACT(YEAR FROM COALESCE(expense_date, date, created_at)) = $1 
-        AND EXTRACT(MONTH FROM COALESCE(expense_date, date, created_at)) = $2
+        WHERE EXTRACT(YEAR FROM date) = $1 
+        AND EXTRACT(MONTH FROM date) = $2
       `, [currentYear, currentMonth]);
       totalExpenses = parseFloat(expRes.rows[0].total) || 0;
     } catch (e) {
-      console.error('Expense query error:', e.message);
       totalExpenses = 0;
     }
 
@@ -74,7 +72,7 @@ router.get('/', async (req, res) => {
     `, [currentYear, currentMonth]);
     const householdsOwing = parseInt(owingRes.rows[0].count) || 0;
 
-    // 7. Cash Flow Trend (last 6 months) - separated
+    // 7. Cash Flow Trend - YOUR ORIGINAL STRUCTURE with added monthly/occasional split
     const trendRes = await query(`
       SELECT 
         period_year,
@@ -107,16 +105,16 @@ router.get('/', async (req, res) => {
       }
     });
 
-    // Fetch expenses for trend - Try different column names
+    // Fetch expenses for trend - USE YOUR ORIGINAL COLUMN
     try {
       const expenseTrendRes = await query(`
         SELECT 
-          TO_CHAR(COALESCE(expense_date, date, created_at), 'YYYY-MM') as month,
+          TO_CHAR(date, 'YYYY-MM') as month,
           COALESCE(SUM(amount), 0) as total
         FROM expenses
-        WHERE (EXTRACT(YEAR FROM COALESCE(expense_date, date, created_at)) = $1 AND EXTRACT(MONTH FROM COALESCE(expense_date, date, created_at)) >= $2)
-           OR EXTRACT(YEAR FROM COALESCE(expense_date, date, created_at)) < $1
-        GROUP BY TO_CHAR(COALESCE(expense_date, date, created_at), 'YYYY-MM')
+        WHERE (EXTRACT(YEAR FROM date) = $1 AND EXTRACT(MONTH FROM date) >= $2)
+           OR EXTRACT(YEAR FROM date) < $1
+        GROUP BY TO_CHAR(date, 'YYYY-MM')
       `, [currentYear, currentMonth]);
 
       expenseTrendRes.rows.forEach(r => {
@@ -125,7 +123,7 @@ router.get('/', async (req, res) => {
         }
       });
     } catch (e) {
-      console.error('Expense trend query error:', e.message);
+      // Ignore expense trend errors
     }
 
     const trend = Object.values(trendMap)
@@ -137,45 +135,51 @@ router.get('/', async (req, res) => {
         net: (t.monthly + t.occasional) - t.expense
       }));
 
-    // 8. Daily & Weekly expenses - Try different column names
-    let daily = [], weekly = [];
+    // 8. Daily expenses - USE YOUR ORIGINAL COLUMN
+    let daily = [];
     try {
       const dailyRes = await query(`
-        SELECT TO_CHAR(COALESCE(expense_date, date, created_at), 'YYYY-MM-DD') as day, COALESCE(SUM(amount), 0) as total 
+        SELECT TO_CHAR(date, 'YYYY-MM-DD') as day, COALESCE(SUM(amount), 0) as total 
         FROM expenses 
-        WHERE COALESCE(expense_date, date, created_at) >= CURRENT_DATE - INTERVAL '14 days' 
-        GROUP BY COALESCE(expense_date, date, created_at) 
-        ORDER BY COALESCE(expense_date, date, created_at)
+        WHERE date >= CURRENT_DATE - INTERVAL '14 days' 
+        GROUP BY date 
+        ORDER BY date
       `);
       daily = dailyRes.rows.map(r => ({ day: r.day, total: parseFloat(r.total) || 0 }));
-      
+    } catch (e) {
+      daily = [];
+    }
+
+    // 9. Weekly expenses - USE YOUR ORIGINAL COLUMN
+    let weekly = [];
+    try {
       const weeklyRes = await query(`
-        SELECT DATE_TRUNC('week', COALESCE(expense_date, date, created_at))::date as week, COALESCE(SUM(amount), 0) as total 
+        SELECT DATE_TRUNC('week', date)::date as week, COALESCE(SUM(amount), 0) as total 
         FROM expenses 
-        WHERE COALESCE(expense_date, date, created_at) >= CURRENT_DATE - INTERVAL '8 weeks' 
-        GROUP BY DATE_TRUNC('week', COALESCE(expense_date, date, created_at)) 
-        ORDER BY DATE_TRUNC('week', COALESCE(expense_date, date, created_at))
+        WHERE date >= CURRENT_DATE - INTERVAL '8 weeks' 
+        GROUP BY DATE_TRUNC('week', date) 
+        ORDER BY DATE_TRUNC('week', date)
       `);
       weekly = weeklyRes.rows.map(r => ({ week: r.week, total: parseFloat(r.total) || 0 }));
     } catch (e) {
-      console.error('Daily/Weekly expense query error:', e.message);
+      weekly = [];
     }
 
-    // 9. Spending by Category
+    // 10. Spending by Category - USE YOUR ORIGINAL COLUMN
     let categories = [];
     try {
       const catRes = await query(`
         SELECT c.name, COALESCE(SUM(e.amount), 0) AS total 
         FROM expenses e 
         LEFT JOIN categories c ON e.category_id = c.id 
-        WHERE EXTRACT(YEAR FROM COALESCE(e.expense_date, e.date, e.created_at)) = $1 
-        AND EXTRACT(MONTH FROM COALESCE(e.expense_date, e.date, e.created_at)) = $2 
+        WHERE EXTRACT(YEAR FROM e.date) = $1 
+        AND EXTRACT(MONTH FROM e.date) = $2 
         GROUP BY c.name 
         ORDER BY total DESC
       `, [currentYear, currentMonth]);
       categories = catRes.rows.map(r => ({ name: r.name || 'Uncategorized', total: parseFloat(r.total) || 0 }));
     } catch (e) {
-      console.error('Category query error:', e.message);
+      categories = [];
     }
 
     res.json({
