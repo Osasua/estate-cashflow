@@ -125,4 +125,35 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET monthly expense breakdown
+router.get('/monthly-breakdown', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'startDate and endDate are required' });
+    }
+
+    const expenseBreakdown = await query(`
+      SELECT c.name, COALESCE(SUM(e.amount), 0) AS total
+      FROM expenses e
+      LEFT JOIN categories c ON e.category_id = c.id
+      WHERE e.date >= $1::date AND e.date <= $2::date
+      GROUP BY c.name
+      ORDER BY total DESC
+    `, [startDate, endDate]);
+
+    res.json({
+      expense_breakdown: expenseBreakdown.rows.map(r => ({
+        name: r.name || 'Uncategorized',
+        total: parseFloat(r.total) || 0
+      }))
+    });
+
+  } catch (err) {
+    console.error('Monthly breakdown error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
