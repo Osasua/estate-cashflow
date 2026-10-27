@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { naira, fmtDate } from '../format';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
+  PieChart, Pie, Cell, Legend,
+} from 'recharts';
+import { KPICard, ChartPanel, CustomTooltip, COLORS as DASH_COLORS } from '../components/dashboard/shared';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -39,6 +44,7 @@ export default function Expenses() {
   });
   const [loading, setLoading] = useState(false);
   const [fundFilter, setFundFilter] = useState('all');
+  const [range, setRange] = useState([]);
   const [message, setMessage] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -62,8 +68,17 @@ export default function Expenses() {
 
   const loadExpenses = async () => {
     try {
-      const data = await api(`/expenses?month=${month}&year=${year}`);
+      const pad = (n) => String(n).padStart(2, '0');
+      const startD = new Date(year, month - 6, 1);
+      const endD = new Date(year, month, 0);
+      const from = `${startD.getFullYear()}-${pad(startD.getMonth() + 1)}-${pad(startD.getDate())}`;
+      const to = `${endD.getFullYear()}-${pad(endD.getMonth() + 1)}-${pad(endD.getDate())}`;
+      const [data, rangeData] = await Promise.all([
+        api(`/expenses?month=${month}&year=${year}`),
+        api(`/expenses?from=${from}&to=${to}`),
+      ]);
       setExpenses(data.expenses || []);
+      setRange(rangeData.expenses || []);
     } catch (e) {
       setMessage(e.message);
     }
@@ -174,6 +189,31 @@ export default function Expenses() {
     ? expenses
     : expenses.filter((e) => (e.type || 'monthly') === fundFilter);
   const totalSpent = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+
+  // --- analytics (client-side, honouring the fund filter) ---
+  const inFund = (r) => fundFilter === 'all' || (r.type || 'monthly') === fundFilter;
+  const trendData = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(year, month - 1 - (5 - i), 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const total = range
+      .filter((r) => (r.spent_on || '').slice(0, 7) === key && inFund(r))
+      .reduce((s2, r) => s2 + Number(r.amount), 0);
+    return { short: d.toLocaleDateString('en-US', { month: 'short' }), total };
+  });
+  const prevTotal = trendData.length > 1 ? trendData[trendData.length - 2].total : 0;
+  const prevLabel = (() => {
+    const d = new Date(year, month - 2, 1);
+    return d.toLocaleDateString('en-US', { month: 'short' });
+  })();
+  const catData = Object.entries(
+    filteredExpenses.reduce((m2, e) => {
+      const k = e.category || 'Uncategorized';
+      m2[k] = (m2[k] || 0) + Number(e.amount);
+      return m2;
+    }, {})
+  ).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
+  const topCat = catData[0] || null;
+  const avgPerTxn = filteredExpenses.length ? totalSpent / filteredExpenses.length : 0;
   const totalPages = Math.ceil(filteredExpenses.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
@@ -216,15 +256,107 @@ export default function Expenses() {
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-        <div style={kpiStyle('#ef4444')}>
-          <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Total Spent ({MONTHS[month - 1]} {year})</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#111827' }}>{naira(totalSpent)}</div>
-        </div>
-        <div style={kpiStyle('#10b981')}>
-          <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Total Transactions</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#111827' }}>{filteredExpenses.length}</div>
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+        <KPICard
+          title="Total Spent"
+          value={naira(totalSpent)}
+          subtitle={`${MONTHS[month - 1]} ${year}${fundFilter !== 'all' ? ` · ${FUND_LABEL[fundFilter]}` : ''} · vs ${naira(prevTotal)} in ${prevLabel}`}
+          color="rose"
+          icon="💰"
+        />
+        <KPICard
+          title="Transactions"
+          value={filteredExpenses.length}
+          subtitle={`receipts in ${MONTHS[month - 1]} ${year}`}
+          color="emerald"
+          icon="🧾"
+        />
+        <KPICard
+          title="Avg per Transaction"
+          value={naira(avgPerTxn)}
+          subtitle="mean receipt value"
+          color="indigo"
+          icon="📊"
+        />
+        <KPICard
+          title="Top Category"
+          value={topCat ? topCat.name : '—'}
+          subtitle={topCat ? `${naira(topCat.total)} · ${(totalSpent > 0 ? ((topCat.total / totalSpent) * 100).toFixed(0) : 0)}% of spend` : 'no expenses this month'}
+          color="amber"
+          icon="🏷️"
+        />
+      </div>
+
+      {/* Analytics charts */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+        <ChartPanel
+          title="Spending Trend"
+          subtitle={`Last 6 months${fundFilter !== 'all' ? ` · ${FUND_LABEL[fundFilter]} fund` : ''}`}
+        >
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={trendData} margin={{ top: 20, right: 30, left: 0, bottom: 40 }}>
+              <defs>
+                <linearGradient id="expTrendGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#f43f5e" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#ef4444" stopOpacity={0.8} />
+                </linearGradient>
+                <filter id="expTrendShadow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#ef4444" floodOpacity="0.3"/>
+                </filter>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+              <XAxis
+                dataKey="short"
+                tick={{ fontSize: 13, fill: '#6b7280', fontWeight: '700' }}
+                axisLine={false}
+                tickLine={false}
+                interval={0}
+                angle={-45}
+                textAnchor="end"
+                height={50}
+              />
+              <YAxis tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: '600' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(239, 68, 68, 0.08)', radius: 8 }} />
+              <Bar dataKey="total" name="Spent" radius={[16, 16, 8, 8]} maxBarSize={70} animationDuration={1200} animationEasing="ease-out">
+                {trendData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill="url(#expTrendGrad)" filter="url(#expTrendShadow)" />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartPanel>
+
+        <ChartPanel
+          title="Spending by Category"
+          subtitle={`${MONTHS[month - 1]} ${year}${fundFilter !== 'all' ? ` · ${FUND_LABEL[fundFilter]} fund` : ''}`}
+        >
+          {catData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <PieChart>
+                <Pie
+                  data={catData}
+                  dataKey="total"
+                  nameKey="name"
+                  cx="45%"
+                  cy="50%"
+                  innerRadius={75}
+                  outerRadius={110}
+                  paddingAngle={3}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {catData.map((_, i) => <Cell key={i} fill={DASH_COLORS[i % DASH_COLORS.length]} />)}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12, fontWeight: '500' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: '1rem' }}>
+              No expenses recorded this month
+            </div>
+          )}
+        </ChartPanel>
       </div>
 
       {/* Form */}
