@@ -19,6 +19,13 @@ const FUND_TYPES = [
   { key: 'welfare', label: 'Welfare' },
 ];
 const FUND_LABEL = FUND_TYPES.reduce((m, t) => ({ ...m, [t.key]: t.label }), {});
+const FUND_GRADIENTS = {
+  monthly: ['#6366f1', '#8b5cf6'],
+  float: ['#06b6d4', '#3b82f6'],
+  projects: ['#a855f7', '#6366f1'],
+  'end-of-year': ['#f59e0b', '#fbbf24'],
+  welfare: ['#10b981', '#22c55e'],
+};
 const FUND_COLORS = {
   monthly: { bg: '#eef2ff', text: '#4f46e5' },
   float: { bg: '#ecfeff', text: '#0891b2' },
@@ -219,6 +226,22 @@ export default function Expenses() {
   const endIndex = startIndex + itemsPerPage;
   const paginatedExpenses = filteredExpenses.slice(startIndex, endIndex);
 
+  // The form wears the colour of the fund it will charge
+  const accent = FUND_COLORS[form.type] || FUND_COLORS.monthly;
+  const accentGrad = FUND_GRADIENTS[form.type] || FUND_GRADIENTS.monthly;
+  const fieldBase = {
+    width: '100%', padding: '10px 12px', border: '1px solid #d1d5db',
+    borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box',
+    background: '#fff', transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+  };
+  const focusOn = (e) => { e.target.style.borderColor = accent.text; e.target.style.boxShadow = `0 0 0 3px ${accent.text}22`; };
+  const focusOff = (e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = 'none'; };
+  const FieldLabel = ({ icon, children }) => (
+    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', fontWeight: '600', color: '#374151', fontSize: '0.85rem' }}>
+      <span style={{ fontSize: '0.95rem' }}>{icon}</span>{children}
+    </label>
+  );
+
   const kpiStyle = (color) => ({
     background: '#fff',
     padding: '20px 24px',
@@ -359,11 +382,19 @@ export default function Expenses() {
         </ChartPanel>
       </div>
 
-      {/* Form */}
-      <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', padding: '24px', marginBottom: '24px' }}>
-        <h2 style={{ margin: '0 0 20px 0', fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>
-          {editingId ? 'Edit Expense' : 'Record New Expense'}
-        </h2>
+      {/* Form — accented by the selected fund */}
+      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', borderTop: `4px solid ${accent.text}`, padding: '24px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+          <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: accent.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem' }}>🧾</div>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>
+              {editingId ? 'Edit Expense' : 'Record New Expense'}
+            </h2>
+            <p style={{ margin: '2px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
+              Charged to <strong style={{ color: accent.text }}>{FUND_LABEL[form.type] || form.type}</strong> — the form wears the fund's colour
+            </p>
+          </div>
+        </div>
 
         {message && (
           <div style={{
@@ -381,42 +412,45 @@ export default function Expenses() {
         <form onSubmit={handleSubmit}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '16px' }}>
             <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151', fontSize: '0.875rem' }}>Date</label>
-              <input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }} />
+              <FieldLabel icon="📅">Date</FieldLabel>
+              <input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} onFocus={focusOn} onBlur={focusOff} style={fieldBase} />
             </div>
             <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151', fontSize: '0.875rem' }}>Category</label>
-              <select required value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }}>
+              <FieldLabel icon="🏷️">Category</FieldLabel>
+              <select required value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} onFocus={focusOn} onBlur={focusOff} style={fieldBase}>
                 <option value="">Select category</option>
                 {categories.filter(c => c.is_active !== false).map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
               </select>
             </div>
             <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151', fontSize: '0.875rem' }}>Funded From</label>
-              <select required value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }}>
+              <FieldLabel icon="🏦">Funded From</FieldLabel>
+              <select required value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} onFocus={focusOn} onBlur={focusOff} style={{ ...fieldBase, borderColor: accent.text, background: accent.bg }}>
                 {FUND_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
               </select>
             </div>
             <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151', fontSize: '0.875rem' }}>Amount</label>
-              <input type="number" required min="1" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0.00" style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }} />
+              <FieldLabel icon="💵">Amount</FieldLabel>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: accent.text, fontWeight: '700', fontSize: '0.95rem', pointerEvents: 'none' }}>₦</span>
+                <input type="number" required min="1" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} onFocus={focusOn} onBlur={focusOff} placeholder="0.00" style={{ ...fieldBase, paddingLeft: '30px', fontWeight: '600' }} />
+              </div>
             </div>
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151', fontSize: '0.875rem' }}>Description</label>
-            <input type="text" required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What was this expense for?" style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }} />
+            <FieldLabel icon="📝">Description</FieldLabel>
+            <input type="text" required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} onFocus={focusOn} onBlur={focusOff} placeholder="What was this expense for?" style={fieldBase} />
           </div>
 
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151', fontSize: '0.875rem' }}>Vendor (Optional)</label>
-            <input type="text" value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} placeholder="Who received the payment?" style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }} />
+            <FieldLabel icon="🤝">Vendor (Optional)</FieldLabel>
+            <input type="text" value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} onFocus={focusOn} onBlur={focusOff} placeholder="Who received the payment?" style={fieldBase} />
           </div>
 
           {!editingId && (
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151', fontSize: '0.875rem' }}>Receipt (Optional)</label>
-              <input type="file" accept="image/*,.pdf" onChange={(e) => setForm({ ...form, receipt: e.target.files[0] })} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }} />
+              <FieldLabel icon="📎">Receipt (Optional)</FieldLabel>
+              <input type="file" accept="image/*,.pdf" onChange={(e) => setForm({ ...form, receipt: e.target.files[0] })} style={{ ...fieldBase, padding: '8px 12px', color: '#6b7280' }} />
             </div>
           )}
 
@@ -426,11 +460,11 @@ export default function Expenses() {
                 setEditingId(null);
                 const firstDay = `${year}-${String(month).padStart(2, '0')}-01`;
                 setForm({ date: firstDay, description: '', vendor: '', category_id: '', amount: '', receipt: null, type: 'monthly' });
-              }} style={{ padding: '8px 24px', background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontWeight: '500', fontSize: '0.875rem' }}>
+              }} style={{ padding: '10px 24px', background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '0.875rem' }}>
                 Cancel
               </button>
             )}
-            <button type="submit" disabled={loading} style={{ padding: '8px 24px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: '500', fontSize: '0.875rem' }}>
+            <button type="submit" disabled={loading} style={{ padding: '10px 24px', background: `linear-gradient(135deg, ${accentGrad[0]} 0%, ${accentGrad[1]} 100%)`, color: 'white', border: 'none', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '0.875rem', boxShadow: `0 4px 14px ${accent.text}44`, opacity: loading ? 0.7 : 1 }}>
               {loading ? 'Saving...' : (editingId ? 'Update Expense' : 'Record Expense')}
             </button>
           </div>
