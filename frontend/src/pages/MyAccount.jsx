@@ -7,8 +7,27 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import Skeleton from '../components/Skeleton';
+import Tabs from '../components/Tabs';
 
 const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#64748b', '#84cc16', '#ec4899', '#14b8a6'];
+
+// Same fund tabs as the dashboard, plus an Overview of all funds
+const ACCOUNT_TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'monthly', label: 'Monthly' },
+  { key: 'float', label: 'Float' },
+  { key: 'projects', label: 'Projects' },
+  { key: 'end-of-year', label: 'End of Year' },
+  { key: 'welfare', label: 'Welfare' },
+];
+const TAB_LABEL = ACCOUNT_TABS.reduce((m, t) => ({ ...m, [t.key]: t.label }), {});
+const OCCASION_TABS = ['float', 'projects', 'end-of-year', 'welfare'];
+
+const STATUS_PILL = {
+  paid: { bg: '#dcfce7', color: '#166534', label: '✓ Paid' },
+  partial: { bg: '#fef3c7', color: '#92400e', label: '⚠ Partial' },
+  pending: { bg: '#fee2e2', color: '#991b1b', label: '⏳ Pending' },
+};
 
 export default function MyAccount() {
   const { user } = useAuth();
@@ -16,16 +35,21 @@ export default function MyAccount() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [viewing, setViewing] = useState('this_month');
+  const [tab, setTab] = useState('overview');
 
   useEffect(() => {
     loadData();
-  }, [viewing]);
+  }, [viewing, tab]);
 
   const loadData = async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await api(`/my-account?viewing=${viewing}`);
+      const res = await api(`/my-account?viewing=${viewing}${tab !== 'overview' ? `&type=${encodeURIComponent(tab)}` : ''}`);
+      if (tab !== 'overview' && res?.scope?.type !== tab) {
+        setError('Per-fund account data is not available yet. The backend needs the My Account "?type=" update (see docs/BACKEND_CONTRACT.md).');
+        return;
+      }
       setData(res);
     } catch (err) {
       console.error('Failed to load account data:', err);
@@ -100,6 +124,14 @@ export default function MyAccount() {
   }
 
   const { member, summary, payment_history, contributions_by_type, recent_payments } = data;
+  const occasions = data.occasions || null;
+  const scoped = tab !== 'overview';
+  const isOccasion = OCCASION_TABS.includes(tab);
+  const statusDonut = scoped && occasions ? [
+    { name: 'Paid', value: occasions.filter((o) => o.status === 'paid').length, color: '#22c55e' },
+    { name: 'Partial', value: occasions.filter((o) => o.status === 'partial').length, color: '#f59e0b' },
+    { name: 'Pending', value: occasions.filter((o) => o.status === 'pending').length, color: '#ef4444' },
+  ].filter((d) => d.value > 0) : [];
 
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 24px' }}>
@@ -113,7 +145,11 @@ export default function MyAccount() {
         </p>
       </div>
 
-      {/* Viewing Filter */}
+      {/* Fund tabs — mirror the dashboard */}
+      <Tabs tabs={ACCOUNT_TABS} active={tab} onChange={setTab} />
+
+      {/* Viewing Filter (overview + monthly only) */}
+      {(tab === 'overview' || tab === 'monthly') && (
       <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
         <label style={{ fontSize: '0.9rem', fontWeight: '600', color: '#374151' }}>Viewing:</label>
         <select
@@ -135,6 +171,7 @@ export default function MyAccount() {
           <option value="year_to_date">Year to Date</option>
         </select>
       </div>
+      )}
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '32px' }}>
@@ -146,8 +183,9 @@ export default function MyAccount() {
           borderLeft: '4px solid #6366f1',
           boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
         }}>
-          <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '8px', fontWeight: '500' }}>Total Due</div>
+          <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '8px', fontWeight: '500' }}>{scoped ? `Total Due — ${TAB_LABEL[tab]}` : 'Total Due'}</div>
           <div style={{ fontSize: '2.25rem', fontWeight: '700', color: '#111827' }}>{naira(summary.total_due)}</div>
+          <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '6px' }}>{isOccasion ? 'All-time for this fund' : 'Selected viewing window'}</div>
         </div>
         <div style={{
           background: '#fff',
@@ -157,8 +195,9 @@ export default function MyAccount() {
           borderLeft: '4px solid #22c55e',
           boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
         }}>
-          <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '8px', fontWeight: '500' }}>Total Paid</div>
+          <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '8px', fontWeight: '500' }}>{scoped ? `Total Paid — ${TAB_LABEL[tab]}` : 'Total Paid'}</div>
           <div style={{ fontSize: '2.25rem', fontWeight: '700', color: '#111827' }}>{naira(summary.total_paid)}</div>
+          <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '6px' }}>{isOccasion ? 'All-time for this fund' : 'Selected viewing window'}</div>
         </div>
         <div style={{
           background: '#fff',
@@ -168,13 +207,45 @@ export default function MyAccount() {
           borderLeft: '4px solid #ef4444',
           boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
         }}>
-          <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '8px', fontWeight: '500' }}>Outstanding Balance</div>
+          <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '8px', fontWeight: '500' }}>{scoped ? `Outstanding — ${TAB_LABEL[tab]}` : 'Outstanding Balance'}</div>
           <div style={{ fontSize: '2.25rem', fontWeight: '700', color: '#111827' }}>{naira(summary.outstanding)}</div>
+          <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '6px' }}>{isOccasion ? 'All-time for this fund' : 'Selected viewing window'}</div>
         </div>
       </div>
 
       {/* Charts Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '24px', marginBottom: '32px' }}>
+        {/* Panel A: per-activation bars (occasion funds) or 6-month history */}
+        {isOccasion ? (
+        <div style={{
+          background: '#fff',
+          borderRadius: '16px',
+          border: '1px solid #e5e7eb',
+          padding: '24px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+        }}>
+          <h3 style={{ margin: '0 0 24px 0', fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>
+            Your {TAB_LABEL[tab]} Activations
+          </h3>
+          {occasions && occasions.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={occasions} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                <XAxis dataKey="short" tick={{ fontSize: 12, fill: '#6b7280', fontWeight: '600' }} axisLine={false} tickLine={false} interval={0} />
+                <YAxis tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: '600' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} />
+                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99, 102, 241, 0.08)' }} />
+                <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '13px', fontWeight: '500' }} />
+                <Bar dataKey="due" name="Billed" fill="#6366f1" fillOpacity={0.35} radius={[10, 10, 4, 4]} maxBarSize={60} />
+                <Bar dataKey="paid" name="Paid" fill="#22c55e" radius={[10, 10, 4, 4]} maxBarSize={60} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '320px', color: '#9ca3af', fontSize: '1rem' }}>
+              You have no {TAB_LABEL[tab]} activations yet
+            </div>
+          )}
+        </div>
+        ) : (
         {/* Payment History - ENHANCED */}
         <div style={{
           background: '#fff',
@@ -259,7 +330,48 @@ export default function MyAccount() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+        )}
 
+        {/* Panel B: your status (scoped) or contributions by type (overview) */}
+        {scoped ? (
+        <div style={{
+          background: '#fff',
+          borderRadius: '16px',
+          border: '1px solid #e5e7eb',
+          padding: '24px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+        }}>
+          <h3 style={{ margin: '0 0 24px 0', fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>
+            Your Status — {TAB_LABEL[tab]}
+          </h3>
+          {statusDonut.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <PieChart>
+                <Pie
+                  data={statusDonut}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="45%"
+                  cy="50%"
+                  innerRadius={75}
+                  outerRadius={110}
+                  paddingAngle={3}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {statusDonut.map((d, i) => <Cell key={i} fill={d.color} />)}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12, fontWeight: '500' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '320px', color: '#9ca3af', fontSize: '1rem' }}>
+              No bills for this fund yet
+            </div>
+          )}
+        </div>
+        ) : (
         {/* Contributions by Type */}
         <div style={{
           background: '#fff',
@@ -296,7 +408,53 @@ export default function MyAccount() {
             </div>
           )}
         </div>
+        )}
       </div>
+
+      {/* Per-period bills table (scoped tabs) */}
+      {scoped && occasions && occasions.length > 0 && (
+      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', marginBottom: '32px' }}>
+        <div style={{ padding: '24px 28px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #f9fafb, #ffffff)' }}>
+          <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>
+            {isOccasion ? `${TAB_LABEL[tab]} Activations` : 'Monthly Bills'}
+          </h3>
+          <p style={{ margin: '4px 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>
+            Your bill and payment status per {isOccasion ? 'activation' : 'month'}
+          </p>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f9fafb' }}>
+                <th style={{ padding: '14px 28px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Period</th>
+                <th style={{ padding: '14px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Billed</th>
+                <th style={{ padding: '14px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Paid</th>
+                <th style={{ padding: '14px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Outstanding</th>
+                <th style={{ padding: '14px 28px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Status</th>
+                <th style={{ padding: '14px 28px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Reference</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...occasions].reverse().map((o) => {
+                const pill = STATUS_PILL[o.status] || STATUS_PILL.pending;
+                return (
+                  <tr key={o.period} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '14px 28px', fontSize: '0.95rem', fontWeight: '600', color: '#111827' }}>{o.label}</td>
+                    <td style={{ padding: '14px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#111827', fontVariantNumeric: 'tabular-nums' }}>{naira(o.due)}</td>
+                    <td style={{ padding: '14px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#059669', fontVariantNumeric: 'tabular-nums' }}>{naira(o.paid)}</td>
+                    <td style={{ padding: '14px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: o.outstanding > 0 ? '#e11d48' : '#9ca3af', fontVariantNumeric: 'tabular-nums' }}>{naira(o.outstanding)}</td>
+                    <td style={{ padding: '14px 28px', textAlign: 'center' }}>
+                      <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '600', background: pill.bg, color: pill.color }}>{pill.label}</span>
+                    </td>
+                    <td style={{ padding: '14px 28px', fontSize: '0.9rem', color: '#4b5563' }}>{o.references || <span style={{ color: '#d1d5db' }}>—</span>}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      )}
 
       {/* Recent Payments Table */}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>

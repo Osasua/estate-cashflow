@@ -8,7 +8,19 @@ router.use(authenticate);
 router.get('/', async (req, res) => {
   try {
     const userId = req.user.id;
-    const viewing = req.query.viewing || 'this_month';
+    // Occasional funds report all-time (their activations are sparse);
+    // monthly/overview honour the viewing window as before.
+    const OCCASIONAL = ['float', 'projects', 'end-of-year', 'welfare'];
+    const requestedType = req.query.type;
+    const viewing = (requestedType && OCCASIONAL.includes(requestedType))
+      ? 'all_time'
+      : (req.query.viewing || 'this_month');
+    const type = req.query.type;
+    const ACCOUNT_TYPES = ['monthly', 'float', 'projects', 'end-of-year', 'welfare'];
+    if (type && !ACCOUNT_TYPES.includes(type)) {
+      return res.status(400).json({ error: `Invalid type. Expected one of: ${ACCOUNT_TYPES.join(', ')}` });
+    }
+    const scoped = !!type;
 
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -55,6 +67,8 @@ router.get('/', async (req, res) => {
     let params = [memberId];
 
     switch (viewing) {
+  case 'all_time':
+    break;
   case 'this_month':
     yearFilter = 'AND c.period_year = $2';
     monthFilter = 'AND c.period_month = $3';
@@ -106,6 +120,12 @@ router.get('/', async (req, res) => {
     params.push(currentYear, currentMonth);
 }
 
+    let typeFilter = '';
+    if (scoped) {
+      params.push(type);
+      typeFilter = ` AND c.type = $${params.length}::contribution_type`;
+    }
+
     // ✅ STEP 3: Summary
     const summaryRes = await query(`
       SELECT 
@@ -113,7 +133,7 @@ router.get('/', async (req, res) => {
         COALESCE(SUM(c.amount_paid), 0) AS total_paid,
         COALESCE(SUM(c.amount_due), 0) - COALESCE(SUM(c.amount_paid), 0) AS outstanding
       FROM contributions c
-      WHERE c.member_id = $1 ${yearFilter} ${monthFilter}
+      WHERE c.member_id = $1 ${yearFilter} ${monthFilter}${typeFilter}
     `, params);
 
     const summary = {
@@ -141,9 +161,10 @@ router.get('/', async (req, res) => {
         ON c.member_id = $1
         AND EXTRACT(YEAR FROM m.month_start)::int = c.period_year
         AND EXTRACT(MONTH FROM m.month_start)::int = c.period_month
+        ${scoped ? 'AND c.type = $2::contribution_type' : ''}
       GROUP BY m.month_start
       ORDER BY m.month_start ASC
-    `, [memberId]);
+    `, scoped ? [memberId, type] : [memberId]);
 
     const payment_history = historyRes.rows.map(r => ({
       month: r.month,
@@ -158,7 +179,7 @@ router.get('/', async (req, res) => {
         COALESCE(c.type, 'monthly') AS type,
         SUM(c.amount_paid) AS total
       FROM contributions c
-      WHERE c.member_id = $1 ${yearFilter} ${monthFilter}
+      WHERE c.member_id = $1 ${yearFilter} ${monthFilter}${typeFilter}
       GROUP BY c.type
       ORDER BY total DESC
     `, params);
@@ -184,10 +205,10 @@ router.get('/', async (req, res) => {
           TO_CHAR(make_date(c.period_year, c.period_month, 1), 'Month YYYY') AS period
         FROM payments p
         JOIN contributions c ON p.contribution_id = c.id
-        WHERE c.member_id = $1
+        WHERE c.member_id = $1 ${scoped ? 'AND c.type = $2::contribution_type' : ''}
         ORDER BY p.paid_at DESC
         LIMIT 10
-      `, [memberId]);
+      `, scoped ? [memberId, type] : [memberId]);
     } catch (e) {
       // If payments table structure is different, return empty
       console.warn('Payments query failed:', e.message);
@@ -205,7 +226,36 @@ router.get('/', async (req, res) => {
       type: r.type || 'monthly'
     }));
 
+    // ✅ STEP 7: the member's own activations (scoped tabs only)
+    let occasions = [];
+    if (scoped) {
+      const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const occRes = await query(`
+        SELECT c.period_year, c.period_month, c.amount_due, c.amount_paid, c.note,
+               (SELECT string_agg(p.reference, ', ' ORDER BY p.id)
+                  FROM payments p WHERE p.contribution_id = c.id) AS references
+        FROM contributions c
+        WHERE c.member_id = $1 AND c.type = $2
+        ORDER BY c.period_year ASC, c.period_month ASC
+      `, [memberId, type]);
+      occasions = occRes.rows.map(r => {
+        const due = parseFloat(r.amount_due) || 0;
+        const paid = parseFloat(r.amount_paid) || 0;
+        return {
+          period: `${r.period_year}-${String(r.period_month).padStart(2, '0')}`,
+          label: `${MONTHS[r.period_month - 1]} ${r.period_year}`,
+          short: `${MONTHS[r.period_month - 1].slice(0, 3)} ${String(r.period_year).slice(2)}`,
+          due,
+          paid,
+          outstanding: due - paid,
+          status: due > 0 && paid >= due ? 'paid' : paid > 0 ? 'partial' : 'pending',
+          references: r.references || r.note || null
+        };
+      });
+    }
+
     res.json({
+      ...(scoped ? { scope: { type }, occasions } : {}),
       member: {
         id: member.id,
         house_number: member.house_number,
