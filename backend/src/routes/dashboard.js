@@ -150,7 +150,7 @@ router.get('/', async (req, res) => {
           EXTRACT(MONTH FROM spent_on)::int AS mo,
           SUM(amount) AS total_spent
         FROM expenses
-        WHERE (CAST($2 AS boolean) OR type = CAST($3 AS contribution_type))
+        ${scoped ? 'WHERE type = CAST($2 AS contribution_type)' : ''}
         GROUP BY EXTRACT(YEAR FROM spent_on), EXTRACT(MONTH FROM spent_on)
       )
       SELECT 
@@ -169,7 +169,7 @@ router.get('/', async (req, res) => {
         ON EXTRACT(YEAR FROM m.month_start)::int = e.yr 
         AND EXTRACT(MONTH FROM m.month_start)::int = e.mo
       ORDER BY m.month_start ASC
-    `, [scoped ? type : 'monthly', !scoped, scoped ? type : 'monthly']);
+    `, scoped ? [type, type] : ['monthly']);
 
     const trend = trendRes.rows.map(r => {
       const income = parseFloat(r.income) || 0;
