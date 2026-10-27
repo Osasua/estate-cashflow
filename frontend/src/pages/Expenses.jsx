@@ -258,19 +258,19 @@ export default function Expenses() {
       </h1>
 
       {/* Month/Year Selector */}
-      <div style={{ background: '#fff', padding: '16px 20px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+      <div style={{ background: '#fff', padding: '20px 24px', borderRadius: '16px', border: '1px solid #e5e7eb', borderTop: '4px solid #6366f1', marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
         <div>
-          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>Month</label>
+          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>📅 Month</label>
           <select value={month} onChange={(e) => setMonth(+e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', minWidth: '120px' }}>
             {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
         </div>
         <div>
-          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>Year</label>
+          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>🗓️ Year</label>
           <input type="number" value={year} onChange={(e) => setYear(+e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', width: '90px' }} />
         </div>
         <div>
-          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>Fund</label>
+          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>🏦 Fund</label>
           <select value={fundFilter} onChange={(e) => setFundFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', minWidth: '140px' }}>
             <option value="all">All funds</option>
             {FUND_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
@@ -472,9 +472,15 @@ export default function Expenses() {
       </div>
 
       {/* Table */}
-      <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
-          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', color: '#1f2937' }}>Expenses for {MONTHS[month - 1]} {year}</h2>
+      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', borderTop: '4px solid #6366f1', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #eef2ff, #ffffff)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#ffffff', border: '1px solid #e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>🧾</div>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '600', color: '#111827' }}>Expenses for {MONTHS[month - 1]} {year}</h2>
+            <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#6b7280' }}>
+              {filteredExpenses.length} transaction{filteredExpenses.length === 1 ? '' : 's'} · {naira(totalSpent)}{fundFilter !== 'all' ? ` · ${FUND_LABEL[fundFilter]} fund` : ''}
+            </p>
+          </div>
         </div>
 
         {expenses.length === 0 ? (
@@ -485,26 +491,28 @@ export default function Expenses() {
           <>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead style={{ background: '#f9fafb' }}>
+                <thead style={{ background: '#eef2ff' }}>
                   <tr>
-                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Date</th>
-                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Description</th>
-                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Category</th>
-                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Fund</th>
-                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Vendor</th>
-                    <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Amount</th>
-                    <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '700', color: '#4f46e5', textTransform: 'uppercase' }}>Date</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '700', color: '#4f46e5', textTransform: 'uppercase' }}>Description</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '700', color: '#4f46e5', textTransform: 'uppercase' }}>Category</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '700', color: '#4f46e5', textTransform: 'uppercase' }}>Fund</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '700', color: '#4f46e5', textTransform: 'uppercase' }}>Vendor</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '700', color: '#4f46e5', textTransform: 'uppercase' }}>Amount</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '700', color: '#4f46e5', textTransform: 'uppercase' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedExpenses.map((expense, idx) => {
                     const category = categories.find(c => c.id === expense.category_id);
                     return (
-                      <tr key={expense.id} style={{ borderBottom: idx !== paginatedExpenses.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                      <tr key={expense.id} style={{ borderBottom: idx !== paginatedExpenses.length - 1 ? '1px solid #f3f4f6' : 'none', background: idx % 2 === 1 ? '#f9fafb' : '#fff', transition: 'background 0.15s ease' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = '#eef2ff'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = idx % 2 === 1 ? '#f9fafb' : '#fff'; }}>
                         <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#374151' }}>{fmtDate(expense.spent_on)}</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#1f2937' }}>{expense.description}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#111827', fontWeight: '600' }}>{expense.description}</td>
                         <td style={{ padding: '12px 16px' }}>
-                          <span style={{ display: 'inline-block', padding: '3px 10px', background: '#f3f4f6', color: '#374151', borderRadius: '4px', fontSize: '0.75rem' }}>
+                          <span style={{ display: 'inline-block', padding: '4px 12px', background: DASH_COLORS[(expense.category_id || 0) % DASH_COLORS.length] + '18', color: DASH_COLORS[(expense.category_id || 0) % DASH_COLORS.length], borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600' }}>
                             {category?.name || expense.category_id}
                           </span>
                         </td>
@@ -513,8 +521,8 @@ export default function Expenses() {
                             {FUND_LABEL[expense.type || 'monthly'] || expense.type}
                           </span>
                         </td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#6b7280' }}>{expense.vendor || '-'}</td>
-                        <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.875rem', fontWeight: '500', color: '#1f2937' }}>{naira(expense.amount)}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#9ca3af', fontStyle: 'italic' }}>{expense.vendor || '—'}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.9rem', fontWeight: '700', color: '#e11d48', fontVariantNumeric: 'tabular-nums' }}>{naira(expense.amount)}</td>
                         <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                           <button onClick={() => handleEdit(expense)} style={{ padding: '4px 10px', background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', marginRight: '6px' }}>Edit</button>
                           <button onClick={() => handleDelete(expense.id)} style={{ padding: '4px 10px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}>Delete</button>
