@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import Skeleton from '../components/Skeleton';
+import Tabs from '../components/Tabs';
 
 const ROW_COLORS = [
   { border: '#6366f1', bg: '#eef2ff', text: '#4f46e5' },
@@ -225,15 +226,7 @@ export default function Contributions() {
         </p>
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #e5e7eb' }}>
-        {Object.keys(TAB_TO_TYPE).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} style={{
-            padding: '10px 20px', background: activeTab === tab ? '#6366f1' : 'transparent',
-            color: activeTab === tab ? 'white' : '#6b7280', border: 'none', fontWeight: activeTab === tab ? '600' : '500', cursor: 'pointer',
-            borderRadius: '8px 8px 0 0'
-          }}>{tab}</button>
-        ))}
-      </div>
+      <Tabs tabs={Object.keys(TAB_TO_TYPE)} active={activeTab} onChange={setActiveTab} />
 
       {!isMonthly && (
         <div style={{
