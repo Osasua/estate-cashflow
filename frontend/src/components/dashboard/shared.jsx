@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { naira } from '../../format';
 
 export const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#64748b', '#84cc16', '#ec4899', '#14b8a6'];
@@ -63,16 +63,47 @@ export function EstateChip() {
   );
 }
 
-// KPI Card (identical to the one previously inlined in Dashboard)
-// Value font scales down for long amounts (e.g. ₦1,658,061.25) so digits
-// never spill out of the card on any tab.
-const valueFontSize = (value) => {
-  const len = String(value ?? '').length;
-  if (len <= 11) return '2.25rem';
-  if (len <= 13) return '1.7rem';
-  if (len <= 16) return '1.45rem';
-  return '1.2rem';
-};
+// KPI value that measures itself and shrinks until it fits the card width.
+// No character-count guessing: works for any amount, any viewport, any tab.
+function FitValue({ value }) {
+  const ref = useRef(null);
+  const [size, setSize] = useState(36); // 2.25rem starting point
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const fit = () => {
+      let s = 36;
+      el.style.fontSize = s + 'px';
+      while (s > 16 && el.scrollWidth > el.clientWidth) {
+        s -= 2;
+        el.style.fontSize = s + 'px';
+      }
+      setSize(s);
+    };
+    fit();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(fit);
+    ro.observe(el.parentElement || el);
+    return () => ro.disconnect();
+  }, [value]);
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        fontSize: size + 'px',
+        fontWeight: '700',
+        color: '#111827',
+        lineHeight: 1.1,
+        marginBottom: '8px',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {value}
+    </div>
+  );
+}
 
 export function KPICard({ title, value, subtitle, trend, color, icon }) {
   const colorMap = {
@@ -106,7 +137,7 @@ export function KPICard({ title, value, subtitle, trend, color, icon }) {
           fontSize: '1.25rem'
         }}>{icon}</div>
       </div>
-      <div style={{ fontSize: valueFontSize(value), fontWeight: '700', color: '#111827', lineHeight: 1.1, marginBottom: '8px', overflowWrap: 'break-word' }}>{value}</div>
+      <FitValue value={value} />
       {subtitle && (
         <div style={{ fontSize: '0.85rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px' }}>
           {trend && <span style={{ color: trend > 0 ? '#059669' : '#e11d48', fontWeight: '600' }}>{trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%</span>}
