@@ -17,7 +17,7 @@ app.use(cors({
 
 // Paystack webhook needs the raw request body — mount BEFORE express.json()
 app.use('/api/payments', require('./routes/payments'));
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '6mb' })); // 6mb: chat images ride as base64 JSON
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
@@ -30,6 +30,7 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/minutes', require('./routes/minutes'));
 app.use('/api/board', require('./routes/board'));
+app.use('/api/chat', require('./routes/chat'));
 app.use('/api/resident', require('./routes/resident'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/audit', require('./routes/audit'));

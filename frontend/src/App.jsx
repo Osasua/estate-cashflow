@@ -16,6 +16,7 @@ import Profile from './pages/Profile';
 import Broadcast from './pages/Broadcast';
 import Minutes from './pages/Minutes';
 import Board from './pages/Board';
+import Chat from './pages/Chat';
 
 function Layout({ children }) {
   const { user, logout } = useAuth();
@@ -58,6 +59,9 @@ function Layout({ children }) {
           
           {/* ✅ NEW: Ferrano Board (Everyone) */}
           <NavLink to="/board">Ferrano Board</NavLink>
+          
+          {/* ✅ NEW: Community Chat (Everyone) */}
+          <NavLink to="/chat">Community Chat</NavLink>
           
           {/* 5. My Profile (Everyone, at the bottom) */}
           <NavLink to="/profile">My Profile</NavLink>
@@ -107,6 +111,7 @@ function AppRoutes() {
       {/* ✅ FIXED: Added page() wrapper so the sidebar shows up */}
       <Route path="/minutes" element={page(<Minutes />)} />
       <Route path="/board" element={page(<Board />)} />
+      <Route path="/chat" element={page(<Chat />)} />
     </Routes>
   );
 }
