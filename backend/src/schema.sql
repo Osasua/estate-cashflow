@@ -74,6 +74,7 @@ CREATE INDEX IF NOT EXISTS idx_payments_contribution ON payments(contribution_id
 CREATE TABLE IF NOT EXISTS expenses (
   id SERIAL PRIMARY KEY,
   category_id INTEGER REFERENCES categories(id),
+  type contribution_type NOT NULL DEFAULT 'monthly', -- which contribution fund paid for this
   amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
   description TEXT NOT NULL,
   vendor TEXT,

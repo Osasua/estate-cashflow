@@ -8,6 +8,14 @@ router.use(authenticate);
 router.get('/summary', staff, async (req, res) => {
   try {
     const { startDate, endDate, category_id } = req.query;
+    const type = req.query.type;
+    const FUND_TYPES = ['monthly', 'float', 'projects', 'end-of-year', 'welfare'];
+    if (type && !FUND_TYPES.includes(type)) {
+      return res.status(400).json({ error: `Invalid type. Expected one of: ${FUND_TYPES.join(', ')}` });
+    }
+    const scoped = !!type;
+    // fund filter fragment; $n is filled per-query below
+    const fundFrag = (n, alias) => ` AND ${alias ? alias + '.' : ''}type = $${n}::contribution_type`;
     
     const now = new Date();
     const start = startDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
@@ -35,20 +43,21 @@ router.get('/summary', staff, async (req, res) => {
         COALESCE((
           SELECT SUM(amount_paid) 
           FROM contributions 
-          WHERE (period_year < $1) OR (period_year = $1 AND period_month < $2)
+          WHERE ((period_year < $1) OR (period_year = $1 AND period_month < $2))${scoped ? fundFrag(4) : ''}
         ), 0) -
         COALESCE((
           SELECT SUM(amount) 
           FROM expenses 
-          WHERE spent_on < $3::date
+          WHERE (spent_on < $3::date)${scoped ? fundFrag(4) : ''}
         ), 0) AS balance
-    `, [startYear, startMonth, start]);
+    `, scoped ? [startYear, startMonth, start, type] : [startYear, startMonth, start]);
 
     const calculatedOpening = parseFloat(calculatedOpeningRes.rows[0].balance) || 0;
     console.log('Calculated Opening:', calculatedOpening);
 
     // ✅ CRITICAL FIX: Add estate opening to calculated opening
-    const openingBalance = estateOpening + calculatedOpening;
+    // (fund-scoped reports exclude the estate opening: it belongs to no fund)
+    const openingBalance = scoped ? calculatedOpening : estateOpening + calculatedOpening;
     console.log('Final Opening Balance:', openingBalance);
 
     // Total Received
@@ -59,7 +68,8 @@ router.get('/summary', staff, async (req, res) => {
         ((period_year > $1) OR (period_year = $1 AND period_month >= $2))
         AND 
         ((period_year < $3) OR (period_year = $3 AND period_month <= $4))
-    `, [startYear, startMonth, endYear, endMonth]);
+        ${scoped ? fundFrag(5) : ''}
+    `, scoped ? [startYear, startMonth, endYear, endMonth, type] : [startYear, startMonth, endYear, endMonth]);
 
     const totalReceived = parseFloat(totalReceivedRes.rows[0].total) || 0;
     console.log('Total Received:', totalReceived);
@@ -75,6 +85,10 @@ router.get('/summary', staff, async (req, res) => {
       expenseQuery += ` AND category_id = $3`;
       expenseParams.push(category_id);
     }
+    if (scoped) {
+      expenseParams.push(type);
+      expenseQuery += fundFrag(expenseParams.length);
+    }
     const totalExpensesRes = await query(expenseQuery, expenseParams);
     const totalExpenses = parseFloat(totalExpensesRes.rows[0].total) || 0;
     console.log('Total Expenses:', totalExpenses);
@@ -85,17 +99,17 @@ router.get('/summary', staff, async (req, res) => {
         COALESCE((
           SELECT SUM(amount_paid) 
           FROM contributions 
-          WHERE (period_year < $1) OR (period_year = $1 AND period_month <= $2)
+          WHERE ((period_year < $1) OR (period_year = $1 AND period_month <= $2))${scoped ? fundFrag(4) : ''}
         ), 0) -
         COALESCE((
           SELECT SUM(amount) 
           FROM expenses 
-          WHERE spent_on <= $3::date
+          WHERE (spent_on <= $3::date)${scoped ? fundFrag(4) : ''}
         ), 0) AS balance
-    `, [endYear, endMonth, end]);
+    `, scoped ? [endYear, endMonth, end, type] : [endYear, endMonth, end]);
 
     const calculatedClosing = parseFloat(closingBalanceRes.rows[0].balance) || 0;
-    const closingBalance = estateOpening + calculatedClosing;
+    const closingBalance = scoped ? calculatedClosing : estateOpening + calculatedClosing;
     console.log('Final Closing Balance:', closingBalance);
     console.log('=== END DEBUG ===');
 
@@ -114,6 +128,10 @@ router.get('/summary', staff, async (req, res) => {
       breakdownQuery += ` AND e.category_id = $3`;
       breakdownParams.push(category_id);
     }
+    if (scoped) {
+      breakdownParams.push(type);
+      breakdownQuery += fundFrag(breakdownParams.length, 'e');
+    }
     breakdownQuery += ` GROUP BY c.name ORDER BY total DESC`;
     const breakdownRes = await query(breakdownQuery, breakdownParams);
 
@@ -130,6 +148,10 @@ router.get('/summary', staff, async (req, res) => {
     if (category_id) {
       dailyTrendQuery += ` AND category_id = $3`;
       dailyTrendParams.push(category_id);
+    }
+    if (scoped) {
+      dailyTrendParams.push(type);
+      dailyTrendQuery += fundFrag(dailyTrendParams.length);
     }
     dailyTrendQuery += ` GROUP BY spent_on ORDER BY spent_on ASC`;
     const dailyTrendRes = await query(dailyTrendQuery, dailyTrendParams);
@@ -148,6 +170,10 @@ router.get('/summary', staff, async (req, res) => {
       topExpensesQuery += ` AND e.category_id = $3`;
       topExpensesParams.push(category_id);
     }
+    if (scoped) {
+      topExpensesParams.push(type);
+      topExpensesQuery += fundFrag(topExpensesParams.length, 'e');
+    }
     topExpensesQuery += ` ORDER BY e.amount DESC LIMIT 10`;
     const topExpensesRes = await query(topExpensesQuery, topExpensesParams);
 
@@ -160,8 +186,8 @@ router.get('/summary', staff, async (req, res) => {
         total_received: totalReceived,
         total_expenses: totalExpenses,
         closing_balance: closingBalance,
-        estate_opening_balance: estateOpening,
-        estate_effective_date: estateEffectiveDate
+        estate_opening_balance: scoped ? null : estateOpening,
+        estate_effective_date: scoped ? null : estateEffectiveDate
       },
       expense_breakdown: breakdownRes.rows.map(r => ({
         name: r.name,
@@ -185,7 +211,8 @@ router.get('/summary', staff, async (req, res) => {
       filters: {
         start_date: start,
         end_date: end,
-        category_id: category_id || null
+        category_id: category_id || null,
+        type: scoped ? type : null
       }
     });
 

@@ -8,6 +8,10 @@ const fs = require('fs');
 const router = express.Router();
 router.use(authenticate);
 
+// Contribution funds an expense can be charged to (mirrors dashboard tabs)
+const EXPENSE_TYPES = ['monthly', 'float', 'projects', 'end-of-year', 'welfare'];
+const validType = (t) => t === undefined || t === null || t === '' || EXPENSE_TYPES.includes(t);
+
 // --- MULTER CONFIGURATION FOR RECEIPTS ---
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -29,7 +33,7 @@ const upload = multer({
 
 // --- EXPENSE ROUTES (WITH MONTH/YEAR FILTERING) ---
 router.get('/', async (req, res) => {
-  const { month, year, from, to, category_id } = req.query;
+  const { month, year, from, to, category_id, type } = req.query;
   const where = [];
   const params = [];
   
@@ -43,15 +47,20 @@ router.get('/', async (req, res) => {
   if (from) { params.push(from); where.push(`e.spent_on >= $${params.length}`); }
   if (to) { params.push(to); where.push(`e.spent_on <= $${params.length}`); }
   if (category_id) { params.push(category_id); where.push(`e.category_id = $${params.length}`); }
+  if (type) { params.push(type); where.push(`e.type = $${params.length}::contribution_type`); }
   
-  const { rows } = await query(
-    `SELECT e.*, c.name AS category
+  const sql = `SELECT e.*, c.name AS category
        FROM expenses e LEFT JOIN categories c ON c.id = e.category_id
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-      ORDER BY e.spent_on DESC, e.id DESC`,
-    params
-  );
-  res.json({ expenses: rows });
+      ORDER BY e.spent_on DESC, e.id DESC`;
+
+  try {
+    const { rows } = await query(sql, params);
+    res.json({ expenses: rows });
+  } catch (err) {
+    console.error('GET expenses error:', err.message, '| SQL:', sql, '| params:', params);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- CATEGORY ROUTES ---
@@ -120,7 +129,7 @@ router.put('/categories/:id', staff, async (req, res) => {
 
 // --- EXPENSE CREATION ---
 router.post('/', staff, upload.single('receipt'), async (req, res) => {
-  const { category_id, amount, description, vendor, date, spent_on } = req.body || {};
+  const { category_id, amount, description, vendor, date, spent_on, type } = req.body || {};
   const amt = Number(amount);
   
   const expenseDate = date || spent_on || new Date().toISOString().split('T')[0];
@@ -129,14 +138,19 @@ router.post('/', staff, upload.single('receipt'), async (req, res) => {
     return res.status(400).json({ error: 'A positive amount and a description are required' });
   }
 
+  const fundType = type || 'monthly';
+  if (!EXPENSE_TYPES.includes(fundType)) {
+    return res.status(400).json({ error: `Invalid type. Expected one of: ${EXPENSE_TYPES.join(', ')}` });
+  }
+
   const receiptUrl = req.file 
     ? `/uploads/${req.file.filename}`
     : (req.body.receipt_url || null);
 
   const { rows } = await query(
-    `INSERT INTO expenses (category_id, amount, description, vendor, spent_on, receipt_url, recorded_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [category_id || null, amt, description, vendor || null, expenseDate, receiptUrl, req.user.id]
+    `INSERT INTO expenses (category_id, type, amount, description, vendor, spent_on, receipt_url, recorded_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [category_id || null, fundType, amt, description, vendor || null, expenseDate, receiptUrl, req.user.id]
   );
   
   res.status(201).json({ expense: rows[0], message: 'Expense recorded successfully' });
@@ -144,10 +158,14 @@ router.post('/', staff, upload.single('receipt'), async (req, res) => {
 
 // --- EXPENSE UPDATE (WITH FULL FIELD SUPPORT) ---
 router.put('/:id', staff, async (req, res) => {
-  const { category_id, amount, description, vendor, spent_on, receipt_url } = req.body || {};
+  const { category_id, amount, description, vendor, spent_on, receipt_url, type } = req.body || {};
   
   const old = await query('SELECT * FROM expenses WHERE id = $1', [req.params.id]);
   if (!old.rows[0]) return res.status(404).json({ error: 'Expense not found' });
+
+  if (type !== undefined && !EXPENSE_TYPES.includes(type)) {
+    return res.status(400).json({ error: `Invalid type. Expected one of: ${EXPENSE_TYPES.join(', ')}` });
+  }
   
   const { rows } = await query(
     `UPDATE expenses SET 
@@ -156,9 +174,10 @@ router.put('/:id', staff, async (req, res) => {
        description = COALESCE($4, description),
        vendor = COALESCE($5, vendor), 
        spent_on = COALESCE($6, spent_on),
-       receipt_url = COALESCE($7, receipt_url)
+       receipt_url = COALESCE($7, receipt_url),
+       type = COALESCE($8, type)
      WHERE id = $1 RETURNING *`,
-    [req.params.id, category_id, amount ? Number(amount) : null, description, vendor, spent_on, receipt_url]
+    [req.params.id, category_id, amount ? Number(amount) : null, description, vendor, spent_on, receipt_url, type || null]
   );
   
   res.json({ expense: rows[0], message: 'Expense updated successfully' });

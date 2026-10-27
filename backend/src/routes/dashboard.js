@@ -52,6 +52,7 @@ router.get('/', async (req, res) => {
           FROM expenses 
           WHERE EXTRACT(YEAR FROM spent_on) = $1 
             AND EXTRACT(MONTH FROM spent_on) = $2
+            AND type = $3
         ), 0) AS month_expense,
         
         COALESCE((
@@ -149,6 +150,7 @@ router.get('/', async (req, res) => {
           EXTRACT(MONTH FROM spent_on)::int AS mo,
           SUM(amount) AS total_spent
         FROM expenses
+        WHERE (CAST($2 AS boolean) OR type = CAST($3 AS contribution_type))
         GROUP BY EXTRACT(YEAR FROM spent_on), EXTRACT(MONTH FROM spent_on)
       )
       SELECT 
@@ -167,7 +169,7 @@ router.get('/', async (req, res) => {
         ON EXTRACT(YEAR FROM m.month_start)::int = e.yr 
         AND EXTRACT(MONTH FROM m.month_start)::int = e.mo
       ORDER BY m.month_start ASC
-    `, [scoped ? type : 'monthly']);
+    `, [scoped ? type : 'monthly', !scoped, scoped ? type : 'monthly']);
 
     const trend = trendRes.rows.map(r => {
       const income = parseFloat(r.income) || 0;
@@ -191,9 +193,9 @@ router.get('/', async (req, res) => {
     // 3. Daily Expenses
     const dailyRes = await query(`
       SELECT TO_CHAR(spent_on, 'DD Mon') AS day, COALESCE(SUM(amount), 0) AS total
-      FROM expenses WHERE spent_on >= CURRENT_DATE - INTERVAL '13 days'
+      FROM expenses WHERE spent_on >= CURRENT_DATE - INTERVAL '13 days' ${scoped ? 'AND type = $1' : ''}
       GROUP BY spent_on ORDER BY spent_on ASC
-    `);
+    `, scoped ? [type] : []);
     const daily = dailyRes.rows.map(r => ({ day: r.day, total: parseFloat(r.total) || 0 }));
 
     // 4. Weekly Expenses
@@ -207,27 +209,41 @@ router.get('/', async (req, res) => {
         'Wk ' || EXTRACT(WEEK FROM w.week_start)::text AS week,
         COALESCE(SUM(e.amount), 0) AS total
       FROM weeks w
-      LEFT JOIN expenses e ON DATE_TRUNC('week', e.spent_on) = w.week_start
+      LEFT JOIN expenses e ON DATE_TRUNC('week', e.spent_on) = w.week_start ${scoped ? 'AND e.type = $1' : ''}
       GROUP BY w.week_start
       ORDER BY w.week_start ASC
-    `);
+    `, scoped ? [type] : []);
     const weekly = weeklyRes.rows.map(r => ({ week: r.week, total: parseFloat(r.total) || 0 }));
 
     // 5. Categories
     const categoriesRes = await query(`
       SELECT COALESCE(c.name, 'Uncategorized') AS name, COALESCE(SUM(e.amount), 0) AS total
       FROM expenses e LEFT JOIN categories c ON e.category_id = c.id
-      WHERE EXTRACT(YEAR FROM e.spent_on) = $1 AND EXTRACT(MONTH FROM e.spent_on) = $2
+      WHERE EXTRACT(YEAR FROM e.spent_on) = $1 AND EXTRACT(MONTH FROM e.spent_on) = $2 ${scoped ? 'AND e.type = $3' : ''}
       GROUP BY c.name ORDER BY total DESC
-    `, [currentYear, currentMonth]);
+    `, scoped ? [currentYear, currentMonth, type] : [currentYear, currentMonth]);
     const categories = categoriesRes.rows.map(r => ({ name: r.name, total: parseFloat(r.total) || 0 }));
+
+    // 6. Collections by fund (same 6-month window as the trend) — Overview only
+    let funds = [];
+    if (!scoped) {
+      const fundsRes = await query(`
+        SELECT type::text AS key, COALESCE(SUM(amount_paid), 0) AS total
+        FROM contributions
+        WHERE (period_year * 12 + period_month) BETWEEN ($1 * 12 + $2) - 5 AND ($1 * 12 + $2)
+        GROUP BY type
+        HAVING COALESCE(SUM(amount_paid), 0) > 0
+        ORDER BY total DESC
+      `, [currentYear, currentMonth]);
+      funds = fundsRes.rows.map(r => ({ key: r.key, total: parseFloat(r.total) || 0 }));
+    }
 
     if (scoped) {
       // Scope echo: the frontend relies on this to refuse displaying
       // estate-wide aggregates as if they were type-scoped.
       return res.json({ scope: { type }, kpis, trend, daily, weekly, categories });
     }
-    res.json({ kpis, trend, daily, weekly, categories });
+    res.json({ kpis, trend, daily, weekly, categories, funds });
   } catch (err) {
     console.error('Dashboard error:', err);
     res.status(500).json({ error: err.message });
