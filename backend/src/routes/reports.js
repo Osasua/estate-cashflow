@@ -56,8 +56,11 @@ router.get('/summary', staff, async (req, res) => {
     console.log('Calculated Opening:', calculatedOpening);
 
     // ✅ CRITICAL FIX: Add estate opening to calculated opening
-    // (fund-scoped reports exclude the estate opening: it belongs to no fund)
-    const openingBalance = scoped ? calculatedOpening : estateOpening + calculatedOpening;
+    // Fund-scoped reports exclude the estate opening (it belongs to no fund),
+    // EXCEPT Monthly — the estate's general fund: the opening cash originated
+    // from monthly contributions, so Monthly carries it (estate decision).
+    const carriesEstateOpening = !scoped || type === 'monthly';
+    const openingBalance = carriesEstateOpening ? estateOpening + calculatedOpening : calculatedOpening;
     console.log('Final Opening Balance:', openingBalance);
 
     // Total Received
@@ -109,7 +112,7 @@ router.get('/summary', staff, async (req, res) => {
     `, scoped ? [endYear, endMonth, end, type] : [endYear, endMonth, end]);
 
     const calculatedClosing = parseFloat(closingBalanceRes.rows[0].balance) || 0;
-    const closingBalance = scoped ? calculatedClosing : estateOpening + calculatedClosing;
+    const closingBalance = carriesEstateOpening ? estateOpening + calculatedClosing : calculatedClosing;
     console.log('Final Closing Balance:', closingBalance);
     console.log('=== END DEBUG ===');
 
@@ -186,8 +189,8 @@ router.get('/summary', staff, async (req, res) => {
         total_received: totalReceived,
         total_expenses: totalExpenses,
         closing_balance: closingBalance,
-        estate_opening_balance: scoped ? null : estateOpening,
-        estate_effective_date: scoped ? null : estateEffectiveDate
+        estate_opening_balance: (scoped && type !== 'monthly') ? null : estateOpening,
+        estate_effective_date: (scoped && type !== 'monthly') ? null : estateEffectiveDate
       },
       expense_breakdown: breakdownRes.rows.map(r => ({
         name: r.name,

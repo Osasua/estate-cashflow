@@ -293,7 +293,7 @@ const handleSaveOpeningBalance = async () => {
       </div>
 
 {/* Estate Opening Balance Card — estate-level, hidden on fund-scoped reports */}
-{!filters.type && (
+{(!filters.type || filters.type === 'monthly') && (
 <div style={{
   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
   borderRadius: '16px',
