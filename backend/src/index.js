@@ -29,6 +29,7 @@ app.use('/api/expenses', require('./routes/expenses'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/minutes', require('./routes/minutes'));
+app.use('/api/board', require('./routes/board'));
 app.use('/api/resident', require('./routes/resident'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/audit', require('./routes/audit'));

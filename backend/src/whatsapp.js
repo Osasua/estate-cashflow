@@ -27,4 +27,20 @@ const sendWhatsAppReminder = async (phoneNumber, name, amount, period) => {
   }
 };
 
-module.exports = { sendWhatsAppReminder };
+// Generic WhatsApp sender (broadcasts, notices). Throws on failure.
+const sendWhatsAppMessage = async (phoneNumber, body) => {
+  if (!phoneNumber) throw new Error('No phone number');
+  if (!phoneNumber.startsWith('+')) {
+    phoneNumber = '+234' + phoneNumber.replace(/^0/, '');
+  }
+  await client.messages.create({
+    body,
+    from: process.env.TWILIO_WHATSAPP_NUMBER,
+    to: `whatsapp:${phoneNumber}`
+  });
+};
+
+const whatsappConfigured = () =>
+  !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_WHATSAPP_NUMBER);
+
+module.exports = { sendWhatsAppReminder, sendWhatsAppMessage, whatsappConfigured };
