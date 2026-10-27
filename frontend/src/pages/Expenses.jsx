@@ -5,6 +5,23 @@ import { naira, fmtDate } from '../format';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
+// Contribution funds an expense can be charged to (mirrors dashboard tabs)
+const FUND_TYPES = [
+  { key: 'monthly', label: 'Monthly' },
+  { key: 'float', label: 'Float' },
+  { key: 'projects', label: 'Projects' },
+  { key: 'end-of-year', label: 'End of Year' },
+  { key: 'welfare', label: 'Welfare' },
+];
+const FUND_LABEL = FUND_TYPES.reduce((m, t) => ({ ...m, [t.key]: t.label }), {});
+const FUND_COLORS = {
+  monthly: { bg: '#eef2ff', text: '#4f46e5' },
+  float: { bg: '#ecfeff', text: '#0891b2' },
+  projects: { bg: '#f5f3ff', text: '#7c3aed' },
+  'end-of-year': { bg: '#fffbeb', text: '#d97706' },
+  welfare: { bg: '#ecfdf5', text: '#059669' },
+};
+
 export default function Expenses() {
   const { user } = useAuth();
   const [expenses, setExpenses] = useState([]);
@@ -18,15 +35,17 @@ export default function Expenses() {
     category_id: '',
     amount: '',
     receipt: null,
+    type: 'monthly',
   });
   const [loading, setLoading] = useState(false);
+  const [fundFilter, setFundFilter] = useState('all');
   const [message, setMessage] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
   // Reset to page 1 when month/year changes
-  useEffect(() => { setCurrentPage(1); }, [month, year]);
+  useEffect(() => { setCurrentPage(1); }, [month, year, fundFilter]);
 
   // Update form date to 1st of selected month when month/year changes (only if not editing)
   useEffect(() => {
@@ -75,6 +94,7 @@ export default function Expenses() {
             vendor: form.vendor,
             category_id: form.category_id,
             amount: Number(form.amount),
+            type: form.type,
           },
         });
         setMessage('✅ Expense updated successfully');
@@ -85,6 +105,7 @@ export default function Expenses() {
         formData.append('description', form.description);
         formData.append('vendor', form.vendor);
         formData.append('category_id', form.category_id);
+        formData.append('type', form.type);
         formData.append('amount', form.amount);
         if (form.receipt) {
           formData.append('receipt', form.receipt);
@@ -107,6 +128,7 @@ export default function Expenses() {
         category_id: '',
         amount: '',
         receipt: null,
+        type: 'monthly',
       });
       setEditingId(null);
       loadExpenses();
@@ -132,6 +154,7 @@ export default function Expenses() {
     category_id: expense.category_id,
     amount: expense.amount.toString(),
     receipt: null,
+    type: expense.type || 'monthly',
   });
   window.scrollTo({ top: 0, behavior: 'smooth' });
 };
@@ -147,11 +170,14 @@ export default function Expenses() {
     }
   };
 
-  const totalSpent = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
-  const totalPages = Math.ceil(expenses.length / itemsPerPage);
+  const filteredExpenses = fundFilter === 'all'
+    ? expenses
+    : expenses.filter((e) => (e.type || 'monthly') === fundFilter);
+  const totalSpent = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+  const totalPages = Math.ceil(filteredExpenses.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedExpenses = expenses.slice(startIndex, endIndex);
+  const paginatedExpenses = filteredExpenses.slice(startIndex, endIndex);
 
   const kpiStyle = (color) => ({
     background: '#fff',
@@ -180,6 +206,13 @@ export default function Expenses() {
           <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>Year</label>
           <input type="number" value={year} onChange={(e) => setYear(+e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', width: '90px' }} />
         </div>
+        <div>
+          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '500', color: '#374151' }}>Fund</label>
+          <select value={fundFilter} onChange={(e) => setFundFilter(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', minWidth: '140px' }}>
+            <option value="all">All funds</option>
+            {FUND_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+          </select>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -190,7 +223,7 @@ export default function Expenses() {
         </div>
         <div style={kpiStyle('#10b981')}>
           <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>Total Transactions</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#111827' }}>{expenses.length}</div>
+          <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#111827' }}>{filteredExpenses.length}</div>
         </div>
       </div>
 
@@ -227,6 +260,12 @@ export default function Expenses() {
               </select>
             </div>
             <div>
+              <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151', fontSize: '0.875rem' }}>Funded From</label>
+              <select required value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }}>
+                {FUND_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
               <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#374151', fontSize: '0.875rem' }}>Amount</label>
               <input type="number" required min="1" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0.00" style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '0.875rem', boxSizing: 'border-box' }} />
             </div>
@@ -254,7 +293,7 @@ export default function Expenses() {
               <button type="button" onClick={() => {
                 setEditingId(null);
                 const firstDay = `${year}-${String(month).padStart(2, '0')}-01`;
-                setForm({ date: firstDay, description: '', vendor: '', category_id: '', amount: '', receipt: null });
+                setForm({ date: firstDay, description: '', vendor: '', category_id: '', amount: '', receipt: null, type: 'monthly' });
               }} style={{ padding: '8px 24px', background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontWeight: '500', fontSize: '0.875rem' }}>
                 Cancel
               </button>
@@ -285,6 +324,7 @@ export default function Expenses() {
                     <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Date</th>
                     <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Description</th>
                     <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Category</th>
+                    <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Fund</th>
                     <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Vendor</th>
                     <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Amount</th>
                     <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>
@@ -300,6 +340,11 @@ export default function Expenses() {
                         <td style={{ padding: '12px 16px' }}>
                           <span style={{ display: 'inline-block', padding: '3px 10px', background: '#f3f4f6', color: '#374151', borderRadius: '4px', fontSize: '0.75rem' }}>
                             {category?.name || expense.category_id}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ display: 'inline-block', padding: '3px 10px', background: (FUND_COLORS[expense.type || 'monthly'] || FUND_COLORS.monthly).bg, color: (FUND_COLORS[expense.type || 'monthly'] || FUND_COLORS.monthly).text, borderRadius: '4px', fontSize: '0.75rem', fontWeight: '600' }}>
+                            {FUND_LABEL[expense.type || 'monthly'] || expense.type}
                           </span>
                         </td>
                         <td style={{ padding: '12px 16px', fontSize: '0.875rem', color: '#6b7280' }}>{expense.vendor || '-'}</td>
@@ -319,7 +364,7 @@ export default function Expenses() {
             {totalPages > 1 && (
               <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f9fafb' }}>
                 <div style={{ color: '#6b7280', fontSize: '0.875rem' }}>
-                  {startIndex + 1}-{Math.min(endIndex, expenses.length)} of {expenses.length}
+                  {startIndex + 1}-{Math.min(endIndex, filteredExpenses.length)} of {filteredExpenses.length}
                 </div>
                 <div style={{ display: 'flex', gap: '4px' }}>
                   <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} style={{ padding: '6px 12px', border: '1px solid #d1d5db', background: currentPage === 1 ? '#f3f4f6' : '#fff', color: currentPage === 1 ? '#9ca3af' : '#374151', borderRadius: '4px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.875rem' }}>Previous</button>

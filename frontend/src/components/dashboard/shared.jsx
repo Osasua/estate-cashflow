@@ -3,6 +3,16 @@ import { naira } from '../../format';
 
 export const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#64748b', '#84cc16', '#ec4899', '#14b8a6'];
 
+// Contribution funds (mirrors backend contribution_type enum)
+export const FUND_TYPES = [
+  { key: 'monthly', label: 'Monthly' },
+  { key: 'float', label: 'Float' },
+  { key: 'projects', label: 'Projects' },
+  { key: 'end-of-year', label: 'End of Year' },
+  { key: 'welfare', label: 'Welfare' },
+];
+export const FUND_LABEL = FUND_TYPES.reduce((m, t) => ({ ...m, [t.key]: t.label }), {});
+
 export const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 // '2026-05' -> 'May 2026'
@@ -54,6 +64,16 @@ export function EstateChip() {
 }
 
 // KPI Card (identical to the one previously inlined in Dashboard)
+// Value font scales down for long amounts (e.g. ₦1,658,061.25) so digits
+// never spill out of the card on any tab.
+const valueFontSize = (value) => {
+  const len = String(value ?? '').length;
+  if (len <= 11) return '2.25rem';
+  if (len <= 13) return '1.7rem';
+  if (len <= 16) return '1.45rem';
+  return '1.2rem';
+};
+
 export function KPICard({ title, value, subtitle, trend, color, icon }) {
   const colorMap = {
     indigo: { bg: '#eef2ff', text: '#4f46e5' },
@@ -86,7 +106,7 @@ export function KPICard({ title, value, subtitle, trend, color, icon }) {
           fontSize: '1.25rem'
         }}>{icon}</div>
       </div>
-      <div style={{ fontSize: '2.25rem', fontWeight: '700', color: '#111827', lineHeight: 1.1, marginBottom: '8px' }}>{value}</div>
+      <div style={{ fontSize: valueFontSize(value), fontWeight: '700', color: '#111827', lineHeight: 1.1, marginBottom: '8px', overflowWrap: 'break-word' }}>{value}</div>
       {subtitle && (
         <div style={{ fontSize: '0.85rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px' }}>
           {trend && <span style={{ color: trend > 0 ? '#059669' : '#e11d48', fontWeight: '600' }}>{trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%</span>}

@@ -7,6 +7,7 @@ import { api } from '../../api';
 import { naira } from '../../format';
 import {
   COLORS, formatMonthName, KPICard, ChartPanel, CustomTooltip, kFormatter,
+  FUND_LABEL,
 } from './shared';
 
 /**
@@ -20,6 +21,7 @@ export default function OverviewDashboard({ data }) {
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
 
   const { kpis, daily, weekly, categories, trend } = data;
+  const funds = (data.funds || []).map((f) => ({ ...f, name: FUND_LABEL[f.key] || f.key }));
   const collectionRate = kpis.month_due > 0 ? ((kpis.month_in / kpis.month_due) * 100).toFixed(1) : 0;
 
   const handleRowClick = async (dateStr) => {
@@ -356,6 +358,35 @@ export default function OverviewDashboard({ data }) {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+        </ChartPanel>
+        {/* Collections by Fund */}
+        <ChartPanel title="Collections by Fund" subtitle="Last 6 months">
+          {funds.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <PieChart>
+                <Pie
+                  data={funds}
+                  dataKey="total"
+                  nameKey="name"
+                  cx="45%"
+                  cy="50%"
+                  innerRadius={75}
+                  outerRadius={110}
+                  paddingAngle={3}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {funds.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12, fontWeight: '500' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: '1rem' }}>
+              No contributions collected in this period
+            </div>
+          )}
         </ChartPanel>
       </div>
 

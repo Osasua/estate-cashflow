@@ -6,7 +6,7 @@ import {
 import { api } from '../../api';
 import { naira } from '../../format';
 import {
-  COLORS, formatMonthName, contributionStatus, StatusPill, EstateChip,
+  COLORS, formatMonthName, contributionStatus, StatusPill,
   KPICard, ChartPanel, CustomTooltip, kFormatter,
 } from './shared';
 
@@ -36,11 +36,11 @@ const td = (align) => ({
  *
  * Data contract (GET /dashboard?type=<t>):
  *  - kpis.month_in / month_due / pending_count  -> scoped to the type
- *  - kpis.month_expense                          -> estate-wide (chip shown)
+ *  - kpis.month_expense                          -> scoped to the type
  *  - kpis.type_all_time_collected                -> all-time collected for type
  *    (falls back to the visible 6-month window if the backend predates it)
  *  - trend rows: { month, short_month, income, due, outstanding } (type-scoped)
- *  - daily / weekly / categories                 -> estate-wide (chip shown)
+ *  - daily / weekly / categories                 -> scoped to the type
  */
 export default function TypeDashboard({ data, typeKey, typeLabel }) {
   const [selectedMonth, setSelectedMonth] = useState(null);
@@ -96,7 +96,7 @@ export default function TypeDashboard({ data, typeKey, typeLabel }) {
         <KPICard
           title="Spent This Month"
           value={naira(kpis.month_expense)}
-          subtitle="Total expenses · estate-wide"
+          subtitle={`Total ${typeLabel.toLowerCase()} expenses`}
           color="rose"
           icon="📤"
         />
@@ -147,7 +147,7 @@ export default function TypeDashboard({ data, typeKey, typeLabel }) {
         </ChartPanel>
 
         {/* Spending by Category — estate-wide */}
-        <ChartPanel title="Spending by Category" subtitle="This month's breakdown" action={<EstateChip />}>
+        <ChartPanel title="Spending by Category" subtitle={`This month's ${typeLabel.toLowerCase()} breakdown`}>
           {categories && categories.length > 0 ? (
             <ResponsiveContainer width="100%" height={320}>
               <PieChart>
@@ -177,7 +177,7 @@ export default function TypeDashboard({ data, typeKey, typeLabel }) {
         </ChartPanel>
 
         {/* Daily Expenses — estate-wide */}
-        <ChartPanel title="Daily Expenses" subtitle="Last 14 days" action={<EstateChip />}>
+        <ChartPanel title="Daily Expenses" subtitle={`Last 14 days · ${typeLabel} fund`}>
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={daily || []} margin={{ top: 20, right: 20, left: 0, bottom: 40 }}>
               <defs>
@@ -204,7 +204,7 @@ export default function TypeDashboard({ data, typeKey, typeLabel }) {
         </ChartPanel>
 
         {/* Weekly Expenses — estate-wide */}
-        <ChartPanel title="Weekly Expenses" subtitle="Last 8 weeks" action={<EstateChip />}>
+        <ChartPanel title="Weekly Expenses" subtitle={`Last 8 weeks · ${typeLabel} fund`}>
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={weekly || []} margin={{ top: 20, right: 20, left: 0, bottom: 40 }}>
               <defs>

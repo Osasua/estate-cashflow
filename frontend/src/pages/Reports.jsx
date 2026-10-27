@@ -78,6 +78,15 @@ function ChartPanel({ title, subtitle, children }) {
   );
 }
 
+const FUND_TYPES = [
+  { key: 'monthly', label: 'Monthly' },
+  { key: 'float', label: 'Float' },
+  { key: 'projects', label: 'Projects' },
+  { key: 'end-of-year', label: 'End of Year' },
+  { key: 'welfare', label: 'Welfare' },
+];
+const FUND_LABEL = FUND_TYPES.reduce((m, t) => ({ ...m, [t.key]: t.label }), {});
+
 export default function Reports() {
   const { user } = useAuth();
   const [data, setData] = useState(null);
@@ -86,6 +95,7 @@ export default function Reports() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedFund, setSelectedFund] = useState('');
   const [showOpeningBalanceForm, setShowOpeningBalanceForm] = useState(false);
 const [newOpeningBalance, setNewOpeningBalance] = useState('');
 const [newEffectiveDate, setNewEffectiveDate] = useState('2026-01-01');
@@ -125,7 +135,7 @@ const handleSaveOpeningBalance = async () => {
 
   useEffect(() => {
     if (startDate && endDate) loadData();
-  }, [startDate, endDate, selectedCategory]);
+  }, [startDate, endDate, selectedCategory, selectedFund]);
 
   const loadData = async () => {
     setLoading(true);
@@ -133,6 +143,7 @@ const handleSaveOpeningBalance = async () => {
     try {
       const params = new URLSearchParams({ startDate, endDate });
       if (selectedCategory) params.append('category_id', selectedCategory);
+      if (selectedFund) params.append('type', selectedFund);
       const res = await api(`/reports/summary?${params.toString()}`);
       setData(res);
     } catch (e) {
@@ -231,6 +242,19 @@ const handleSaveOpeningBalance = async () => {
               ))}
             </select>
           </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fund Filter</label>
+            <select
+              value={selectedFund}
+              onChange={(e) => setSelectedFund(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' }}
+            >
+              <option value="">All Funds</option>
+              {FUND_TYPES.map(f => (
+                <option key={f.key} value={f.key}>{f.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -241,14 +265,14 @@ const handleSaveOpeningBalance = async () => {
   value={naira(kpis.opening_balance)}
   subtitle={kpis.is_system_start 
     ? "System start — no prior data" 
-    : `As of ${filters.start_date}`}
+    : `As of ${filters.start_date}${filters.type ? ` · ${FUND_LABEL[filters.type] || filters.type} fund` : ''}`}
   color="indigo"
   icon=""
 />
         <KPICard
           title="Total Received"
           value={naira(kpis.total_received)}
-          subtitle="Contributions collected"
+          subtitle={filters.type ? `${FUND_LABEL[filters.type] || filters.type} collections` : 'Contributions collected'}
           color="emerald"
           icon="📥"
         />
@@ -262,13 +286,14 @@ const handleSaveOpeningBalance = async () => {
         <KPICard
           title="Closing Balance"
           value={naira(kpis.closing_balance)}
-          subtitle={`As of ${filters.end_date}`}
+          subtitle={`As of ${filters.end_date}${filters.type ? ` · ${FUND_LABEL[filters.type] || filters.type} fund` : ''}`}
           color="violet"
           icon=""
         />
       </div>
 
-{/* Estate Opening Balance Card */}
+{/* Estate Opening Balance Card — estate-level, hidden on fund-scoped reports */}
+{!filters.type && (
 <div style={{
   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
   borderRadius: '16px',
@@ -374,6 +399,7 @@ const handleSaveOpeningBalance = async () => {
     </div>
   )}
 </div>
+)}
 
       {/* Charts Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '24px', marginBottom: '32px' }}>

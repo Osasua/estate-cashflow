@@ -29,7 +29,7 @@ const DASH_TABS = [
   { key: 'welfare', label: 'Welfare' },
 ];
 
-const DEFAULT_TAB = 'monthly';
+const DEFAULT_TAB = 'overview';
 
 const TAB_LABEL = DASH_TABS.reduce((m, t) => ({ ...m, [t.key]: t.label }), {});
 
