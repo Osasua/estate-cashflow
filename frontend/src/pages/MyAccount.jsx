@@ -246,7 +246,6 @@ export default function MyAccount() {
           )}
         </div>
         ) : (
-        {/* Payment History - ENHANCED */}
         <div style={{
           background: '#fff',
           borderRadius: '16px',
@@ -372,7 +371,6 @@ export default function MyAccount() {
           )}
         </div>
         ) : (
-        {/* Contributions by Type */}
         <div style={{
           background: '#fff',
           borderRadius: '16px',
