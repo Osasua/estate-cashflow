@@ -6,6 +6,7 @@ import Skeleton from '../components/Skeleton';
 import Tabs from '../components/Tabs';
 import OverviewDashboard from '../components/dashboard/OverviewDashboard';
 import TypeDashboard from '../components/dashboard/TypeDashboard';
+import OccasionDashboard from '../components/dashboard/OccasionDashboard';
 
 /**
  * Tabbed financial dashboard.
@@ -31,6 +32,10 @@ const DASH_TABS = [
 
 const DEFAULT_TAB = 'overview';
 
+// Occasional funds (1-3 activations per year) get the occasion-based
+// analytics view instead of the monthly-window view.
+const OCCASION_FUNDS = ['float', 'projects', 'end-of-year'];
+
 const TAB_LABEL = DASH_TABS.reduce((m, t) => ({ ...m, [t.key]: t.label }), {});
 
 export default function Dashboard() {
@@ -44,10 +49,18 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const cacheRef = useRef(new Map());
 
+  const isOccasion = OCCASION_FUNDS.includes(tab);
+
   useEffect(() => {
     let alive = true;
     setData(null);
     setError('');
+
+    // Occasion tabs fetch their own analytics; no /dashboard payload needed
+    if (OCCASION_FUNDS.includes(tab)) {
+      setData({ occasion: true });
+      return;
+    }
 
     const cache = cacheRef.current;
     if (!cache.has(tab)) {
@@ -126,9 +139,11 @@ export default function Dashboard() {
 
       <Tabs tabs={DASH_TABS} active={tab} onChange={changeTab} />
 
-      {tab === 'overview'
-        ? <OverviewDashboard data={data} />
-        : <TypeDashboard data={data} typeKey={tab} typeLabel={TAB_LABEL[tab]} />}
+      {isOccasion
+        ? <OccasionDashboard typeKey={tab} typeLabel={TAB_LABEL[tab]} />
+        : tab === 'overview'
+          ? <OverviewDashboard data={data} />
+          : <TypeDashboard data={data} typeKey={tab} typeLabel={TAB_LABEL[tab]} />}
     </div>
   );
 }

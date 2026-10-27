@@ -250,6 +250,76 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET occasion-based analytics for occasional contribution types
+// (Float / Projects / End of Year): one entry per activation, instead of a
+// fixed monthly window that would be mostly zeros for these funds.
+router.get('/occasions', async (req, res) => {
+  const type = req.query.type;
+  if (!type || !DASHBOARD_TYPES.includes(type)) {
+    return res.status(400).json({
+      error: `Invalid or missing type. Expected one of: ${DASHBOARD_TYPES.join(', ')}`
+    });
+  }
+
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  try {
+    const { rows } = await query(`
+      SELECT
+        period_year,
+        period_month,
+        COALESCE(SUM(amount_due), 0)  AS expected,
+        COALESCE(SUM(amount_paid), 0) AS collected,
+        COUNT(*)::int AS households,
+        COUNT(*) FILTER (WHERE amount_due > 0 AND amount_paid >= amount_due)::int AS paid,
+        COUNT(*) FILTER (WHERE amount_paid > 0 AND amount_paid < amount_due)::int AS partial,
+        COUNT(*) FILTER (WHERE amount_paid = 0)::int AS pending,
+        MIN(created_at) AS billed_at
+      FROM contributions
+      WHERE type = $1
+      GROUP BY period_year, period_month
+      ORDER BY period_year ASC, period_month ASC
+    `, [type]);
+
+    const occasions = rows.map(r => {
+      const expected = parseFloat(r.expected) || 0;
+      const collected = parseFloat(r.collected) || 0;
+      return {
+        period: `${r.period_year}-${String(r.period_month).padStart(2, '0')}`,
+        label: `${MONTHS[r.period_month - 1]} ${r.period_year}`,
+        short: `${MONTHS[r.period_month - 1].slice(0, 3)} ${String(r.period_year).slice(2)}`,
+        expected,
+        collected,
+        outstanding: expected - collected,
+        rate: expected > 0 ? parseFloat(((collected / expected) * 100).toFixed(1)) : null,
+        households: {
+          total: parseInt(r.households) || 0,
+          paid: parseInt(r.paid) || 0,
+          partial: parseInt(r.partial) || 0,
+          pending: parseInt(r.pending) || 0
+        },
+        billed_at: r.billed_at
+      };
+    });
+
+    const withRate = occasions.filter(o => o.rate !== null);
+    const totals = {
+      occasions: occasions.length,
+      all_time_expected: occasions.reduce((s2, o) => s2 + o.expected, 0),
+      all_time_collected: occasions.reduce((s2, o) => s2 + o.collected, 0),
+      avg_collection_rate: withRate.length
+        ? parseFloat((withRate.reduce((s2, o) => s2 + o.rate, 0) / withRate.length).toFixed(1))
+        : null,
+      latest: occasions.length ? occasions[occasions.length - 1].period : null
+    };
+
+    res.json({ scope: { type }, totals, occasions });
+  } catch (err) {
+    console.error('Occasions error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET monthly expense breakdown (accessible to all authenticated users)
 router.get('/monthly-breakdown', authenticate, async (req, res) => {
   try {
