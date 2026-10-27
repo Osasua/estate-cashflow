@@ -23,8 +23,12 @@ const timeAgo = (iso) => {
   return `${Math.floor(s / 86400)}d ago`;
 };
 
+// node-pg returns DATE columns as Date objects -> JSON gives full ISO
+// strings; always reduce to the YYYY-MM-DD prefix before parsing.
+const dayOnly = (v) => String(v || '').slice(0, 10);
+
 const daysUntil = (dateStr) => {
-  const d = new Date(dateStr + 'T00:00:00');
+  const d = new Date(dayOnly(dateStr) + 'T00:00:00');
   return Math.ceil((d - new Date(new Date().toDateString())) / 86400000);
 };
 
@@ -34,11 +38,13 @@ export default function Board() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [form, setForm] = useState({ kind: 'notice', title: '', body: '', event_date: '', event_time: '', location: '' });
 
   const isStaff = ['admin', 'treasurer'].includes(user?.role);
 
   const load = useCallback(async () => {
+    setError('');
     try {
       const res = await api('/board');
       setPosts(res.posts || []);
@@ -46,6 +52,13 @@ export default function Board() {
       setError(e.message);
     }
   }, []);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+    flash('✅ Board refreshed');
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -111,8 +124,8 @@ export default function Board() {
             Notices & upcoming events from your neighbours and the estate
           </p>
         </div>
-        <button onClick={load} style={{ padding: '8px 16px', background: '#fff', border: '1px solid #d1d5db', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>
-          ⟳ Refresh
+        <button onClick={refresh} disabled={refreshing} style={{ padding: '8px 16px', background: '#fff', border: '1px solid #d1d5db', borderRadius: '8px', cursor: refreshing ? 'wait' : 'pointer', fontSize: '0.85rem', fontWeight: '600', color: '#374151', opacity: refreshing ? 0.6 : 1 }}>
+          {refreshing ? '⟳ Refreshing…' : '⟳ Refresh'}
         </button>
       </div>
 
@@ -256,7 +269,7 @@ export default function Board() {
 
                 {p.kind === 'event' && p.event_date && (
                   <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginBottom: '10px', fontSize: '0.85rem', color: '#374151', fontWeight: '600' }}>
-                    <span>📅 {new Date(p.event_date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                    <span>📅 {new Date(dayOnly(p.event_date) + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</span>
                     {p.event_time && <span>🕒 {p.event_time}</span>}
                     {p.location && <span>📍 {p.location}</span>}
                   </div>
