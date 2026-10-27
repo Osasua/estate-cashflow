@@ -15,6 +15,7 @@ import AuditLog from './pages/AuditLog';
 import Profile from './pages/Profile';
 import Broadcast from './pages/Broadcast';
 import Minutes from './pages/Minutes';
+import Board from './pages/Board';
 
 function Layout({ children }) {
   const { user, logout } = useAuth();
@@ -54,6 +55,9 @@ function Layout({ children }) {
           
           {/* ✅ NEW: Minutes (Everyone - Residents & Staff) */}
           <NavLink to="/minutes">Minutes</NavLink>
+          
+          {/* ✅ NEW: Ferrano Board (Everyone) */}
+          <NavLink to="/board">Ferrano Board</NavLink>
           
           {/* 5. My Profile (Everyone, at the bottom) */}
           <NavLink to="/profile">My Profile</NavLink>
@@ -102,6 +106,7 @@ function AppRoutes() {
       
       {/* ✅ FIXED: Added page() wrapper so the sidebar shows up */}
       <Route path="/minutes" element={page(<Minutes />)} />
+      <Route path="/board" element={page(<Board />)} />
     </Routes>
   );
 }

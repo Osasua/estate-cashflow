@@ -8,6 +8,10 @@ export default function Broadcast() {
   const [message, setMessage] = useState('');
   const [status, setStatus] = useState(''); 
   const [statusMsg, setStatusMsg] = useState('');
+  const [channels, setChannels] = useState({ email: true, whatsapp: false });
+  const [results, setResults] = useState(null);
+  const [phones, setPhones] = useState(null);
+  const [phonesMsg, setPhonesMsg] = useState('');
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -15,10 +19,17 @@ export default function Broadcast() {
     setStatusMsg('Preparing broadcast...');
     
     try {
+      const chosen = Object.entries(channels).filter(([, on]) => on).map(([k]) => k);
+      if (chosen.length === 0) {
+        setStatus('error');
+        setStatusMsg('Select at least one channel (Email or WhatsApp).');
+        return;
+      }
       const res = await api('/admin/broadcast', {
         method: 'POST',
-        body: { subject, message }
+        body: { subject, message, channels: chosen }
       });
+      setResults(res.results || null);
       setStatus('success');
       setStatusMsg(res.message);
       setSubject('');
@@ -80,7 +91,8 @@ export default function Broadcast() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-             <span style={{ background: 'rgba(255,255,255,0.2)', padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: '600' }}>📧 Email</span>
+             {channels.email && <span style={{ background: 'rgba(255,255,255,0.2)', padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: '600' }}>📧 Email</span>}
+             {channels.whatsapp && <span style={{ background: 'rgba(37,211,102,0.35)', padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: '600' }}>💬 WhatsApp</span>}
           </div>
         </div>
 
@@ -107,6 +119,17 @@ export default function Broadcast() {
             </div>
 
             <form onSubmit={handleSend} style={{ display: 'flex', flexDirection: 'column', gap: '20px', flex: 1 }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151', fontSize: '0.875rem' }}>Channels</label>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <button type="button" onClick={() => setChannels({ ...channels, email: !channels.email })} style={{ padding: '8px 16px', borderRadius: '20px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', border: `1px solid ${channels.email ? '#4f46e5' : '#d1d5db'}`, background: channels.email ? '#eef2ff' : '#fff', color: channels.email ? '#4f46e5' : '#6b7280' }}>
+                    📧 Email
+                  </button>
+                  <button type="button" onClick={() => setChannels({ ...channels, whatsapp: !channels.whatsapp })} style={{ padding: '8px 16px', borderRadius: '20px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', border: `1px solid ${channels.whatsapp ? '#25D366' : '#d1d5db'}`, background: channels.whatsapp ? '#ecfdf5' : '#fff', color: channels.whatsapp ? '#059669' : '#6b7280' }}>
+                    💬 WhatsApp
+                  </button>
+                </div>
+              </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151', fontSize: '0.875rem' }}>Subject Line</label>
                 <input
@@ -188,6 +211,52 @@ export default function Broadcast() {
             </div>
           </div>
 
+        </div>
+      </div>
+
+      {/* WhatsApp wa.me composer — manual fallback that never needs Twilio */}
+      <div style={{ marginTop: '24px', background: 'white', borderRadius: '16px', border: '1px solid #e5e7eb', borderTop: '4px solid #25D366', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+        <div style={{ padding: '18px 24px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #ecfdf5, #ffffff)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>💬</div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '600', color: '#111827' }}>WhatsApp Composer (manual)</h3>
+              <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#6b7280' }}>Opens WhatsApp with this message pre-filled per household — works with or without Twilio</p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" onClick={() => navigator.clipboard && navigator.clipboard.writeText((subject ? subject + '\n\n' : '') + message).then(() => { setPhonesMsg('Message copied to clipboard ✅'); setTimeout(() => setPhonesMsg(''), 3000); })} style={{ padding: '8px 14px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600', color: '#374151' }}>
+              📋 Copy message
+            </button>
+            <button type="button" onClick={async () => {
+              try { setPhonesMsg('Loading contacts…'); const res = await api('/admin/broadcast/phones'); setPhones(res.contacts || []); setPhonesMsg(''); }
+              catch (e) { setPhonesMsg(e.message); }
+            }} style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', background: '#25D366', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '700', color: '#fff' }}>
+              Load households
+            </button>
+          </div>
+        </div>
+        <div style={{ padding: '16px 24px' }}>
+          {phonesMsg && <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: '#6b7280' }}>{phonesMsg}</p>}
+          {phones === null ? (
+            <p style={{ margin: 0, fontSize: '0.9rem', color: '#9ca3af' }}>Load households to open individual WhatsApp chats with the message pre-filled.</p>
+          ) : phones.length === 0 ? (
+            <p style={{ margin: 0, fontSize: '0.9rem', color: '#9ca3af' }}>No households have phone numbers on file.</p>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '10px' }}>
+              {phones.map((c) => (
+                <a key={c.wa_digits + c.name} href={`https://wa.me/${c.wa_digits}?text=${encodeURIComponent((subject ? subject + '\n\n' : '') + message)}`} target="_blank" rel="noreferrer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '10px 14px', borderRadius: '10px', border: '1px solid #d1f2df', background: '#f0fdf4', color: '#065f46', fontSize: '0.85rem', fontWeight: '600', textDecoration: 'none' }}>
+                  <span>{c.name}</span>
+                  <span style={{ fontSize: '0.75rem', color: '#059669' }}>Open ↗</span>
+                </a>
+              ))}
+            </div>
+          )}
+          {results && results.whatsapp && results.whatsapp.unavailable && (
+            <p style={{ margin: '12px 0 0 0', fontSize: '0.8rem', color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '10px 14px' }}>
+              ⚠️ Server-side WhatsApp (Twilio) is not configured, so the WhatsApp channel was skipped. Use this composer to send manually.
+            </p>
+          )}
         </div>
       </div>
     </div>
