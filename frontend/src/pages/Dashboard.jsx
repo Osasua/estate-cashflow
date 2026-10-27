@@ -34,7 +34,7 @@ const DEFAULT_TAB = 'overview';
 
 // Occasional funds (1-3 activations per year) get the occasion-based
 // analytics view instead of the monthly-window view.
-const OCCASION_FUNDS = ['float', 'projects', 'end-of-year'];
+const OCCASION_FUNDS = ['float', 'projects', 'end-of-year', 'welfare'];
 
 const TAB_LABEL = DASH_TABS.reduce((m, t) => ({ ...m, [t.key]: t.label }), {});
 
