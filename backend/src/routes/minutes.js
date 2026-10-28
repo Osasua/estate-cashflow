@@ -1,6 +1,6 @@
 const express = require('express');
 const { query } = require('../db');
-const { authenticate, staff } = require('../auth');
+const { authenticate, comms } = require('../auth');
 
 const router = express.Router();
 
@@ -20,7 +20,7 @@ router.get('/', authenticate, async (req, res) => {
 });
 
 // Only staff can publish
-router.post('/', authenticate, staff, async (req, res) => {
+router.post('/', authenticate, comms, async (req, res) => {
   try {
     const { title, meeting_date, content, document_link } = req.body;
     if (!title || !meeting_date || !content) {
@@ -40,7 +40,7 @@ router.post('/', authenticate, staff, async (req, res) => {
 });
 
 // Only staff can delete
-router.delete('/:id', authenticate, staff, async (req, res) => {
+router.delete('/:id', authenticate, comms, async (req, res) => {
   try {
     await query('DELETE FROM meeting_minutes WHERE id = $1', [req.params.id]);
     res.json({ message: 'Minute deleted successfully' });

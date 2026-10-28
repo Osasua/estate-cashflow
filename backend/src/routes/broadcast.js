@@ -1,6 +1,6 @@
 const express = require('express');
 const { query } = require('../db');
-const { authenticate } = require('../auth');
+const { authenticate, comms } = require('../auth');
 const { sendBroadcastEmail } = require('../mailer');
 const { sendWhatsAppMessage, whatsappConfigured } = require('../whatsapp');
 
@@ -8,12 +8,7 @@ const router = express.Router();
 router.use(authenticate);
 
 // Middleware to ensure only Admin or Treasurer can send broadcasts
-const requireStaff = (req, res, next) => {
-  if (req.user.role !== 'admin' && req.user.role !== 'treasurer') {
-    return res.status(403).json({ error: 'Access denied. Staff only.' });
-  }
-  next();
-};
+const requireStaff = comms; // Admin, Treasurer AND Secretary
 
 router.post('/', requireStaff, async (req, res) => {
   const { subject, message, channels } = req.body;

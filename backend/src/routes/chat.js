@@ -5,7 +5,7 @@ const { authenticate } = require('../auth');
 const router = express.Router();
 router.use(authenticate);
 
-const isStaff = (u) => ['admin', 'treasurer'].includes(u?.role);
+const isStaff = (u) => ['admin', 'treasurer', 'secretary'].includes(u?.role);
 const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024; // 1.5 MB raw file
 const ALLOWED_MIME = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 

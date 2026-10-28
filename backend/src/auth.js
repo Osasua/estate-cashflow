@@ -26,4 +26,11 @@ const staff = (req, res, next) =>
     ? next()
     : res.status(403).json({ error: 'Treasurer or Admin access required' });
 
-module.exports = { sign, authenticate, staff };
+// Comms team: broadcast, minutes, board & chat moderation.
+// Secretary lives here — NOT in `staff`, so she never touches finances.
+const comms = (req, res, next) =>
+  ['admin', 'treasurer', 'secretary'].includes(req.user && req.user.role)
+    ? next()
+    : res.status(403).json({ error: 'Staff or Secretary access required' });
+
+module.exports = { sign, authenticate, staff, comms };

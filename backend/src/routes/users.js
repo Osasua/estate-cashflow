@@ -12,20 +12,26 @@ router.use(authenticate);
 const adminOnly = (req, res, next) => 
   req.user.role === 'admin' ? next() : res.status(403).json({ error: 'Admin access required' });
 
-// GET all users
-router.get('/', async (req, res) => {
-  const { rows } = await query(
-    'SELECT id, name, email, role, member_id, created_at FROM users ORDER BY created_at DESC'
-  );
-  res.json({ users: rows });
+// GET all users — ADMIN ONLY (this endpoint lists emails; it must not be
+// reachable by every authenticated user)
+router.get('/', adminOnly, async (req, res) => {
+  try {
+    const { rows } = await query(
+      'SELECT id, name, email, role, member_id, created_at FROM users ORDER BY created_at DESC'
+    );
+    res.json({ users: rows });
+  } catch (err) {
+    console.error('GET users error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST create new staff user (Admin or Treasurer)
 router.post('/', adminOnly, async (req, res) => {
   const { name, email, role, member_id } = req.body;
   
-  if (!['admin', 'treasurer'].includes(role)) {
-    return res.status(400).json({ error: 'Invalid role. Must be admin or treasurer.' });
+  if (!['admin', 'treasurer', 'secretary'].includes(role)) {
+    return res.status(400).json({ error: 'Invalid role. Must be admin, treasurer or secretary.' });
   }
 
   const existing = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase().trim()]);
@@ -58,7 +64,7 @@ router.post('/', adminOnly, async (req, res) => {
 router.put('/:id', adminOnly, async (req, res) => {
   const { role, member_id } = req.body;
   
-  if (role && !['admin', 'treasurer', 'member'].includes(role)) {
+  if (role && !['admin', 'treasurer', 'secretary', 'member'].includes(role)) {
     return res.status(400).json({ error: 'Invalid role' });
   }
 

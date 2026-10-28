@@ -5,7 +5,7 @@ const { authenticate } = require('../auth');
 const router = express.Router();
 router.use(authenticate);
 
-const isStaff = (u) => ['admin', 'treasurer'].includes(u?.role);
+const isStaff = (u) => ['admin', 'treasurer', 'secretary'].includes(u?.role);
 
 // GET /api/board — everyone; pinned first, newest after
 router.get('/', async (req, res) => {
