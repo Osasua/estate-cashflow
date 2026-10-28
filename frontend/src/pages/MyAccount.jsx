@@ -26,7 +26,7 @@ const OCCASION_TABS = ['float', 'projects', 'end-of-year', 'welfare'];
 const STATUS_PILL = {
   paid: { bg: '#dcfce7', color: '#166534', label: '✓ Paid' },
   partial: { bg: '#fef3c7', color: '#92400e', label: '⚠ Partial' },
-  pending: { bg: '#fee2e2', color: '#991b1b', label: '⏳ Pending' },
+  pending: { bg: '#fee2e2', color: '#991b1b', label: ' Pending' },
 };
 
 export default function MyAccount() {
@@ -36,6 +36,13 @@ export default function MyAccount() {
   const [error, setError] = useState('');
   const [viewing, setViewing] = useState('this_month');
   const [tab, setTab] = useState('overview');
+  
+  // Payment Modal State
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [selectedBill, setSelectedBill] = useState(null);
+  const [paymentEmail, setPaymentEmail] = useState(user?.email || '');
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
 
   useEffect(() => {
     loadData();
@@ -56,6 +63,42 @@ export default function MyAccount() {
       setError(err.message || 'Failed to load data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePayClick = (bill) => {
+    setSelectedBill(bill);
+    setPaymentEmail(user?.email || '');
+    setPaymentError('');
+    setShowPayModal(true);
+  };
+
+  const handleInitializePayment = async () => {
+    if (!paymentEmail) {
+      setPaymentError('Email address is required for receipt');
+      return;
+    }
+
+    setPaymentLoading(true);
+    setPaymentError('');
+
+    try {
+      const response = await api('/contributions/payments/initialize', {
+        method: 'POST',
+        body: {
+          member_id: selectedBill.member_id,
+          amount: selectedBill.outstanding,
+          email: paymentEmail,
+          reference: `ESTATE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        }
+      });
+
+      // Redirect to Paystack checkout page
+      window.location.href = response.authorization_url;
+
+    } catch (err) {
+      setPaymentError(err.message || 'Failed to initialize payment. Please try again.');
+      setPaymentLoading(false);
     }
   };
 
@@ -232,7 +275,7 @@ export default function MyAccount() {
               <BarChart data={occasions} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
                 <XAxis dataKey="short" tick={{ fontSize: 12, fill: '#6b7280', fontWeight: '600' }} axisLine={false} tickLine={false} interval={0} />
-                <YAxis tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: '600' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} />
+                <YAxis tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: '600' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : `₦${v}`} />
                 <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99, 102, 241, 0.08)' }} />
                 <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '13px', fontWeight: '500' }} />
                 <Bar dataKey="due" name="Billed" fill="#6366f1" fillOpacity={0.35} radius={[10, 10, 4, 4]} maxBarSize={60} />
@@ -430,21 +473,45 @@ export default function MyAccount() {
                 <th style={{ padding: '14px 28px', textAlign: 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Outstanding</th>
                 <th style={{ padding: '14px 28px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Status</th>
                 <th style={{ padding: '14px 28px', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Reference</th>
+                <th style={{ padding: '14px 28px', textAlign: 'center', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {[...occasions].reverse().map((o) => {
                 const pill = STATUS_PILL[o.status] || STATUS_PILL.pending;
+                const hasOutstanding = o.outstanding > 0;
                 return (
                   <tr key={o.period} style={{ borderBottom: '1px solid #f3f4f6' }}>
                     <td style={{ padding: '14px 28px', fontSize: '0.95rem', fontWeight: '600', color: '#111827' }}>{o.label}</td>
                     <td style={{ padding: '14px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#111827', fontVariantNumeric: 'tabular-nums' }}>{naira(o.due)}</td>
                     <td style={{ padding: '14px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: '#059669', fontVariantNumeric: 'tabular-nums' }}>{naira(o.paid)}</td>
-                    <td style={{ padding: '14px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: o.outstanding > 0 ? '#e11d48' : '#9ca3af', fontVariantNumeric: 'tabular-nums' }}>{naira(o.outstanding)}</td>
+                    <td style={{ padding: '14px 28px', textAlign: 'right', fontSize: '0.95rem', fontWeight: '600', color: hasOutstanding ? '#e11d48' : '#9ca3af', fontVariantNumeric: 'tabular-nums' }}>{naira(o.outstanding)}</td>
                     <td style={{ padding: '14px 28px', textAlign: 'center' }}>
                       <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '600', background: pill.bg, color: pill.color }}>{pill.label}</span>
                     </td>
                     <td style={{ padding: '14px 28px', fontSize: '0.9rem', color: '#4b5563' }}>{o.references || <span style={{ color: '#d1d5db' }}>—</span>}</td>
+                    <td style={{ padding: '14px 28px', textAlign: 'center' }}>
+                      {hasOutstanding ? (
+                        <button
+                          onClick={() => handlePayClick(o)}
+                          style={{
+                            padding: '6px 16px',
+                            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontWeight: '600',
+                            fontSize: '0.8rem',
+                            boxShadow: '0 2px 4px rgba(99, 102, 241, 0.3)'
+                          }}
+                        >
+                          Pay Now
+                        </button>
+                      ) : (
+                        <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>—</span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -527,6 +594,89 @@ export default function MyAccount() {
           </div>
         )}
       </div>
+
+      {/* Payment Modal Overlay */}
+      {showPayModal && selectedBill && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          backdropFilter: 'blur(4px)'
+        }} onClick={() => setShowPayModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: 'white', borderRadius: '16px', padding: '32px',
+            width: '90%', maxWidth: '480px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+          }}>
+            <h3 style={{ margin: '0 0 24px 0', fontSize: '1.5rem', fontWeight: '700', color: '#111827' }}>
+              💳 Pay Outstanding Bill
+            </h3>
+
+            <div style={{ marginBottom: '24px', padding: '16px', background: '#f9fafb', borderRadius: '12px' }}>
+              <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px' }}>Period</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#111827', marginBottom: '12px' }}>
+                {selectedBill.label}
+              </div>
+              <div style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '4px' }}>Amount Due</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#e11d48' }}>
+                ₦{selectedBill.outstanding?.toLocaleString()}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>
+                Email Address *
+              </label>
+              <input
+                type="email"
+                value={paymentEmail}
+                onChange={(e) => setPaymentEmail(e.target.value)}
+                placeholder="your@email.com"
+                style={{
+                  width: '100%', padding: '12px', border: '2px solid #e5e7eb',
+                  borderRadius: '8px', fontSize: '1rem', boxSizing: 'border-box'
+                }}
+              />
+              <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '6px' }}>
+                Receipt will be sent to this email after successful payment
+              </div>
+            </div>
+
+            {paymentError && (
+              <div style={{
+                marginBottom: '16px', padding: '12px', background: '#fee2e2',
+                color: '#991b1b', borderRadius: '8px', fontSize: '0.875rem'
+              }}>
+                {paymentError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowPayModal(false)}
+                style={{
+                  padding: '12px 24px', background: '#f3f4f6', color: '#374151',
+                  border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleInitializePayment}
+                disabled={paymentLoading}
+                style={{
+                  padding: '12px 24px',
+                  background: paymentLoading ? '#9ca3af' : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                  color: 'white', border: 'none', borderRadius: '8px',
+                  fontWeight: '600', cursor: paymentLoading ? 'not-allowed' : 'pointer',
+                  boxShadow: paymentLoading ? 'none' : '0 4px 12px rgba(99, 102, 241, 0.3)'
+                }}
+              >
+                {paymentLoading ? 'Processing...' : 'Proceed to Pay'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
