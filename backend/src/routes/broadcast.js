@@ -25,7 +25,7 @@ router.post('/', requireStaff, async (req, res) => {
 
   const results = {
     email: chans.includes('email') ? { sent: 0, failed: 0 } : null,
-    whatsapp: chans.includes('whatsapp') ? { sent: 0, failed: 0, no_phone: 0, unavailable: false } : null,
+    whatsapp: chans.includes('whatsapp') ? { sent: 0, failed: 0, no_phone: 0, unavailable: false, error_sample: null } : null,
   };
 
   try {
@@ -56,6 +56,7 @@ router.post('/', requireStaff, async (req, res) => {
           } catch (err) {
             console.error(`Failed to WhatsApp ${member.phone}:`, err.message);
             results.whatsapp.failed++;
+            if (!results.whatsapp.error_sample) results.whatsapp.error_sample = err.message;
           }
         }
       }

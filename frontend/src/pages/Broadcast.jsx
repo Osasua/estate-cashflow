@@ -257,6 +257,11 @@ export default function Broadcast() {
               ⚠️ Server-side WhatsApp (Twilio) is not configured, so the WhatsApp channel was skipped. Use this composer to send manually.
             </p>
           )}
+          {results && results.whatsapp && results.whatsapp.failed > 0 && results.whatsapp.error_sample && (
+            <p style={{ margin: '12px 0 0 0', fontSize: '0.8rem', color: '#991b1b', background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '8px', padding: '10px 14px' }}>
+              ⚠️ WhatsApp failures ({results.whatsapp.failed}): {results.whatsapp.error_sample} — common causes: recipients not joined to your Twilio sandbox, or free-form messages needing an approved template. The wa.me composer above always works.
+            </p>
+          )}
         </div>
       </div>
     </div>
