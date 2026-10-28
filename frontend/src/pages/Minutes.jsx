@@ -7,7 +7,7 @@ const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7'
 
 export default function Minutes() {
   const { user } = useAuth();
-  const isStaff = ['admin', 'treasurer'].includes(user?.role);
+  const isStaff = ['admin', 'treasurer', 'secretary'].includes(user?.role);
   
   const [minutes, setMinutes] = useState([]);
   const [loading, setLoading] = useState(true);
