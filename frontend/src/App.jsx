@@ -23,6 +23,7 @@ function Layout({ children }) {
   const navigate = useNavigate();
   const isAdmin = user?.role === 'admin';
   const isStaff = ['admin', 'treasurer'].includes(user?.role);
+  const isComms = ['admin', 'treasurer', 'secretary'].includes(user?.role);
 
   return (
     <div className="app">
@@ -40,13 +41,13 @@ function Layout({ children }) {
           <NavLink to="/" end>Dashboard</NavLink>
           
           {/* 2. My Account (Residents Only) */}
-          {!isStaff && <NavLink to="/my-account">My Account</NavLink>}
+          {user?.role === 'member' && <NavLink to="/my-account">My Account</NavLink>}
           
           {/* 3. Staff/Admin Menu */}
           {isStaff && <NavLink to="/contributions">Contributions</NavLink>}
           {isStaff && <NavLink to="/expenses">Expenses</NavLink>}
           {isStaff && <NavLink to="/reports">Reports</NavLink>}
-          {isStaff && <NavLink to="/broadcast">Broadcast</NavLink>}
+          {isComms && <NavLink to="/broadcast">Broadcast</NavLink>}
           {isStaff && <NavLink to="/categories">Categories</NavLink>}
           {isStaff && <NavLink to="/members">Members</NavLink>}
           

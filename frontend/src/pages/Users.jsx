@@ -98,6 +98,7 @@ export default function Users() {
           >
             <option value="treasurer">Treasurer</option>
             <option value="admin">Admin</option>
+            <option value="secretary">Secretary</option>
           </select>
           
           <select 
@@ -141,6 +142,7 @@ export default function Users() {
                       <select value={form.role} onChange={(e) => setForm({...form, role: e.target.value})} style={{width: '100%', padding: '5px'}}>
                         <option value="admin">Admin</option>
                         <option value="treasurer">Treasurer</option>
+                        <option value="secretary">Secretary</option>
                         <option value="member">Member</option>
                       </select>
                     </td>
@@ -163,7 +165,7 @@ export default function Users() {
                     <td style={{ padding: '10px' }}>{u.name}</td>
                     <td style={{ padding: '10px' }}>{u.email}</td>
                     <td style={{ padding: '10px' }}>
-                      <span className={`badge ${u.role === 'admin' ? 'paid' : u.role === 'treasurer' ? 'pending' : ''}`} style={{ background: u.role === 'member' ? '#eee' : '' }}>
+                      <span className={`badge ${u.role === 'admin' ? 'paid' : u.role === 'treasurer' ? 'pending' : ''}`} style={{ background: u.role === 'member' ? '#eee' : u.role === 'secretary' ? '#ecfdf5' : '', color: u.role === 'secretary' ? '#059669' : undefined }}>
                         {u.role}
                       </span>
                     </td>
