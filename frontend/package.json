@@ -23,5 +23,8 @@
     "paystack": "^2.0.1",
     "pg": "^8.13.0",
     "twilio": "^6.1.2"
+  },
+  "devDependencies": {
+    "vite": "^7.3.7"
   }
 }
