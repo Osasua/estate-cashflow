@@ -1,25 +1,27 @@
 {
-  "name": "estate-cashflow-frontend",
+  "name": "estate-cashflow-backend",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js",
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js"
   },
   "dependencies": {
-    "jspdf": "^4.2.1",
-    "jspdf-autotable": "^5.0.8",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-paystack": "^6.0.0",
-    "react-router-dom": "^7.18.4",
-    "recharts": "^2.15.4"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.2",
-    "vite": "^5.4.0",
-    "vite-plugin-pwa": "^1.3.0"
+    "axios": "^1.20.0",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-rate-limit": "^8.7.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.4.0",
+    "node-cron": "^4.6.0",
+    "nodemailer": "^10.0.10",
+    "paystack": "^2.0.1",
+    "pg": "^8.13.0",
+    "twilio": "^6.1.2"
   }
 }
