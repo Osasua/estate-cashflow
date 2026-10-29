@@ -79,12 +79,12 @@ export default function MyAccount() {
     return;
   }
 
-  // Debug log - check what you're sending
-  console.log('Payment payload:', {
-    member_id: user?.id || member?.id,
-    amount: selectedBill.outstanding,
-    email: paymentEmail
-  });
+  const memberId = user?.id || member?.id;
+  
+  if (!memberId) {
+    setPaymentError('Unable to identify member. Please refresh and try again.');
+    return;
+  }
 
   setPaymentLoading(true);
   setPaymentError('');
@@ -93,7 +93,7 @@ export default function MyAccount() {
     const response = await api('/contributions/payments/initialize', {
       method: 'POST',
       body: {
-        member_id: user?.id || member?.id,  // ✅ Use user/member ID
+        member_id: memberId,
         amount: selectedBill.outstanding,
         email: paymentEmail,
         reference: `ESTATE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
