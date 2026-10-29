@@ -1,6 +1,10 @@
 const express = require('express');
 const { pool, query } = require('../db');
 const { authenticate, staff } = require('../auth');
+const Paystack = require('paystack');
+
+// Initialize Paystack with secret key from environment variables
+const paystack = new Paystack(process.env.PAYSTACK_SECRET_KEY);
 
 const router = express.Router();
 router.use(authenticate);
@@ -60,7 +64,7 @@ router.get('/activation-period', async (req, res) => {
   }
 });
 
-// POST generate bills (improved for occasional contributions)
+// POST generate bills
 router.post('/generate', staff, async (req, res) => {
   const { month, year, type = 'monthly', amount } = req.body || {};
   if (!(month >= 1 && month <= 12) || !(year >= 2000 && year <= 2100))
@@ -134,7 +138,7 @@ router.put('/:id', staff, async (req, res) => {
   }
 });
 
-// POST record payment
+// POST record manual payment (staff only)
 router.post('/payments', staff, async (req, res) => {
   const { member_id, month, year, type = 'monthly', amount, method = 'cash', reference, note } = req.body || {};
   const amt = Number(amount);
@@ -282,6 +286,65 @@ router.post('/payments', staff, async (req, res) => {
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
+  }
+});
+
+// POST initialize Paystack payment (accessible by authenticated users)
+router.post('/payments/initialize', async (req, res) => {
+  const { member_id, amount, email, reference } = req.body;
+  
+  if (!member_id || !amount || !email) {
+    return res.status(400).json({ error: 'member_id, amount, and email are required' });
+  }
+
+  try {
+    // Security Check: Ensure user is either staff OR paying for themselves
+    const isStaff = req.user?.role === 'treasurer' || req.user?.role === 'admin';
+    const isSelf = String(req.user?.id) === String(member_id);
+    
+    if (!isStaff && !isSelf) {
+      return res.status(403).json({ error: 'Unauthorized to initiate payment for this member' });
+    }
+
+    // Get member details
+    const { rows: [member] } = await query(
+      'SELECT id, household_name, house_number FROM members WHERE id = $1 AND active = true',
+      [member_id]
+    );
+    
+    if (!member) {
+      return res.status(404).json({ error: 'Active member not found' });
+    }
+
+    // Initialize Paystack transaction
+    const response = await paystack.transaction.initialize({
+      email: email,
+      amount: Math.round(amount * 100), // Convert Naira to Kobo
+      reference: reference || `ESTATE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      metadata: {
+        member_id: member_id,
+        household_name: member.household_name,
+        custom_fields: [
+          {
+            display_name: "House Number",
+            variable_name: "house_number",
+            value: member.house_number || "N/A"
+          }
+        ]
+      },
+      callback_url: `${process.env.FRONTEND_URL}/my-account?payment=success`,
+      channels: ['card', 'bank_transfer', 'ussd']
+    });
+
+    res.json({
+      authorization_url: response.data.authorization_url,
+      access_code: response.data.access_code,
+      reference: response.data.reference
+    });
+
+  } catch (err) {
+    console.error('Paystack initialization error:', err);
+    res.status(500).json({ error: 'Failed to initialize payment: ' + err.message });
   }
 });
 
