@@ -20,6 +20,7 @@
     "multer": "^2.4.0",
     "node-cron": "^4.6.0",
     "nodemailer": "^10.0.10",
+    "paystack": "^2.0.1",
     "pg": "^8.13.0",
     "twilio": "^6.1.2"
   }
