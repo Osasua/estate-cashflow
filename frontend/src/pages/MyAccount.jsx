@@ -74,33 +74,39 @@ export default function MyAccount() {
   };
 
   const handleInitializePayment = async () => {
-    if (!paymentEmail) {
-      setPaymentError('Email address is required for receipt');
-      return;
-    }
+  if (!paymentEmail) {
+    setPaymentError('Email address is required for receipt');
+    return;
+  }
 
-    setPaymentLoading(true);
-    setPaymentError('');
+  // Debug log - check what you're sending
+  console.log('Payment payload:', {
+    member_id: user?.id || member?.id,
+    amount: selectedBill.outstanding,
+    email: paymentEmail
+  });
 
-    try {
-      const response = await api('/contributions/payments/initialize', {
-        method: 'POST',
-        body: {
-          member_id: selectedBill.member_id,
-          amount: selectedBill.outstanding,
-          email: paymentEmail,
-          reference: `ESTATE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        }
-      });
+  setPaymentLoading(true);
+  setPaymentError('');
 
-      // Redirect to Paystack checkout page
-      window.location.href = response.authorization_url;
+  try {
+    const response = await api('/contributions/payments/initialize', {
+      method: 'POST',
+      body: {
+        member_id: user?.id || member?.id,  // ✅ Use user/member ID
+        amount: selectedBill.outstanding,
+        email: paymentEmail,
+        reference: `ESTATE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      }
+    });
 
-    } catch (err) {
-      setPaymentError(err.message || 'Failed to initialize payment. Please try again.');
-      setPaymentLoading(false);
-    }
-  };
+    window.location.href = response.authorization_url;
+
+  } catch (err) {
+    setPaymentError(err.message || 'Failed to initialize payment');
+    setPaymentLoading(false);
+  }
+};
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
