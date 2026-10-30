@@ -17,6 +17,9 @@ import Broadcast from './pages/Broadcast';
 import Minutes from './pages/Minutes';
 import Board from './pages/Board';
 import Chat from './pages/Chat';
+import PaymentSuccess from './pages/PaymentSuccess';
+import PaymentFailure from './pages/PaymentFailure';
+
 
 function Layout({ children }) {
   const { user, logout } = useAuth();
@@ -108,6 +111,8 @@ function AppRoutes() {
       <Route path="/categories" element={page(<Categories />)} />
       <Route path="/members" element={page(<Members />)} />
       <Route path="/users" element={page(<Users />)} />
+      <Route path="/payment-success" element={<PaymentSuccess />} />
+      <Route path="/payment-failed" element={<PaymentFailure />} />
       
       {/* ✅ FIXED: Added page() wrapper so the sidebar shows up */}
       <Route path="/minutes" element={page(<Minutes />)} />
