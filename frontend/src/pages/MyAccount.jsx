@@ -26,7 +26,7 @@ const OCCASION_TABS = ['float', 'projects', 'end-of-year', 'welfare'];
 const STATUS_PILL = {
   paid: { bg: '#dcfce7', color: '#166534', label: '✓ Paid' },
   partial: { bg: '#fef3c7', color: '#92400e', label: '⚠ Partial' },
-  pending: { bg: '#fee2e2', color: '#991b1b', label: ' Pending' },
+  pending: { bg: '#fee2e2', color: '#991b1b', label: '⏳ Pending' },
 };
 
 export default function MyAccount() {
@@ -45,7 +45,16 @@ export default function MyAccount() {
   const [paymentError, setPaymentError] = useState('');
 
   useEffect(() => {
-    loadData();
+    // Check if user was redirected back from a successful payment
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('payment') === 'success') {
+      // Clean up the URL so it doesn't trigger on every render
+      window.history.replaceState({}, document.title, window.location.pathname);
+      // Force a fresh load of data to reflect the paid status
+      loadData();
+    } else {
+      loadData();
+    }
   }, [viewing, tab]);
 
   const loadData = async () => {
@@ -74,39 +83,40 @@ export default function MyAccount() {
   };
 
   const handleInitializePayment = async () => {
-  if (!paymentEmail) {
-    setPaymentError('Email address is required for receipt');
-    return;
-  }
+    if (!paymentEmail) {
+      setPaymentError('Email address is required for receipt');
+      return;
+    }
 
-  const memberId = user?.id || member?.id;
-  
-  if (!memberId) {
-    setPaymentError('Unable to identify member. Please refresh and try again.');
-    return;
-  }
+    // CRITICAL FIX: Send the contribution ID (selectedBill.id), not member_id
+    const contributionId = selectedBill.id;
+    
+    if (!contributionId) {
+      setPaymentError('Unable to identify the bill. Please refresh and try again.');
+      return;
+    }
 
-  setPaymentLoading(true);
-  setPaymentError('');
+    setPaymentLoading(true);
+    setPaymentError('');
 
-  try {
-    const response = await api('/contributions/payments/initialize', {
-      method: 'POST',
-      body: {
-        member_id: memberId,
-        amount: selectedBill.outstanding,
-        email: paymentEmail,
-        reference: `ESTATE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      }
-    });
+    try {
+      const response = await api('/payments/initialize', {
+        method: 'POST',
+        body: {
+          contribution_id: contributionId, // This is what the webhook needs to update the correct bill!
+          amount: selectedBill.outstanding,
+          email: paymentEmail,
+          reference: `ESTATE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        }
+      });
 
-    window.location.href = response.authorization_url;
+      window.location.href = response.authorization_url;
 
-  } catch (err) {
-    setPaymentError(err.message || 'Failed to initialize payment');
-    setPaymentLoading(false);
-  }
-};
+    } catch (err) {
+      setPaymentError(err.message || 'Failed to initialize payment');
+      setPaymentLoading(false);
+    }
+  };
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -595,7 +605,7 @@ export default function MyAccount() {
           </div>
         ) : (
           <div style={{ padding: '60px 20px', textAlign: 'center', color: '#9ca3af' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '12px' }}></div>
+            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>📭</div>
             <p style={{ fontSize: '1rem', fontWeight: '600', color: '#6b7280' }}>No payments recorded yet</p>
           </div>
         )}
