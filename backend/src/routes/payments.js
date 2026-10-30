@@ -68,7 +68,9 @@ router.post('/initialize', express.json(), async (req, res) => {
       { 
         email, 
         amount: Math.round(amount * 100), 
-        reference, 
+        reference,
+        // ✅ CRITICAL FIX: Tell Paystack where to redirect after payment
+        callback_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/my-account?payment=success`,
         metadata: { 
           contribution_id, 
           user_id: req.user?.id || null 

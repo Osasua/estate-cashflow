@@ -45,12 +45,20 @@ export default function MyAccount() {
   const [paymentError, setPaymentError] = useState('');
 
   useEffect(() => {
-    // Check if user was redirected back from a successful payment
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('payment') === 'success') {
-      // Clean up the URL so it doesn't trigger on every render
+    const paymentSuccess = urlParams.get('payment') === 'success';
+    
+    if (paymentSuccess) {
+      // Close modal and reset state
+      setShowPayModal(false);
+      setPaymentLoading(false);
+      setPaymentError('');
+      setSelectedBill(null);
+      
+      // Clean URL
       window.history.replaceState({}, document.title, window.location.pathname);
-      // Force a fresh load of data to reflect the paid status
+      
+      // Reload data to show updated status
       loadData();
     } else {
       loadData();
@@ -160,7 +168,7 @@ export default function MyAccount() {
   if (error) {
     return (
       <div style={{ padding: '40px', textAlign: 'center' }}>
-        <div style={{ fontSize: '3rem', marginBottom: '16px' }}>⚠️</div>
+        <div style={{ fontSize: '3rem', marginBottom: '16px' }}>️</div>
         <h2 style={{ color: '#ef4444', marginBottom: '8px' }}>Error Loading Account</h2>
         <p style={{ color: '#6b7280' }}>{error}</p>
         <button 
@@ -176,7 +184,7 @@ export default function MyAccount() {
   if (!data) {
     return (
       <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>
-        <div style={{ fontSize: '3rem', marginBottom: '16px' }}>👤</div>
+        <div style={{ fontSize: '3rem', marginBottom: '16px' }}></div>
         <p>No account data available</p>
       </div>
     );
@@ -361,7 +369,7 @@ export default function MyAccount() {
                 tick={{ fontSize: 12, fill: '#9ca3af', fontWeight: '600' }}
                 axisLine={false}
                 tickLine={false}
-                tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`}
+                tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : `₦${v}`}
               />
               <Tooltip
                 content={<CustomTooltip />}
