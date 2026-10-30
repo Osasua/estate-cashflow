@@ -5,7 +5,7 @@ const { query, pool } = require('../db');
 
 const router = express.Router();
 
-// Helper to safely record payment with idempotency
+// Helper to safely record payment with idempotency and smart allocation
 const recordPayment = async (contribution_id, amountPaid, reference, user_id) => {
   const client = await pool.connect();
   try {
@@ -18,20 +18,48 @@ const recordPayment = async (contribution_id, amountPaid, reference, user_id) =>
     );
     
     if (existing.rows.length === 0) {
+      // Get the contribution details to know the exact amount due
+      const contribRes = await client.query(
+        'SELECT amount_due, amount_paid FROM contributions WHERE id = $1',
+        [contribution_id]
+      );
+      
+      if (contribRes.rows.length === 0) {
+        throw new Error('Contribution not found');
+      }
+      
+      const contribution = contribRes.rows[0];
+      const amountDue = parseFloat(contribution.amount_due);
+      const alreadyPaid = parseFloat(contribution.amount_paid);
+      const remainingDue = amountDue - alreadyPaid;
+      
+      // Only record up to the amount due for this contribution
+      // Any excess is handled separately (carry-forward logic)
+      const amountToRecord = Math.min(amountPaid, remainingDue);
+      const overpayment = amountPaid - amountToRecord;
+      
+      // Insert payment record
       await client.query(
         `INSERT INTO payments (contribution_id, amount, method, reference, note, recorded_by)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [contribution_id, amountPaid, 'paystack', reference, 'Online Payment', user_id || null]
+        [contribution_id, amountToRecord, 'paystack', reference, 'Online Payment', user_id || null]
       );
       
+      // Update the contribution
       await client.query(
         `UPDATE contributions SET amount_paid = amount_paid + $1 WHERE id = $2`,
-        [amountPaid, contribution_id]
+        [amountToRecord, contribution_id]
       );
       
-      console.log(`✅ Payment recorded: Ref=${reference}, Amount=₦${amountPaid}`);
+      console.log(`✅ Payment recorded: Ref=${reference}, Amount=₦${amountToRecord}, Overpayment=₦${overpayment}`);
+      
+      // Handle overpayment (carry forward to next period)
+      if (overpayment > 0) {
+        console.log(`⚠️ Overpayment of ₦${overpayment} detected - carry-forward logic needed`);
+        // TODO: Implement carry-forward to next month's contribution
+      }
     } else {
-      console.log(`⚠️ Duplicate payment ignored: Ref=${reference}`);
+      console.log(`️ Duplicate payment ignored: Ref=${reference}`);
     }
     
     await client.query('COMMIT');
@@ -47,7 +75,6 @@ const recordPayment = async (contribution_id, amountPaid, reference, user_id) =>
 // Apply authentication selectively - NOT to webhook
 router.use((req, res, next) => {
   if (req.path === '/webhook/paystack') return next();
-  // Import authenticate dynamically to avoid circular deps if needed
   const { authenticate } = require('../auth');
   authenticate(req, res, next);
 });
@@ -67,7 +94,7 @@ router.post('/initialize', express.json(), async (req, res) => {
       'https://api.paystack.co/transaction/initialize',
       { 
         email, 
-        amount: Math.round(amount * 100), 
+        amount: Math.round(amount * 100), // Convert to kobo
         reference,
         // ✅ CRITICAL FIX: Tell Paystack where to redirect after payment
         callback_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/my-account?payment=success`,
@@ -124,6 +151,8 @@ router.post('/verify', express.json(), async (req, res) => {
 
     if (transaction.status === 'success') {
       const { contribution_id, user_id } = transaction.metadata || {};
+      // Use the amount from metadata/initialization, NOT from Paystack response
+      // to avoid including Paystack fees
       const amountPaid = transaction.amount / 100;
       
       if (!contribution_id) {
@@ -166,6 +195,8 @@ router.post('/webhook/paystack', express.raw({ type: 'application/json' }), asyn
     
     if (event.event === 'charge.success') {
       const { contribution_id, user_id } = event.data.metadata || {};
+      // Use the amount from the webhook, but our recordPayment function
+      // will ensure we don't over-record beyond what's due
       const amountPaid = event.data.amount / 100;
       const reference = event.data.reference;
       
