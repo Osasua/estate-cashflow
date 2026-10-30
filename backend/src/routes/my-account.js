@@ -231,28 +231,28 @@ router.get('/', async (req, res) => {
     if (scoped) {
       const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
       const occRes = await query(`
-        SELECT c.period_year, c.period_month, c.amount_due, c.amount_paid, c.note,
+        SELECT c.id, c.period_year, c.period_month, c.amount_due, c.amount_paid, c.note,
                (SELECT string_agg(p.reference, ', ' ORDER BY p.id)
                   FROM payments p WHERE p.contribution_id = c.id) AS references
         FROM contributions c
         WHERE c.member_id = $1 AND c.type = $2
         ORDER BY c.period_year ASC, c.period_month ASC
       `, [memberId, type]);
-      occasions = occRes.rows.map(r => {
-        const due = parseFloat(r.amount_due) || 0;
-        const paid = parseFloat(r.amount_paid) || 0;
-        return {
-          period: `${r.period_year}-${String(r.period_month).padStart(2, '0')}`,
-          label: `${MONTHS[r.period_month - 1]} ${r.period_year}`,
-          short: `${MONTHS[r.period_month - 1].slice(0, 3)} ${String(r.period_year).slice(2)}`,
-          due,
-          paid,
-          outstanding: due - paid,
-          status: due > 0 && paid >= due ? 'paid' : paid > 0 ? 'partial' : 'pending',
-          references: r.references || r.note || null
-        };
-      });
-    }
+     occasions = occRes.rows.map(r => {
+  const due = parseFloat(r.amount_due) || 0;
+  const paid = parseFloat(r.amount_paid) || 0;
+  return {
+    id: r.id, // ✅ CRITICAL FIX: Added the database ID here
+    period: `${r.period_year}-${String(r.period_month).padStart(2, '0')}`,
+    label: `${MONTHS[r.period_month - 1]} ${r.period_year}`,
+    short: `${MONTHS[r.period_month - 1].slice(0, 3)} ${String(r.period_year).slice(2)}`,
+    due,
+    paid,
+    outstanding: due - paid,
+    status: due > 0 && paid >= due ? 'paid' : paid > 0 ? 'partial' : 'pending',
+    references: r.references || r.note || null
+  };
+});
 
     res.json({
       ...(scoped ? { scope: { type }, occasions } : {}),
