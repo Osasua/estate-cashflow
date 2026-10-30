@@ -3,6 +3,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import Skeleton from '../components/Skeleton';
 import Tabs from '../components/Tabs';
+import ManualPaymentModal from '../components/ManualPaymentModal'; // ✅ ADDED
 
 const ROW_COLORS = [
   { border: '#6366f1', bg: '#eef2ff', text: '#4f46e5' },
@@ -27,11 +28,9 @@ export default function Contributions() {
   const [contributions, setContributions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedContribution, setSelectedContribution] = useState(null);
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [paymentReference, setPaymentReference] = useState('');
+  
+  // ✅ REPLACED old modal states with a single state for the new component
+  const [payingContribution, setPayingContribution] = useState(null);
   
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({ amount: '', paid: '', reference: '' });
@@ -130,75 +129,42 @@ export default function Contributions() {
   };
 
   const handleEditSave = () => {
-  const dueAmount = parseFloat(editForm.amount);
-  const paidAmount = parseFloat(editForm.paid) || 0;
+    const dueAmount = parseFloat(editForm.amount);
+    const paidAmount = parseFloat(editForm.paid) || 0;
 
-  // Allow 0 (for non-members/exempt), but block negative values
-  if (isNaN(dueAmount) || dueAmount < 0) {
-    setMessage('❌ Amount due cannot be negative');
-    setTimeout(() => setMessage(''), 3000);
-    return;
-  }
-
-  if (paidAmount < 0) {
-    setMessage('❌ Amount paid cannot be negative');
-    setTimeout(() => setMessage(''), 3000);
-    return;
-  }
-
-  api(`/contributions/${selectedContribution.id}`, {
-    method: 'PUT',
-    body: { 
-      amount_due: dueAmount,
-      amount_paid: paidAmount,
-      note: editForm.reference.trim() === '' ? null : editForm.reference
-    }
-  }).then(() => {
-    setMessage('✅ Contribution updated');
-    setTimeout(() => setMessage(''), 3000);
-    setEditModalOpen(false);
-    loadContributions();
-  }).catch(err => {
-    setMessage('❌ Failed to update: ' + err.message);
-    setTimeout(() => setMessage(''), 5000);
-  });
-};
-
-  const handleRecordPayment = (contribution) => {
-    setSelectedContribution(contribution);
-    setPaymentAmount('');
-    setPaymentMethod('cash');
-    setPaymentReference('');
-    setShowPaymentModal(true);
-  };
-
-  const submitPayment = async () => {
-    if (!selectedContribution || !paymentAmount || parseFloat(paymentAmount) <= 0) {
-      setMessage('❌ Please enter a valid amount');
+    if (isNaN(dueAmount) || dueAmount < 0) {
+      setMessage('❌ Amount due cannot be negative');
+      setTimeout(() => setMessage(''), 3000);
       return;
     }
 
-    try {
-      await api('/contributions/payments', {
-        method: 'POST',
-        body: {
-          member_id: selectedContribution.member_id,
-          month: parseInt(form.month),
-          year: parseInt(form.year),
-          type: currentType,
-          amount: parseFloat(paymentAmount),
-          method: paymentMethod,
-          reference: paymentReference || undefined
-        }
-      });
-      setMessage('✅ Payment recorded');
+    if (paidAmount < 0) {
+      setMessage('❌ Amount paid cannot be negative');
       setTimeout(() => setMessage(''), 3000);
-      setShowPaymentModal(false);
-      await loadContributions();
-    } catch (err) {
-      setMessage('❌ ' + err.message);
-      setTimeout(() => setMessage(''), 3000);
+      return;
     }
+
+    api(`/contributions/${selectedContribution.id}`, {
+      method: 'PUT',
+      body: { 
+        amount_due: dueAmount,
+        amount_paid: paidAmount,
+        note: editForm.reference.trim() === '' ? null : editForm.reference
+      }
+    }).then(() => {
+      setMessage('✅ Contribution updated');
+      setTimeout(() => setMessage(''), 3000);
+      setEditModalOpen(false);
+      loadContributions();
+    }).catch(err => {
+      setMessage('❌ Failed to update: ' + err.message);
+      setTimeout(() => setMessage(''), 5000);
+    });
+  };
+
+  // ✅ UPDATED: Just set the state, the new modal handles the rest
+  const handleRecordPayment = (contribution) => {
+    setPayingContribution(contribution);
   };
 
   const expected = contributions.reduce((sum, c) => sum + (parseFloat(c.amount_due) || 0), 0);
@@ -254,7 +220,7 @@ export default function Contributions() {
       )}
 
       {message && (
-        <div style={{ background: message.includes('✅') ? '#ecfdf5' : message.includes('⚠️') ? '#fffbeb' : '#fff1f2', border: `1px solid ${message.includes('✅') ? '#a7f3d0' : message.includes('️') ? '#fde68a' : '#fecdd3'}`, borderRadius: '8px', padding: '12px', marginBottom: '20px', color: message.includes('✅') ? '#065f46' : message.includes('️') ? '#92400e' : '#991b1b' }}>{message}</div>
+        <div style={{ background: message.includes('✅') ? '#ecfdf5' : message.includes('⚠️') ? '#fffbeb' : '#fff1f2', border: `1px solid ${message.includes('✅') ? '#a7f3d0' : message.includes('⚠️') ? '#fde68a' : '#fecdd3'}`, borderRadius: '8px', padding: '12px', marginBottom: '20px', color: message.includes('✅') ? '#065f46' : message.includes('⚠️') ? '#92400e' : '#991b1b' }}>{message}</div>
       )}
 
       <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', marginBottom: '24px' }}>
@@ -385,6 +351,7 @@ export default function Contributions() {
         )}
       </div>
 
+      {/* Edit Modal */}
       {editModalOpen && selectedContribution && (
         <div style={{
           position: 'fixed',
@@ -408,7 +375,7 @@ export default function Contributions() {
             boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
           }} onClick={e => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 24px 0', fontSize: '1.5rem', fontWeight: '700', color: '#111827' }}>
-              ️ Edit Contribution
+              Edit Contribution
             </h3>
             
             <div style={{ marginBottom: '20px', padding: '16px', background: '#f9fafb', borderRadius: '12px' }}>
@@ -429,14 +396,7 @@ export default function Contributions() {
                 type="number"
                 value={editForm.amount}
                 onChange={(e) => setEditForm({...editForm, amount: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '8px',
-                  fontSize: '1rem',
-                  boxSizing: 'border-box'
-                }}
+                style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '1rem', boxSizing: 'border-box' }}
                 placeholder="Enter amount due"
                 autoFocus
               />
@@ -450,14 +410,7 @@ export default function Contributions() {
                 type="number"
                 value={editForm.paid}
                 onChange={(e) => setEditForm({...editForm, paid: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '8px',
-                  fontSize: '1rem',
-                  boxSizing: 'border-box'
-                }}
+                style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '1rem', boxSizing: 'border-box' }}
                 placeholder="Enter amount paid"
               />
               <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '6px' }}>
@@ -473,88 +426,33 @@ export default function Contributions() {
                 type="text"
                 value={editForm.reference}
                 onChange={(e) => setEditForm({...editForm, reference: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '8px',
-                  fontSize: '1rem',
-                  boxSizing: 'border-box'
-                }}
+                style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '1rem', boxSizing: 'border-box' }}
                 placeholder="e.g., Sept - Dec-2, Sept - Dec-3"
               />
             </div>
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setEditModalOpen(false)}
-                style={{
-                  padding: '12px 24px',
-                  background: '#f3f4f6',
-                  color: '#374151',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  fontSize: '0.95rem'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEditSave}
-                style={{
-                  padding: '12px 24px',
-                  background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  fontSize: '0.95rem',
-                  boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
-                }}
-              >
-                ✓ Save Changes
-              </button>
+              <button onClick={() => setEditModalOpen(false)} style={{ padding: '12px 24px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '0.95rem' }}>Cancel</button>
+              <button onClick={handleEditSave} style={{ padding: '12px 24px', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '0.95rem', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)' }}>✓ Save Changes</button>
             </div>
           </div>
         </div>
       )}
 
-      {showPaymentModal && selectedContribution && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowPaymentModal(false)}>
-          <div style={{ background: 'white', padding: '24px', borderRadius: '12px', width: '400px', maxWidth: '90%' }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0, marginBottom: '16px' }}>Record Payment</h3>
-            <div style={{ marginBottom: '16px', padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
-              <div style={{ fontSize: '0.9rem', color: '#6b7280' }}>Household</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: '600' }}>{selectedContribution.household_name}</div>
-              <div style={{ fontSize: '0.9rem', color: '#6b7280', marginTop: '8px' }}>Amount Due</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#e11d48' }}>₦{(parseFloat(selectedContribution.amount_due) || 0).toLocaleString()}</div>
-            </div>
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600' }}>Payment Amount</label>
-              <input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} style={{ width: '100%', padding: '10px', boxSizing: 'border-box', border: '1px solid #d1d5db', borderRadius: '6px' }} placeholder="Enter amount" />
-            </div>
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600' }}>Payment Method</label>
-              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} style={{ width: '100%', padding: '10px', boxSizing: 'border-box', border: '1px solid #d1d5db', borderRadius: '6px' }}>
-                <option value="cash">Cash</option>
-                <option value="transfer">Bank Transfer</option>
-                <option value="cheque">Cheque</option>
-                <option value="pos">POS</option>
-              </select>
-            </div>
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600' }}>Reference (Optional)</label>
-              <input type="text" value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} style={{ width: '100%', padding: '10px', boxSizing: 'border-box', border: '1px solid #d1d5db', borderRadius: '6px' }} placeholder="e.g., TXN123456" />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button onClick={() => setShowPaymentModal(false)} style={{ padding: '10px 20px', background: '#e5e7eb', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={submitPayment} style={{ padding: '10px 20px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>Submit Payment</button>
-            </div>
-          </div>
-        </div>
+      {/* ✅ NEW: Manual Payment Modal Component */}
+      {payingContribution && (
+        <ManualPaymentModal 
+          member={{ 
+            id: payingContribution.member_id, 
+            household_name: payingContribution.household_name, 
+            house_number: payingContribution.house_number 
+          }} 
+          onClose={() => setPayingContribution(null)} 
+          onSuccess={() => {
+            setPayingContribution(null);
+            loadContributions(); // Refresh the table automatically
+          }} 
+        />
       )}
     </div>
   );

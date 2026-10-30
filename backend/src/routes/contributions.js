@@ -2,6 +2,7 @@ const express = require('express');
 const { pool, query } = require('../db');
 const { authenticate, staff } = require('../auth');
 const Paystack = require('paystack');
+const nodemailer = require('nodemailer'); // Added for email receipts
 
 // Initialize Paystack with secret key from environment variables
 const paystack = new Paystack(process.env.PAYSTACK_SECRET_KEY);
@@ -71,8 +72,6 @@ router.post('/generate', staff, async (req, res) => {
     return res.status(400).json({ error: 'Valid month (1-12) and year are required' });
 
   try {
-    let rowCount;
-    
     // For occasional contributions, check if already activated
     if (type !== 'monthly') {
       const { rows: existing } = await query(
@@ -154,8 +153,9 @@ router.post('/payments', staff, async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    // ✅ Fetch email and household name for the receipt
     const { rows: [member] } = await client.query(
-      'SELECT id, monthly_due FROM members WHERE id = $1 AND active = true',
+      'SELECT id, monthly_due, email, household_name FROM members WHERE id = $1 AND active = true',
       [member_id]
     );
     if (!member) {
@@ -169,9 +169,7 @@ router.post('/payments', staff, async (req, res) => {
 
     // 1. Clear Previous-Year Arrears
     const { rows: [arrearsRow] } = await client.query(
-      `SELECT id, period_year, period_month, amount_due, amount_paid
-         FROM contributions
-        WHERE member_id = $1 AND type = 'arrears'`,
+      `SELECT id, period_year, period_month, amount_due, amount_paid FROM contributions WHERE member_id = $1 AND type = 'arrears'`,
       [member_id]
     );
     if (arrearsRow && remaining > 0) {
@@ -185,10 +183,7 @@ router.post('/payments', staff, async (req, res) => {
 
     // 2. Allocate to oldest unpaid months
     const { rows: existingContribs } = await client.query(
-      `SELECT id, period_year, period_month, amount_due, amount_paid
-         FROM contributions
-        WHERE member_id = $1 AND type = $2
-        ORDER BY period_year ASC, period_month ASC`,
+      `SELECT id, period_year, period_month, amount_due, amount_paid FROM contributions WHERE member_id = $1 AND type = $2 ORDER BY period_year ASC, period_month ASC`,
       [member_id, type]
     );
     for (const c of existingContribs) {
@@ -201,7 +196,7 @@ router.post('/payments', staff, async (req, res) => {
       }
     }
 
-    // 3. Future months
+    // 3. Future months (Monthly only)
     if (remaining > 0 && type === 'monthly') {
       let anchorDate = new Date(year, month - 1, 1);
       const today = new Date(); today.setDate(1);
@@ -238,7 +233,7 @@ router.post('/payments', staff, async (req, res) => {
       }
     }
 
-    // 4. Fallback
+    // 4. Fallback (Prevent overpayment bug)
     if (allocations.length === 0 && remaining > 0) {
       await client.query(
         `INSERT INTO contributions (member_id, type, period_year, period_month, amount_due, amount_paid)
@@ -247,15 +242,22 @@ router.post('/payments', staff, async (req, res) => {
         [member_id, type, year, month, monthlyDue]
       );
       const { rows: [fallback] } = await client.query(
-        `SELECT id FROM contributions WHERE member_id = $1 AND type = $2 AND period_year = $3 AND period_month = $4`,
+        `SELECT id, amount_due, amount_paid FROM contributions WHERE member_id = $1 AND type = $2 AND period_year = $3 AND period_month = $4`,
         [member_id, type, year, month]
       );
-      allocations.push({ contrib_id: fallback.id, amount: remaining, year, month, type });
-      remaining = 0;
+      
+      if (fallback) {
+        const owed = Number(fallback.amount_due) - Number(fallback.amount_paid);
+        const maxAllowed = owed > 0 ? owed : Number(fallback.amount_due);
+        const allocate = Math.min(remaining, maxAllowed);
+        
+        allocations.push({ contrib_id: fallback.id, amount: allocate, year, month, type });
+        remaining -= allocate;
+      }
     }
 
     // 5. Update and insert records
-    const baseRef = reference || `PAY-${Date.now()}`;
+    const baseRef = reference || `MANUAL-${Date.now().toString().slice(-8)}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
     for (let i = 0; i < allocations.length; i++) {
       const alloc = allocations[i];
       const allocRef = allocations.length > 1 ? `${baseRef}-${i + 1}` : baseRef;
@@ -274,8 +276,23 @@ router.post('/payments', staff, async (req, res) => {
 
     await client.query('COMMIT');
 
+    // ✅ Trigger email asynchronously (won't block the response)
+    if (member.email) {
+      sendPaymentReceiptEmail(member.email, member.household_name, amt, baseRef, allocations, method).catch(err => 
+        console.error('❌ Failed to send payment receipt email:', err)
+      );
+    }
+
+    let message = `Payment of ₦${amt.toLocaleString()} allocated successfully.`;
+    if (remaining > 0) {
+      message += ` ⚠️ Note: ₦${remaining.toLocaleString()} was NOT allocated as it exceeds all known dues.`;
+    }
+
+    // ✅ CRITICAL: Return reference and allocations for the frontend modal
     res.status(201).json({ 
-      message: `Payment of ₦${amt.toLocaleString()} allocated successfully.`,
+      success: true,
+      message,
+      reference: baseRef,
       allocations,
       credit_balance: remaining
     });
@@ -298,7 +315,6 @@ router.post('/payments/initialize', async (req, res) => {
   }
 
   try {
-    // Security Check: Ensure user is either staff OR paying for themselves
     const isStaff = req.user?.role === 'treasurer' || req.user?.role === 'admin';
     const isSelf = String(req.user?.id) === String(member_id);
     
@@ -306,7 +322,6 @@ router.post('/payments/initialize', async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized to initiate payment for this member' });
     }
 
-    // Get member details
     const { rows: [member] } = await query(
       'SELECT id, household_name, house_number FROM members WHERE id = $1 AND active = true',
       [member_id]
@@ -316,10 +331,9 @@ router.post('/payments/initialize', async (req, res) => {
       return res.status(404).json({ error: 'Active member not found' });
     }
 
-    // Initialize Paystack transaction
     const response = await paystack.transaction.initialize({
       email: email,
-      amount: Math.round(amount * 100), // Convert Naira to Kobo
+      amount: Math.round(amount * 100),
       reference: reference || `ESTATE-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       metadata: {
         member_id: member_id,
@@ -347,5 +361,53 @@ router.post('/payments/initialize', async (req, res) => {
     res.status(500).json({ error: 'Failed to initialize payment: ' + err.message });
   }
 });
+
+// ✅ Helper function to send email receipts
+async function sendPaymentReceiptEmail(email, householdName, amount, reference, allocations, method) {
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: process.env.SMTP_PORT || 587,
+    secure: process.env.SMTP_PORT === '465',
+    auth: { 
+      user: process.env.SMTP_USER, 
+      pass: process.env.SMTP_PASS 
+    },
+  });
+
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const allocationRows = allocations.map(alloc => 
+    `<tr>
+      <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${MONTHS[alloc.month - 1]} ${alloc.year} (${alloc.type})</td>
+      <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">₦${Number(alloc.amount).toLocaleString()}</td>
+    </tr>`
+  ).join('');
+
+  await transporter.sendMail({
+    from: `"Estate Management" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+    to: email,
+    subject: `Payment Receipt - Reference: ${reference}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
+        <h2 style="color: #166534; text-align: center;">Payment Received</h2>
+        <p>Dear <strong>${householdName}</strong>,</p>
+        <p>Thank you for your payment. We have successfully recorded your contribution.</p>
+        <div style="background: #f9fafb; padding: 16px; border-radius: 8px; margin: 20px 0;">
+          <p style="margin: 4px 0;"><strong>Reference:</strong> ${reference}</p>
+          <p style="margin: 4px 0;"><strong>Total Amount:</strong> ₦${Number(amount).toLocaleString()}</p>
+          <p style="margin: 4px 0;"><strong>Method:</strong> ${method.charAt(0).toUpperCase() + method.slice(1)}</p>
+        </div>
+        <h3 style="font-size: 16px; margin-bottom: 12px;">Allocation Breakdown:</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <thead>
+            <tr style="background: #f3f4f6;">
+              <th style="padding: 8px; text-align: left;">Period / Type</th>
+              <th style="padding: 8px; text-align: right;">Amount Applied</th>
+            </tr>
+          </thead>
+          <tbody>${allocationRows}</tbody>
+        </table>
+      </div>`
+  });
+}
 
 module.exports = router;
