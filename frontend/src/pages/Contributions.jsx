@@ -419,14 +419,14 @@ export default function Contributions() {
           zIndex: 1000,
           backdropFilter: 'blur(4px)'
         }} onClick={() => setEditModalOpen(false)}>
-          <div className="print-receipt-container" style={{
-  background: 'white',
-  borderRadius: '16px',
-  padding: '32px',
-  width: '90%',
-  maxWidth: '500px',
-  boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
-}} onClick={e => e.stopPropagation()}>
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            padding: '32px',
+            width: '90%',
+            maxWidth: '500px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+          }} onClick={e => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 24px 0', fontSize: '1.5rem', fontWeight: '700', color: '#111827' }}>
               Edit Contribution
             </h3>
@@ -507,7 +507,7 @@ export default function Contributions() {
           zIndex: 1000,
           backdropFilter: 'blur(4px)'
         }} onClick={() => setPayingContribution(null)}>
-          <div style={{
+          <div className="print-receipt-container" style={{
             background: 'white',
             borderRadius: '16px',
             padding: '32px',
@@ -640,34 +640,42 @@ export default function Contributions() {
         </div>
       )}
 
-      {/* Print Styles */}
+      {/* ✅ FIXED: Single, Clean Print Style Tag */}
       <style>{`
-  @media print {
-    /* Hide everything on the page */
-    body * { visibility: hidden !important; }
-    
-    /* Make the receipt container visible and static */
-    .print-receipt-container { 
-      visibility: visible !important; 
-      position: absolute !important; 
-      left: 0 !important; 
-      top: 0 !important; 
-      width: 100% !important; 
-      margin: 0 !important;
-      padding: 20px !important;
-      background: white !important;
-      box-shadow: none !important;
-      border: none !important;
-      z-index: 9999 !important;
-    }
-    
-    /* Ensure text inside is visible */
-    .print-receipt-container * { visibility: visible !important; }
-    
-    /* Hide buttons */
-    .no-print { display: none !important; }
-  }
-`}</style>
+        @media print {
+          body, body * { 
+            visibility: hidden !important; 
+            display: none !important; 
+          }
+          
+          .print-receipt-container, .print-receipt-container * { 
+            visibility: visible !important; 
+            display: block !important; 
+          }
+          
+          .print-receipt-container {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 40px !important;
+            background: white !important;
+            box-shadow: none !important;
+            border: none !important;
+            z-index: 99999 !important;
+            transform: none !important;
+          }
+          
+          .print-receipt-container div[style*="display: flex"] {
+            display: flex !important;
+          }
+          
+          .no-print, button, input, select, textarea { 
+            display: none !important; 
+          }
+        }
+      `}</style>
     </div>
   );
 }
