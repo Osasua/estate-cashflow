@@ -123,20 +123,30 @@ router.post('/:id/create-login', staff, async (req, res) => {
     if (!m.email) return res.status(400).json({ message: 'Member must have an email address.' });
 
     const existingUser = await query('SELECT id FROM users WHERE member_id = $1', [m.id]);
-    if (existingUser.rows[0]) return res.status(409).json({ message: 'Login already exists.' });
+    if (existingUser.rows[0]) return res.status(409).json({ message: 'Login already exists for this member.' });
 
     const tempPassword = crypto.randomBytes(6).toString('hex');
     const password_hash = bcrypt.hashSync(tempPassword, 10);
 
-    await query(
-      `INSERT INTO users (name, email, password_hash, role, member_id) 
-       VALUES ($1, $2, $3, 'member', $4)`,
-      [m.household_name, m.email.toLowerCase().trim(), password_hash, m.id]
-    );
+    try {
+      await query(
+        `INSERT INTO users (name, email, password_hash, role, member_id) 
+         VALUES ($1, $2, $3, 'member', $4)`,
+        [m.household_name, m.email.toLowerCase().trim(), password_hash, m.id]
+      );
+    } catch (dbError) {
+      // ✅ Handle Duplicate Email Error gracefully
+      if (dbError.code === '23505') {
+        return res.status(409).json({ 
+          message: `The email '${m.email}' is already linked to another user account. Please use a unique email address.` 
+        });
+      }
+      throw dbError; // Re-throw other unexpected errors
+    }
 
     res.json({ message: `Login created for ${m.email}! Temp password: ${tempPassword}` });
 
-    // ✅ Send Welcome Email using Brevo HTTP API (Guaranteed to work)
+    // ✅ Send Welcome Email using Brevo HTTP API
     const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     const BREVO_API_KEY = process.env.BREVO_API_KEY;
     const senderEmail = process.env.SMTP_FROM_EMAIL || 'your-verified-email@domain.com';
@@ -174,10 +184,6 @@ router.post('/:id/create-login', staff, async (req, res) => {
           <p style="color: #6b7280; font-size: 0.95em; margin-top: 24px;">
             If you have any questions or need assistance, please contact the estate management office.
           </p>
-          
-          <p style="color: #9ca3af; font-size: 0.85em; text-align: center; margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
-            This is an automated message. Please do not reply to this email.
-          </p>
         </div>
       `;
 
@@ -194,14 +200,7 @@ router.post('/:id/create-login', staff, async (req, res) => {
           subject: 'Welcome to Ferrano Court Portal - Your Login Credentials',
           htmlContent: emailHtml
         })
-      })
-      .then(response => {
-        if (response.ok) console.log('✅ Welcome email sent to', m.email);
-        else response.json().then(err => console.error('❌ Brevo API Error:', err));
-      })
-      .catch(err => console.error('❌ Network error sending email:', err.message));
-    } else {
-      console.error('❌ BREVO_API_KEY is missing in environment variables');
+      }).catch(err => console.error('❌ Email send failed:', err.message));
     }
 
   } catch (err) {
