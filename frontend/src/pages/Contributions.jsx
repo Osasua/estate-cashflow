@@ -32,7 +32,6 @@ export default function Contributions() {
   
   // Payment Modal State
   const [payingContribution, setPayingContribution] = useState(null);
-  const [paymentReceipt, setPaymentReceipt] = useState(null);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [formData, setFormData] = useState({
@@ -41,6 +40,9 @@ export default function Contributions() {
     reference: '',
     note: ''
   });
+
+  // ✅ NEW: State for the printable receipt (separate from modal)
+  const [printableReceipt, setPrintableReceipt] = useState(null);
   
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedContribution, setSelectedContribution] = useState(null);
@@ -175,7 +177,6 @@ export default function Contributions() {
 
   const handleRecordPayment = (contribution) => {
     setPayingContribution(contribution);
-    setPaymentReceipt(null);
     setPaymentError('');
     setFormData({
       amount: '',
@@ -209,16 +210,20 @@ export default function Contributions() {
         }
       });
       
-      setPaymentReceipt(res);
+      // ✅ Store receipt data for printing AND close modal
+      setPrintableReceipt(res);
+      setPayingContribution(null); 
       loadContributions();
+      
+      // Auto-trigger print after a tiny delay to ensure state updates
+      setTimeout(() => window.print(), 100);
+
     } catch (err) {
       setPaymentError(err.message || 'Failed to record payment');
     } finally {
       setPaymentLoading(false);
     }
   };
-
-  const handlePrint = () => window.print();
 
   const expected = contributions.reduce((sum, c) => sum + (parseFloat(c.amount_due) || 0), 0);
   const collected = contributions.reduce((sum, c) => sum + (parseFloat(c.amount_paid) || 0), 0);
@@ -492,7 +497,7 @@ export default function Contributions() {
         </div>
       )}
 
-      {/* ✅ MANUAL PAYMENT MODAL - BUILT DIRECTLY INTO THIS FILE */}
+      {/* ✅ MANUAL PAYMENT MODAL (Screen Only - No Print Logic Here) */}
       {payingContribution && (
         <div style={{
           position: 'fixed',
@@ -507,7 +512,7 @@ export default function Contributions() {
           zIndex: 1000,
           backdropFilter: 'blur(4px)'
         }} onClick={() => setPayingContribution(null)}>
-          <div className="print-receipt-container" style={{
+          <div style={{
             background: 'white',
             borderRadius: '16px',
             padding: '32px',
@@ -516,163 +521,151 @@ export default function Contributions() {
             boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
           }} onClick={e => e.stopPropagation()}>
             
-            {/* SUCCESS / RECEIPT VIEW */}
-            {paymentReceipt ? (
-              <>
-                <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                  <div style={{ width: '64px', height: '64px', background: '#dcfce7', color: '#166534', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', fontWeight: 'bold', margin: '0 auto' }}>✓</div>
-                  <h2 style={{ margin: '16px 0 8px', color: '#111827' }}>Payment Recorded!</h2>
-                  <p style={{ color: '#6b7280', margin: 0 }}>{paymentReceipt.message}</p>
+            {/* INPUT FORM VIEW ONLY */}
+            <>
+              <h2 style={{ margin: '0 0 8px 0', fontSize: '1.25rem', color: '#111827' }}>Record Manual Payment</h2>
+              <p style={{ color: '#6b7280', marginBottom: '24px', fontSize: '0.9rem' }}>
+                For: <strong>{payingContribution.household_name}</strong> ({payingContribution.house_number})
+              </p>
+
+              {paymentError && <div style={{ padding: '12px', background: '#fee2e2', color: '#991b1b', borderRadius: '8px', fontSize: '0.875rem', marginBottom: '16px' }}>{paymentError}</div>}
+
+              <div style={{ display: 'grid', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>Amount (₦) *</label>
+                  <input
+                    type="number" required min="1" step="0.01"
+                    value={formData.amount}
+                    onChange={e => setFormData({ ...formData, amount: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }}
+                    placeholder="50000"
+                  />
                 </div>
 
-                <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px dashed #d1d5db', fontSize: '0.875rem' }}>
-                    <span>Reference</span>
-                    <strong>{paymentReceipt.reference}</strong>
-                  </div>
-                  
-                  <div style={{ marginTop: '16px' }}>
-                    <h4 style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '8px', textTransform: 'uppercase' }}>Allocation Breakdown</h4>
-                    <table style={{ width: '100%', fontSize: '0.9rem', borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-                          <th style={{ textAlign: 'left', padding: '8px 0', color: '#374151' }}>Period</th>
-                          <th style={{ textAlign: 'right', padding: '8px 0', color: '#374151' }}>Amount Applied</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paymentReceipt.allocations.map((alloc, idx) => (
-                          <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                            <td style={{ padding: '8px 0', color: '#111827' }}>
-                              {MONTHS[alloc.month - 1]} {alloc.year} 
-                              <span style={{ color: '#6b7280', fontSize: '0.75rem', marginLeft: '6px' }}>({alloc.type})</span>
-                            </td>
-                            <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: '600', color: '#059669' }}>
-                              ₦{Number(alloc.amount).toLocaleString()}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {paymentReceipt.credit_balance > 0 && (
-                    <div style={{ marginTop: '16px', padding: '12px', background: '#fef3c7', borderRadius: '8px', color: '#92400e', fontSize: '0.875rem' }}>
-                      ⚠️ Unallocated Credit: ₦{Number(paymentReceipt.credit_balance).toLocaleString()}
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }} className="no-print">
-                  <button onClick={handlePrint} style={{ flex: 1, padding: '12px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>🖨️ Print Receipt</button>
-                  <button onClick={() => setPayingContribution(null)} style={{ flex: 1, padding: '12px', background: '#6366f1', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Done</button>
-                </div>
-              </>
-            ) : (
-              /* INPUT FORM VIEW */
-              <>
-                <h2 style={{ margin: '0 0 8px 0', fontSize: '1.25rem', color: '#111827' }}>Record Manual Payment</h2>
-                <p style={{ color: '#6b7280', marginBottom: '24px', fontSize: '0.9rem' }}>
-                  For: <strong>{payingContribution.household_name}</strong> ({payingContribution.house_number})
-                </p>
-
-                {paymentError && <div style={{ padding: '12px', background: '#fee2e2', color: '#991b1b', borderRadius: '8px', fontSize: '0.875rem', marginBottom: '16px' }}>{paymentError}</div>}
-
-                <div style={{ display: 'grid', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>Amount (₦) *</label>
-                    <input
-                      type="number" required min="1" step="0.01"
-                      value={formData.amount}
-                      onChange={e => setFormData({ ...formData, amount: e.target.value })}
-                      style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }}
-                      placeholder="50000"
-                    />
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>Month *</label>
-                      <select value={form.month} disabled style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', background: '#f9fafb' }}>
-                        {monthNames.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>Year *</label>
-                      <input type="number" value={form.year} disabled style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', background: '#f9fafb', boxSizing: 'border-box' }} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>Method *</label>
-                    <select value={formData.method} onChange={e => setFormData({ ...formData, method: e.target.value })} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px' }}>
-                      <option value="cash">Cash</option>
-                      <option value="bank_transfer">Bank Transfer</option>
-                      <option value="cheque">Cheque</option>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>Month *</label>
+                    <select value={form.month} disabled style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', background: '#f9fafb' }}>
+                      {monthNames.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
                     </select>
                   </div>
-
                   <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>Reference <span style={{ color: '#9ca3af', fontWeight: 'normal' }}>(Auto-generated if blank)</span></label>
-                    <input type="text" value={formData.reference} onChange={e => setFormData({ ...formData, reference: e.target.value })} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} placeholder="e.g., TRF-998877" />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>Note (Optional)</label>
-                    <textarea
-                      value={formData.note}
-                      onChange={e => setFormData({ ...formData, note: e.target.value })}
-                      style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', minHeight: '60px', resize: 'vertical', boxSizing: 'border-box' }}
-                      placeholder="e.g., Paid by wife"
-                    />
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                    <button type="button" onClick={() => setPayingContribution(null)} style={{ flex: 1, padding: '12px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
-                    <button type="button" onClick={submitPayment} disabled={paymentLoading} style={{ flex: 1, padding: '12px', background: paymentLoading ? '#9ca3af' : '#22c55e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: paymentLoading ? 'not-allowed' : 'pointer' }}>
-                      {paymentLoading ? 'Processing...' : 'Record Payment'}
-                    </button>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>Year *</label>
+                    <input type="number" value={form.year} disabled style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', background: '#f9fafb', boxSizing: 'border-box' }} />
                   </div>
                 </div>
-              </>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>Method *</label>
+                  <select value={formData.method} onChange={e => setFormData({ ...formData, method: e.target.value })} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px' }}>
+                    <option value="cash">Cash</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="cheque">Cheque</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>Reference <span style={{ color: '#9ca3af', fontWeight: 'normal' }}>(Auto-generated if blank)</span></label>
+                  <input type="text" value={formData.reference} onChange={e => setFormData({ ...formData, reference: e.target.value })} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} placeholder="e.g., TRF-998877" />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.875rem', fontWeight: '600', color: '#374151' }}>Note (Optional)</label>
+                  <textarea
+                    value={formData.note}
+                    onChange={e => setFormData({ ...formData, note: e.target.value })}
+                    style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', minHeight: '60px', resize: 'vertical', boxSizing: 'border-box' }}
+                    placeholder="e.g., Paid by wife"
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                  <button type="button" onClick={() => setPayingContribution(null)} style={{ flex: 1, padding: '12px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                  <button type="button" onClick={submitPayment} disabled={paymentLoading} style={{ flex: 1, padding: '12px', background: paymentLoading ? '#9ca3af' : '#22c55e', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: paymentLoading ? 'not-allowed' : 'pointer' }}>
+                    {paymentLoading ? 'Processing...' : 'Record Payment'}
+                  </button>
+                </div>
+              </div>
+            </>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ HIDDEN PRINTABLE RECEIPT CONTAINER */}
+      {printableReceipt && (
+        <div id="printable-receipt" className="print-only">
+          <div style={{ padding: '40px', fontFamily: 'Arial, sans-serif' }}>
+            <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+              <h1 style={{ margin: '0 0 10px 0', color: '#166534' }}>PAYMENT RECEIPT</h1>
+              <p style={{ margin: 0, color: '#6b7280' }}>Ferrano Court Portal</p>
+            </div>
+
+            <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <span style={{ color: '#6b7280' }}>Reference:</span>
+                <strong>{printableReceipt.reference}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <span style={{ color: '#6b7280' }}>Date:</span>
+                <strong>{new Date().toLocaleDateString()}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <span style={{ color: '#6b7280' }}>Household:</span>
+                <strong>{payingContribution?.household_name || 'N/A'}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#6b7280' }}>Total Amount:</span>
+                <strong style={{ fontSize: '1.2rem', color: '#059669' }}>₦{Number(printableReceipt.allocations.reduce((sum, a) => sum + a.amount, 0)).toLocaleString()}</strong>
+              </div>
+            </div>
+
+            <h3 style={{ fontSize: '1rem', color: '#374151', marginBottom: '10px' }}>Allocation Breakdown</h3>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                  <th style={{ textAlign: 'left', padding: '8px', color: '#6b7280' }}>Period</th>
+                  <th style={{ textAlign: 'right', padding: '8px', color: '#6b7280' }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {printableReceipt.allocations.map((alloc, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '8px', color: '#111827' }}>
+                      {MONTHS[alloc.month - 1]} {alloc.year} ({alloc.type})
+                    </td>
+                    <td style={{ padding: '8px', textAlign: 'right', fontWeight: '600', color: '#059669' }}>
+                      ₦{Number(alloc.amount).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {printableReceipt.credit_balance > 0 && (
+              <div style={{ padding: '10px', background: '#fef3c7', borderRadius: '4px', color: '#92400e', fontSize: '0.9rem' }}>
+                ⚠️ Unallocated Credit: ₦{Number(printableReceipt.credit_balance).toLocaleString()}
+              </div>
             )}
           </div>
         </div>
       )}
 
-      {/* ✅ FIXED: Single, Clean Print Style Tag */}
+      {/* ✅ SIMPLE PRINT CSS */}
       <style>{`
         @media print {
-          body, body * { 
-            visibility: hidden !important; 
-            display: none !important; 
-          }
-          
-          .print-receipt-container, .print-receipt-container * { 
+          body * { visibility: hidden !important; }
+          #printable-receipt, #printable-receipt * { 
             visibility: visible !important; 
-            display: block !important; 
+            position: static !important;
+            display: block !important;
           }
-          
-          .print-receipt-container {
+          #printable-receipt {
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
             width: 100% !important;
             margin: 0 !important;
-            padding: 40px !important;
-            background: white !important;
-            box-shadow: none !important;
-            border: none !important;
-            z-index: 99999 !important;
-            transform: none !important;
-          }
-          
-          .print-receipt-container div[style*="display: flex"] {
-            display: flex !important;
-          }
-          
-          .no-print, button, input, select, textarea { 
-            display: none !important; 
+            padding: 0 !important;
           }
         }
       `}</style>
