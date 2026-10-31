@@ -34,7 +34,9 @@ router.get('/', async (req, res) => {
                  FROM payments WHERE contribution_id = c.id)) AS references
          FROM contributions c JOIN members m ON m.id = c.member_id
         WHERE c.period_year = $1 AND c.period_month = $2 AND c.type = $3
-        ORDER BY m.house_number`,
+        ORDER BY 
+          CAST(regexp_replace(m.house_number, '[^0-9]', '', 'g') AS INTEGER),
+          m.house_number`,
       [year, month, type]
     );
     res.json({
