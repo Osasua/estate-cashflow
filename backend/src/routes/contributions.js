@@ -1,11 +1,11 @@
 // backend/src/routes/contributions.js
-require('dns').setDefaultResultOrder('ipv4first'); // ✅ Fix for Render/Gmail IPv6 timeout
+require('dns').setDefaultResultOrder('ipv4first'); // ✅ Fix for Render IPv6 timeout
 
 const express = require('express');
 const { pool, query } = require('../db');
 const { authenticate, staff } = require('../auth');
 const Paystack = require('paystack');
-const nodemailer = require('nodemailer');
+// ✅ nodemailer removed - switching to Brevo HTTP API
 
 // Initialize Paystack with secret key from environment variables
 const paystack = new Paystack(process.env.PAYSTACK_SECRET_KEY);
@@ -75,7 +75,6 @@ router.post('/generate', staff, async (req, res) => {
     return res.status(400).json({ error: 'Valid month (1-12) and year are required' });
 
   try {
-    // For occasional contributions, check if already activated
     if (type !== 'monthly') {
       const { rows: existing } = await query(
         `SELECT COUNT(*) as count FROM contributions WHERE type = $1 AND period_year = $2 AND period_month = $3`,
@@ -89,7 +88,6 @@ router.post('/generate', staff, async (req, res) => {
       }
     }
 
-    // Generate for currently active members
     const { rowCount: generated } = await query(
       `INSERT INTO contributions (member_id, type, period_year, period_month, amount_due)
          SELECT id, $1, $2, $3, CASE WHEN $4 > 0 THEN $4 ELSE monthly_due END FROM members WHERE active = true
@@ -119,9 +117,7 @@ router.put('/:id', staff, async (req, res) => {
     if (newDue !== null && newDue < 0) return res.status(400).json({ error: 'Amount due cannot be negative' });
     if (newPaid !== null && newPaid < 0) return res.status(400).json({ error: 'Amount paid cannot be negative' });
 
-    // ✅ CARRY FORWARD LOGIC START
     if (newPaid !== null) {
-      // Get current contribution details
       const { rows: [current] } = await query(
         `SELECT member_id, type, period_year, period_month, amount_due FROM contributions WHERE id = $1`,
         [req.params.id]
@@ -131,13 +127,11 @@ router.put('/:id', staff, async (req, res) => {
         const effectiveDue = newDue !== null ? newDue : current.amount_due;
         const overpayment = newPaid - effectiveDue;
 
-        // If there is excess money AND it's a monthly contribution
         if (overpayment > 0 && current.type === 'monthly') {
           let nextMonth = current.period_month + 1;
           let nextYear = current.period_year;
           if (nextMonth > 12) { nextMonth = 1; nextYear++; }
 
-          // Ensure next month's contribution exists
           await query(
             `INSERT INTO contributions (member_id, type, period_year, period_month, amount_due, amount_paid)
              VALUES ($1, $2, $3, $4, $5, 0)
@@ -145,7 +139,6 @@ router.put('/:id', staff, async (req, res) => {
             [current.member_id, current.type, nextYear, nextMonth, current.amount_due]
           );
 
-          // Add the overpayment to the NEXT month
           await query(
             `UPDATE contributions 
              SET amount_paid = amount_paid + $1 
@@ -157,7 +150,6 @@ router.put('/:id', staff, async (req, res) => {
         }
       }
     }
-    // ✅ CARRY FORWARD LOGIC END
 
     const { rows } = await query(
       `UPDATE contributions SET 
@@ -196,7 +188,6 @@ router.post('/payments', staff, async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // ✅ Fetch email and household name for the receipt
     const { rows: [member] } = await client.query(
       'SELECT id, monthly_due, email, household_name FROM members WHERE id = $1 AND active = true',
       [member_id]
@@ -319,7 +310,7 @@ router.post('/payments', staff, async (req, res) => {
 
     await client.query('COMMIT');
 
-    // ✅ Trigger email asynchronously (won't block the response)
+    // ✅ Trigger email asynchronously
     if (member.email) {
       sendPaymentReceiptEmail(member.email, member.household_name, amt, baseRef, allocations, method).catch(err => 
         console.error('❌ Failed to send payment receipt email:', err)
@@ -331,7 +322,6 @@ router.post('/payments', staff, async (req, res) => {
       message += ` ⚠️ Note: ₦${remaining.toLocaleString()} was NOT allocated as it exceeds all known dues.`;
     }
 
-    // ✅ CRITICAL: Return reference and allocations for the frontend modal
     res.status(201).json({ 
       success: true,
       message,
@@ -349,7 +339,7 @@ router.post('/payments', staff, async (req, res) => {
   }
 });
 
-// POST initialize Paystack payment (accessible by authenticated users)
+// POST initialize Paystack payment
 router.post('/payments/initialize', async (req, res) => {
   const { member_id, amount, email, reference } = req.body;
   
@@ -405,57 +395,85 @@ router.post('/payments/initialize', async (req, res) => {
   }
 });
 
-// ✅ Helper function to send email receipts
+// ✅ PERMANENT FIX: Uses Brevo HTTP API instead of unreliable SMTP
 async function sendPaymentReceiptEmail(email, householdName, amount, reference, allocations, method) {
-  const transporter = nodemailer.createTransport({
-    host: 'smtp-relay.brevo.com',
-    port: 587,
-    secure: false, // STARTTLS
-    tls: {
-      rejectUnauthorized: false // Helps with Render's SSL termination
-    },
-    auth: { 
-      user: process.env.SMTP_USER, 
-      pass: process.env.SMTP_PASS 
-    },
-    connectionTimeout: 10000, // 10s timeout
-    greetingTimeout: 10000
-  });
+  const BREVO_API_KEY = process.env.BREVO_API_KEY;
+  
+  if (!BREVO_API_KEY) {
+    console.error('❌ BREVO_API_KEY is missing in environment variables');
+    return;
+  }
 
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const allocationRows = allocations.map(alloc => 
-    `<tr>
+  const allocationRows = allocations.map(alloc => `
+    <tr>
       <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${MONTHS[alloc.month - 1]} ${alloc.year} (${alloc.type})</td>
       <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">₦${Number(alloc.amount).toLocaleString()}</td>
-    </tr>`
-  ).join('');
+    </tr>
+  `).join('');
 
-  await transporter.sendMail({
-    from: `"Estate Management" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
-    to: email,
+  // ⚠️ CRITICAL: Replace 'your-verified-email@domain.com' with the EXACT email address you verified in Brevo!
+  const senderEmail = process.env.SMTP_FROM_EMAIL || 'osasua@gmail.com'; 
+  const senderName = process.env.SMTP_FROM_NAME || 'Estate Management';
+
+  const emailData = {
+    sender: { 
+      name: senderName,
+      email: senderEmail
+    },
+    to: [{ email: email, name: householdName }],
     subject: `Payment Receipt - Reference: ${reference}`,
-    html: `
+    htmlContent: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
         <h2 style="color: #166534; text-align: center;">Payment Received</h2>
         <p>Dear <strong>${householdName}</strong>,</p>
         <p>Thank you for your payment. We have successfully recorded your contribution.</p>
+        
         <div style="background: #f9fafb; padding: 16px; border-radius: 8px; margin: 20px 0;">
           <p style="margin: 4px 0;"><strong>Reference:</strong> ${reference}</p>
           <p style="margin: 4px 0;"><strong>Total Amount:</strong> ₦${Number(amount).toLocaleString()}</p>
           <p style="margin: 4px 0;"><strong>Method:</strong> ${method.charAt(0).toUpperCase() + method.slice(1)}</p>
+          <p style="margin: 4px 0;"><strong>Date:</strong> ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
         </div>
-        <h3 style="font-size: 16px; margin-bottom: 12px;">Allocation Breakdown:</h3>
+
+        <h3 style="font-size: 16px; margin-bottom: 12px; color: #374151;">Allocation Breakdown:</h3>
         <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
           <thead>
             <tr style="background: #f3f4f6;">
-              <th style="padding: 8px; text-align: left;">Period / Type</th>
-              <th style="padding: 8px; text-align: right;">Amount Applied</th>
+              <th style="padding: 8px; text-align: left; color: #6b7280;">Period / Type</th>
+              <th style="padding: 8px; text-align: right; color: #6b7280;">Amount Applied</th>
             </tr>
           </thead>
           <tbody>${allocationRows}</tbody>
         </table>
-      </div>`
-  });
+
+        <p style="margin-top: 24px; color: #6b7280; font-size: 14px; text-align: center;">
+          If you have any questions, please contact the estate management office.
+        </p>
+      </div>
+    `
+  };
+
+  try {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'api-key': BREVO_API_KEY
+      },
+      body: JSON.stringify(emailData)
+    });
+
+    if (response.ok) {
+      console.log('✅ Email sent successfully via Brevo API to:', email);
+    } else {
+      const errorData = await response.json();
+      console.error('❌ Brevo API Error:', errorData);
+    }
+  } catch (error) {
+    console.error('❌ Network error sending email:', error.message);
+  }
 }
 
 module.exports = router;
