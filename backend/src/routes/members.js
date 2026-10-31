@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
 // UPDATE a member
 router.put('/:id', staff, async (req, res) => {
   try {
-    const { household_name, house_number, phone, email, monthly_due, active, opening_balance } = req.body || {};
+    const { household_name, house_number, phone, email, monthly_due, active, opening_balance = 0} = req.body || {};
 
     if (opening_balance !== undefined) {
       const val = Math.max(0, Number(opening_balance) || 0);

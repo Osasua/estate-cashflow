@@ -19,8 +19,20 @@ export default function Members() {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  
+  // Edit State
   const [editingMember, setEditingMember] = useState(null);
   const [editForm, setEditForm] = useState({});
+  
+  // Add Member State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({
+    house_number: '',
+    household_name: '',
+    phone: '',
+    email: '',
+    monthly_due: 75000
+  });
 
   useEffect(() => {
     loadMembers();
@@ -35,7 +47,6 @@ export default function Members() {
       const membersList = res.members || res || [];
       setMembers(membersList);
       
-      // Log the first member to see exact field names
       if (membersList.length > 0) {
         console.log('🔍 First member structure:', membersList[0]);
       }
@@ -67,7 +78,6 @@ export default function Members() {
   const handleReactivate = async (id) => {
     try {
       console.log('🔄 Reactivating member:', id);
-      // Send both 'status' and 'is_active' to cover all backend possibilities
       const res = await api(`/members/${id}`, { method: 'PUT', body: { status: 'active', is_active: true } });
       console.log('✅ Reactivate response:', res);
       setMessage('✅ Member reactivated successfully');
@@ -134,15 +144,37 @@ export default function Members() {
     }
   };
 
+  // ✅ NEW: Handle Add Member
+  const handleAddMember = async () => {
+    if (!addForm.house_number || !addForm.household_name) {
+      setMessage('❌ House Number and Household Name are required');
+      setTimeout(() => setMessage(''), 3000);
+      return;
+    }
+
+    try {
+      await api('/members', { 
+        method: 'POST', 
+        body: addForm 
+      });
+      setMessage('✅ New member added successfully');
+      setTimeout(() => setMessage(''), 3000);
+      setShowAddModal(false);
+      setAddForm({ house_number: '', household_name: '', phone: '', email: '', monthly_due: 75000 });
+      await loadMembers();
+    } catch (err) {
+      console.error('❌ Add member error:', err);
+      setMessage('❌ Failed to add member: ' + err.message);
+      setTimeout(() => setMessage(''), 5000);
+    }
+  };
+
   // Bulletproof status check
   const isMemberActive = (member) => {
-    console.log('🔍 Checking status for:', member.household_name, '| status:', member.status, '| is_active:', member.is_active, '| active:', member.active);
-    
     if (member.status === 'active' || member.status === 'Active' || member.status === 'ACTIVE') return true;
     if (member.is_active === true || member.is_active === 'true' || member.is_active === 1) return true;
     if (member.active === true || member.active === 'true' || member.active === 1) return true;
     
-    // Fallback: if the field is missing entirely, assume they are active
     if (member.status === undefined && member.is_active === undefined && member.active === undefined) {
       return true;
     }
@@ -167,6 +199,28 @@ export default function Members() {
             Manage estate residents and their accounts
           </p>
         </div>
+        
+        {/* ✅ ADD MEMBER BUTTON */}
+        <button 
+          onClick={() => setShowAddModal(true)}
+          style={{ 
+            padding: '12px 24px', 
+            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '8px', 
+            fontWeight: '600', 
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          ➕ Add Member
+        </button>
+
         <div style={{ display: 'flex', gap: '12px' }}>
           <div style={{ background: '#ecfdf5', border: '2px solid #a7f3d0', borderRadius: '12px', padding: '12px 20px', textAlign: 'center' }}>
             <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: '600', textTransform: 'uppercase' }}>Active</div>
@@ -337,6 +391,67 @@ export default function Members() {
             <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
               <button onClick={() => setEditingMember(null)} style={{ padding: '10px 20px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
               <button onClick={handleEditSave} style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)' }}>💾 Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ ADD MEMBER MODAL */}
+      {showAddModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px', backdropFilter: 'blur(4px)' }} onClick={() => setShowAddModal(false)}>
+          <div style={{ background: '#fff', borderRadius: '16px', maxWidth: '500px', width: '100%', padding: '32px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', borderLeft: '4px solid #22c55e' }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: '0 0 24px 0', fontSize: '1.5rem', fontWeight: '700', color: '#111827' }}>➕ Add New Member</h2>
+            <div style={{ display: 'grid', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>House Number *</label>
+                <input 
+                  value={addForm.house_number} 
+                  onChange={(e) => setAddForm({...addForm, house_number: e.target.value})} 
+                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }} 
+                  placeholder="e.g., 001"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Household Name *</label>
+                <input 
+                  value={addForm.household_name} 
+                  onChange={(e) => setAddForm({...addForm, household_name: e.target.value})} 
+                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }} 
+                  placeholder="e.g., The Smiths"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Phone</label>
+                <input 
+                  value={addForm.phone} 
+                  onChange={(e) => setAddForm({...addForm, phone: e.target.value})} 
+                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }} 
+                  placeholder="+234..."
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Email</label>
+                <input 
+                  type="email"
+                  value={addForm.email} 
+                  onChange={(e) => setAddForm({...addForm, email: e.target.value})} 
+                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }} 
+                  placeholder="resident@email.com"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Monthly Due (₦)</label>
+                <input 
+                  type="number"
+                  value={addForm.monthly_due} 
+                  onChange={(e) => setAddForm({...addForm, monthly_due: Number(e.target.value)})} 
+                  style={{ width: '100%', padding: '10px 12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }} 
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowAddModal(false)} style={{ padding: '10px 20px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleAddMember} style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #22c55e 0%, #10b981 100%)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)' }}>💾 Save Member</button>
             </div>
           </div>
         </div>
