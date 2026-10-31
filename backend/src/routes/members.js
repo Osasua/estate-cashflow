@@ -9,6 +9,7 @@ const router = express.Router();
 router.use(authenticate);
 
 // GET all members
+// GET all members
 router.get('/', async (req, res) => {
   try {
     const { rows } = await query(
@@ -20,7 +21,11 @@ router.get('/', async (req, res) => {
                (SELECT COALESCE(SUM(amount_paid), 0) FROM contributions WHERE member_id = m.id)) AS outstanding_balance
          FROM members m 
          LEFT JOIN users u ON u.member_id = m.id
-        ORDER BY m.house_number`
+        ORDER BY 
+          -- 1. Sort by the numeric part of the house number (e.g., '10' from '10A')
+          CAST(regexp_replace(m.house_number, '[^0-9]', '', 'g') AS INTEGER),
+          -- 2. Then sort alphabetically for the letters (e.g., 'A' before 'B')
+          m.house_number`
     );
     res.json({ members: rows });
   } catch (err) {
