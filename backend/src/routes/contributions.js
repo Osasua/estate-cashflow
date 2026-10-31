@@ -1,11 +1,11 @@
 // backend/src/routes/contributions.js
-require('dns').setDefaultResultOrder('ipv4first');
+require('dns').setDefaultResultOrder('ipv4first'); // ✅ Fix for Render/Gmail IPv6 timeout
 
 const express = require('express');
 const { pool, query } = require('../db');
 const { authenticate, staff } = require('../auth');
 const Paystack = require('paystack');
-const nodemailer = require('nodemailer'); // Added for email receipts
+const nodemailer = require('nodemailer');
 
 // Initialize Paystack with secret key from environment variables
 const paystack = new Paystack(process.env.PAYSTACK_SECRET_KEY);
@@ -108,7 +108,7 @@ router.post('/generate', staff, async (req, res) => {
   }
 });
 
-// PUT edit contribution
+// PUT edit contribution (WITH CARRY FORWARD LOGIC)
 router.put('/:id', staff, async (req, res) => {
   try {
     const { amount_due, amount_paid, note } = req.body || {};
@@ -118,6 +118,46 @@ router.put('/:id', staff, async (req, res) => {
     
     if (newDue !== null && newDue < 0) return res.status(400).json({ error: 'Amount due cannot be negative' });
     if (newPaid !== null && newPaid < 0) return res.status(400).json({ error: 'Amount paid cannot be negative' });
+
+    // ✅ CARRY FORWARD LOGIC START
+    if (newPaid !== null) {
+      // Get current contribution details
+      const { rows: [current] } = await query(
+        `SELECT member_id, type, period_year, period_month, amount_due FROM contributions WHERE id = $1`,
+        [req.params.id]
+      );
+
+      if (current) {
+        const effectiveDue = newDue !== null ? newDue : current.amount_due;
+        const overpayment = newPaid - effectiveDue;
+
+        // If there is excess money AND it's a monthly contribution
+        if (overpayment > 0 && current.type === 'monthly') {
+          let nextMonth = current.period_month + 1;
+          let nextYear = current.period_year;
+          if (nextMonth > 12) { nextMonth = 1; nextYear++; }
+
+          // Ensure next month's contribution exists
+          await query(
+            `INSERT INTO contributions (member_id, type, period_year, period_month, amount_due, amount_paid)
+             VALUES ($1, $2, $3, $4, $5, 0)
+             ON CONFLICT (member_id, type, period_year, period_month) DO NOTHING`,
+            [current.member_id, current.type, nextYear, nextMonth, current.amount_due]
+          );
+
+          // Add the overpayment to the NEXT month
+          await query(
+            `UPDATE contributions 
+             SET amount_paid = amount_paid + $1 
+             WHERE member_id = $2 AND type = $3 AND period_year = $4 AND period_month = $5`,
+            [overpayment, current.member_id, current.type, nextYear, nextMonth]
+          );
+          
+          console.log(`💰 Carried forward ₦${overpayment.toLocaleString()} from ${current.period_month}/${current.period_year} to ${nextMonth}/${nextYear}`);
+        }
+      }
+    }
+    // ✅ CARRY FORWARD LOGIC END
 
     const { rows } = await query(
       `UPDATE contributions SET 
@@ -368,19 +408,19 @@ router.post('/payments/initialize', async (req, res) => {
 // ✅ Helper function to send email receipts
 async function sendPaymentReceiptEmail(email, householdName, amount, reference, allocations, method) {
   const transporter = nodemailer.createTransport({
-  host: 'smtp-relay.brevo.com',
-  port: 587,
-  secure: false, // STARTTLS
-  tls: {
-    rejectUnauthorized: false // Helps with Render's SSL termination
-  },
-  auth: { 
-    user: process.env.SMTP_USER, 
-    pass: process.env.SMTP_PASS 
-  },
-  connectionTimeout: 10000, // 10s timeout
-  greetingTimeout: 10000
-});
+    host: 'smtp-relay.brevo.com',
+    port: 587,
+    secure: false, // STARTTLS
+    tls: {
+      rejectUnauthorized: false // Helps with Render's SSL termination
+    },
+    auth: { 
+      user: process.env.SMTP_USER, 
+      pass: process.env.SMTP_PASS 
+    },
+    connectionTimeout: 10000, // 10s timeout
+    greetingTimeout: 10000
+  });
 
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const allocationRows = allocations.map(alloc => 
