@@ -136,10 +136,74 @@ router.post('/:id/create-login', staff, async (req, res) => {
 
     res.json({ message: `Login created for ${m.email}! Temp password: ${tempPassword}` });
 
+    // ✅ Send Welcome Email using Brevo HTTP API (Guaranteed to work)
     const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    sendWelcomeEmail(m.email, tempPassword, loginUrl)
-      .then(() => console.log('✅ Email sent to', m.email))
-      .catch((err) => console.error('❌ Email failed:', err.message));
+    const BREVO_API_KEY = process.env.BREVO_API_KEY;
+    const senderEmail = process.env.SMTP_FROM_EMAIL || 'your-verified-email@domain.com';
+    const senderName = process.env.SMTP_FROM_NAME || 'Estate Management';
+
+    if (BREVO_API_KEY) {
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
+          <h2 style="color: #166534; text-align: center;">Welcome to Ferrano Court Portal</h2>
+          <p>Dear <strong>${m.household_name}</strong>,</p>
+          <p>Your login credentials for the estate portal have been created successfully.</p>
+          
+          <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #6366f1;">
+            <p style="margin: 8px 0;"><strong>📧 Email:</strong> ${m.email}</p>
+            <p style="margin: 8px 0;"><strong>🔑 Temporary Password:</strong> <code style="background: #fff; padding: 4px 8px; border-radius: 4px; font-size: 1.1em;">${tempPassword}</code></p>
+            <p style="margin: 8px 0;"><strong>🔗 Login URL:</strong> <a href="${loginUrl}" style="color: #6366f1;">${loginUrl}</a></p>
+          </div>
+
+          <div style="background: #fef3c7; padding: 16px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+            <h3 style="margin: 0 0 12px 0; color: #92400e; font-size: 1.1em;">⚠️ Important: Change Your Password</h3>
+            <p style="margin: 0 0 12px 0; color: #92400e;">For security reasons, you <strong>must</strong> change your temporary password upon first login.</p>
+            
+            <h4 style="margin: 16px 0 8px 0; color: #92400e; font-size: 1em;">Steps to change your password:</h4>
+            <ol style="margin: 0; padding-left: 20px; color: #92400e;">
+              <li>Log in to the portal using the temporary password above</li>
+              <li>Click on <strong>"My Profile"</strong> in the left sidebar menu</li>
+              <li>Click the <strong>"Change Password"</strong> button</li>
+              <li>Enter your current (temporary) password</li>
+              <li>Enter your new password (minimum 8 characters)</li>
+              <li>Confirm your new password</li>
+              <li>Click <strong>"Update Password"</strong></li>
+            </ol>
+          </div>
+
+          <p style="color: #6b7280; font-size: 0.95em; margin-top: 24px;">
+            If you have any questions or need assistance, please contact the estate management office.
+          </p>
+          
+          <p style="color: #9ca3af; font-size: 0.85em; text-align: center; margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+            This is an automated message. Please do not reply to this email.
+          </p>
+        </div>
+      `;
+
+      fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'api-key': BREVO_API_KEY
+        },
+        body: JSON.stringify({
+          sender: { name: senderName, email: senderEmail },
+          to: [{ email: m.email, name: m.household_name }],
+          subject: 'Welcome to Ferrano Court Portal - Your Login Credentials',
+          htmlContent: emailHtml
+        })
+      })
+      .then(response => {
+        if (response.ok) console.log('✅ Welcome email sent to', m.email);
+        else response.json().then(err => console.error('❌ Brevo API Error:', err));
+      })
+      .catch(err => console.error('❌ Network error sending email:', err.message));
+    } else {
+      console.error('❌ BREVO_API_KEY is missing in environment variables');
+    }
+
   } catch (err) {
     console.error('Create login error:', err);
     res.status(500).json({ message: err.message });
