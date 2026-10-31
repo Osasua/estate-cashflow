@@ -419,7 +419,7 @@ export default function Contributions() {
           zIndex: 1000,
           backdropFilter: 'blur(4px)'
         }} onClick={() => setEditModalOpen(false)}>
-          <div className="print-receipt" style={{
+          <div className="print-receipt-container" style={{
   background: 'white',
   borderRadius: '16px',
   padding: '32px',
@@ -643,18 +643,28 @@ export default function Contributions() {
       {/* Print Styles */}
       <style>{`
   @media print {
+    /* Hide everything on the page */
     body * { visibility: hidden !important; }
-    .print-receipt, .print-receipt * { visibility: visible !important; }
-    .print-receipt { 
+    
+    /* Make the receipt container visible and static */
+    .print-receipt-container { 
+      visibility: visible !important; 
       position: absolute !important; 
       left: 0 !important; 
       top: 0 !important; 
       width: 100% !important; 
-      background: white !important; 
-      padding: 40px !important;
+      margin: 0 !important;
+      padding: 20px !important;
+      background: white !important;
       box-shadow: none !important;
       border: none !important;
+      z-index: 9999 !important;
     }
+    
+    /* Ensure text inside is visible */
+    .print-receipt-container * { visibility: visible !important; }
+    
+    /* Hide buttons */
     .no-print { display: none !important; }
   }
 `}</style>

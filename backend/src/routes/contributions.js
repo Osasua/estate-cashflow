@@ -1,3 +1,6 @@
+// backend/src/routes/contributions.js
+require('dns').setDefaultResultOrder('ipv4first');
+
 const express = require('express');
 const { pool, query } = require('../db');
 const { authenticate, staff } = require('../auth');
@@ -365,13 +368,18 @@ router.post('/payments/initialize', async (req, res) => {
 // ✅ Helper function to send email receipts
 async function sendPaymentReceiptEmail(email, householdName, amount, reference, allocations, method) {
   const transporter = nodemailer.createTransport({
-  host: 'smtp-relay.brevo.com', // Explicitly set Brevo's relay host
-  port: 587,                    // Brevo uses 587 for STARTTLS
-  secure: false,                // Must be false for port 587
-  auth: { 
-    user: process.env.SMTP_USER, // Your Brevo SMTP login (usually an email)
-    pass: process.env.SMTP_PASS  // Your Brevo SMTP Key (NOT your account password)
+  host: 'smtp-relay.brevo.com',
+  port: 587,
+  secure: false, // STARTTLS
+  tls: {
+    rejectUnauthorized: false // Helps with Render's SSL termination
   },
+  auth: { 
+    user: process.env.SMTP_USER, 
+    pass: process.env.SMTP_PASS 
+  },
+  connectionTimeout: 10000, // 10s timeout
+  greetingTimeout: 10000
 });
 
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
