@@ -419,14 +419,14 @@ export default function Contributions() {
           zIndex: 1000,
           backdropFilter: 'blur(4px)'
         }} onClick={() => setEditModalOpen(false)}>
-          <div style={{
-            background: 'white',
-            borderRadius: '16px',
-            padding: '32px',
-            width: '90%',
-            maxWidth: '500px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
-          }} onClick={e => e.stopPropagation()}>
+          <div className="print-receipt" style={{
+  background: 'white',
+  borderRadius: '16px',
+  padding: '32px',
+  width: '90%',
+  maxWidth: '500px',
+  boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+}} onClick={e => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 24px 0', fontSize: '1.5rem', fontWeight: '700', color: '#111827' }}>
               Edit Contribution
             </h3>
@@ -642,13 +642,22 @@ export default function Contributions() {
 
       {/* Print Styles */}
       <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          .no-print, .no-print * { display: none !important; }
-          div[style*="position: fixed"] { position: static !important; background: white !important; }
-          div[style*="box-shadow"] { box-shadow: none !important; border: 1px solid #e5e7eb; }
-        }
-      `}</style>
+  @media print {
+    body * { visibility: hidden !important; }
+    .print-receipt, .print-receipt * { visibility: visible !important; }
+    .print-receipt { 
+      position: absolute !important; 
+      left: 0 !important; 
+      top: 0 !important; 
+      width: 100% !important; 
+      background: white !important; 
+      padding: 40px !important;
+      box-shadow: none !important;
+      border: none !important;
+    }
+    .no-print { display: none !important; }
+  }
+`}</style>
     </div>
   );
 }

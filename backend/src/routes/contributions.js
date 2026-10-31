@@ -365,14 +365,14 @@ router.post('/payments/initialize', async (req, res) => {
 // ✅ Helper function to send email receipts
 async function sendPaymentReceiptEmail(email, householdName, amount, reference, allocations, method) {
   const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: process.env.SMTP_PORT || 587,
-    secure: process.env.SMTP_PORT === '465',
-    auth: { 
-      user: process.env.SMTP_USER, 
-      pass: process.env.SMTP_PASS 
-    },
-  });
+  host: 'smtp-relay.brevo.com', // Explicitly set Brevo's relay host
+  port: 587,                    // Brevo uses 587 for STARTTLS
+  secure: false,                // Must be false for port 587
+  auth: { 
+    user: process.env.SMTP_USER, // Your Brevo SMTP login (usually an email)
+    pass: process.env.SMTP_PASS  // Your Brevo SMTP Key (NOT your account password)
+  },
+});
 
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const allocationRows = allocations.map(alloc => 
