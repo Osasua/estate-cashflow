@@ -1,58 +1,34 @@
-const { sendWhatsAppReminder } = require('./whatsapp');
+/**
+ * Background jobs.
+ *
+ * Weekly payment reminders — Mondays 09:00. Scans every fund for households
+ * still owing, emails each one a Brevo reminder with a Paystack pay link
+ * (WhatsApp too when Twilio is configured), and respects a 7-day cooldown
+ * per bill so nobody is nagged twice in a week.
+ *
+ * The sender lives in src/reminders.js and is shared with the manual
+ * "Remind defaulters" button (POST /api/reminders/send), so cron and manual
+ * runs can never double-send inside the cooldown window.
+ */
 const cron = require('node-cron');
-const { query } = require('./db');
-const { sendReminderEmail } = require('./mailer');
+const { runReminders } = require('./reminders');
+
+// For TESTING: '* * * * *' (every minute). For PRODUCTION: Mondays 09:00.
+const REMINDER_SCHEDULE = process.env.REMINDER_SCHEDULE || '0 9 * * 1';
 
 const startCronJobs = () => {
-  // --- SCHEDULE CONFIGURATION ---
-  // For TESTING: Change to '* * * * *' (Runs every minute)
-  // For PRODUCTION: '0 9 5 * *' (Runs at 9:00 AM on the 5th of every month)
-  const schedule = '0 9 5 * *'; 
-
-  cron.schedule(schedule, async () => {
-    console.log('⏰ [CRON] Running monthly reminder check...');
-    
+  cron.schedule(REMINDER_SCHEDULE, async () => {
+    console.log('⏰ [CRON] Weekly payment reminder run starting...');
     try {
-      // Find all contributions where amount paid is less than amount due
-      // NOTE: Added m.phone to the SELECT statement
-      const { rows } = await query(`
-        SELECT m.email, m.phone, m.household_name as name, (c.amount_due - c.amount_paid) as outstanding, 
-               to_char(to_date(c.period_year || '-' || c.period_month, 'YYYY-MM'), 'Month YYYY') as period
-        FROM contributions c
-        JOIN members m ON c.member_id = m.id
-        WHERE c.amount_paid < c.amount_due AND m.email = 'osasua@gmail.com';
-      `);
-
-      if (rows.length === 0) {
-        console.log('✅ [CRON] No outstanding contributions found. All caught up!');
-        return;
-      }
-
-      console.log(`📧 [CRON] Found ${rows.length} outstanding contributions. Sending reminders...`);
-
-      // Send an email and WhatsApp to each defaulter
-      for (const row of rows) {
-        try {
-          // 1. Send Email
-          await sendReminderEmail(row.email, row.name, row.outstanding, row.period);
-          console.log(`   -> Email sent to ${row.email}`);
-
-          // 2. Send WhatsApp (if phone number exists)
-          if (row.phone) {
-            await sendWhatsAppReminder(row.phone, row.name, row.outstanding, row.period);
-          } else {
-            console.log(`   -> Skipped WhatsApp for ${row.name} (No phone number)`);
-          }
-        } catch (err) {
-          console.error(`   -> Failed to notify ${row.name}:`, err.message);
-        }
-      }
-      
-      console.log('✅ [CRON] Reminder job completed successfully.');
+      const summary = await runReminders();
+      console.log(
+        `✅ [CRON] Reminders done — found ${summary.found}, sent ${summary.sent}, failed ${summary.failed}`
+      );
     } catch (error) {
-      console.error('❌ [CRON] Job failed:', error);
+      console.error('❌ [CRON] Reminder job failed:', error);
     }
   });
+  console.log(`⏰ [CRON] Weekly reminders scheduled: "${REMINDER_SCHEDULE}"`);
 };
 
 module.exports = { startCronJobs };

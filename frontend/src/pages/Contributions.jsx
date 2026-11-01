@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom'; // ✅ Added for reliable printing
 import { api } from '../api';
+import { downloadCSV } from '../utils/csv';
 import { useAuth } from '../auth';
 import Skeleton from '../components/Skeleton';
 import Tabs from '../components/Tabs';
@@ -233,6 +234,70 @@ export default function Contributions() {
     return 'pending';
   };
 
+  // Export the currently filtered view (month + year + fund tab) as a CSV
+  // that opens cleanly in Excel: numeric cells, totals row, BOM for ₦.
+  const handleExportCSV = () => {
+    const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const period = `${names[parseInt(form.month, 10) - 1]} ${form.year}`;
+    const rows = [
+      ['House No.', 'Household', 'Fund', 'Period', 'Due', 'Paid', 'Outstanding', 'Status', 'Reference(s)'],
+      ...contributions.map((c) => {
+        const due = parseFloat(c.amount_due) || 0;
+        const paid = parseFloat(c.amount_paid) || 0;
+        return [
+          c.house_number,
+          c.household_name,
+          activeTab,
+          period,
+          due.toFixed(2),
+          paid.toFixed(2),
+          (due - paid).toFixed(2),
+          getStatus(c).toUpperCase(),
+          c.references || '',
+        ];
+      }),
+      [],
+      ['TOTAL', `${contributions.length} households`, activeTab, period,
+        expected.toFixed(2), collected.toFixed(2), outstanding.toFixed(2), '', ''],
+    ];
+    downloadCSV(
+      `contributions_${currentType}_${form.year}-${String(form.month).padStart(2, '0')}.csv`,
+      rows
+    );
+    setMessage(`✅ Exported ${contributions.length} rows for ${period} (${activeTab})`);
+  };
+
+  // Staff-only: email every household still owing (any fund), with a 7-day
+  // cooldown per bill. Previews via dry-run before sending anything.
+  const [reminding, setReminding] = useState(false);
+  const handleRemindDefaulters = async () => {
+    if (reminding) return;
+    setReminding(true);
+    try {
+      const preview = await api('/reminders/send?dryRun=1', { method: 'POST' });
+      if (!preview.found) {
+        setMessage('✅ No outstanding households need reminding right now.');
+        return;
+      }
+      const list = preview.targets
+        .slice(0, 8)
+        .map((t) => `${t.house_number} ${t.name} (₦${Number(t.outstanding).toLocaleString()})`)
+        .join('\n');
+      const more = preview.found > 8 ? `\n…and ${preview.found - 8} more` : '';
+      if (!window.confirm(`Remind ${preview.found} household(s) by email about outstanding bills?\n\n${list}${more}`)) return;
+      const res = await api('/reminders/send', { method: 'POST' });
+      setMessage(
+        `✅ Reminders sent to ${res.sent} household(s)` +
+        `${res.failed ? ` · ${res.failed} failed (check email addresses)` : ''}. ` +
+        `They won't be re-reminded for ${res.cooldown_days} days.`
+      );
+    } catch (e) {
+      setMessage(`⚠️ Reminder run failed: ${e.message}`);
+    } finally {
+      setReminding(false);
+    }
+  };
+
   if (loading) return <div style={{ padding: '40px' }}><Skeleton height="40px" width="300px" /></div>;
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -316,6 +381,41 @@ export default function Contributions() {
           >
             {isActivated && !isMonthly ? `✓ ${activeTab} Activated` : (isMonthly ? 'Generate Monthly Bills' : `Activate ${activeTab}`)}
           </button>
+          <button
+            onClick={handleExportCSV}
+            disabled={!contributions.length}
+            title="Download the filtered view as a CSV (opens in Excel)"
+            style={{
+              padding: '10px 20px',
+              background: contributions.length ? '#059669' : '#9ca3af',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: '600',
+              cursor: contributions.length ? 'pointer' : 'not-allowed',
+              opacity: contributions.length ? 1 : 0.6,
+            }}
+          >
+            ⬇ Download CSV
+          </button>
+          {['admin', 'treasurer'].includes(user?.role) && (
+            <button
+              onClick={handleRemindDefaulters}
+              disabled={reminding}
+              title="Email every household still owing (7-day cooldown per bill)"
+              style={{
+                padding: '10px 20px',
+                background: reminding ? '#9ca3af' : '#d97706',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: '600',
+                cursor: reminding ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {reminding ? 'Sending…' : '🔔 Remind Defaulters'}
+            </button>
+          )}
         </div>
       </div>
 

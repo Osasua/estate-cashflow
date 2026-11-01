@@ -98,7 +98,20 @@ CREATE TABLE IF NOT EXISTS fund_opening_balances (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 9. Audit Log Table (Already existed, perfect for tracking edits!)
+-- 9. Payment Reminders log (audit trail + 7-day spam cooldown per bill)
+CREATE TABLE IF NOT EXISTS payment_reminders (
+  id BIGSERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  contribution_id INTEGER NOT NULL REFERENCES contributions(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL DEFAULT 'email',
+  fund TEXT,
+  outstanding_at_send NUMERIC(12,2),
+  sent_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_reminders_contribution ON payment_reminders(contribution_id);
+CREATE INDEX IF NOT EXISTS idx_reminders_sent_at ON payment_reminders(sent_at);
+
+-- 10. Audit Log Table (Already existed, perfect for tracking edits!)
 CREATE TABLE IF NOT EXISTS audit_log (
   id BIGSERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id),

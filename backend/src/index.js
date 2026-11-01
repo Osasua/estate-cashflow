@@ -38,6 +38,7 @@ app.use('/api/password', require('./routes/password'));
 app.use('/api/profile', require('./routes/profile'));
 app.use('/api/admin/broadcast', require('./routes/broadcast'));
 app.use('/api/my-account', require('./routes/my-account'));
+app.use('/api/reminders', require('./routes/reminders'));
 
 
 // Error handler

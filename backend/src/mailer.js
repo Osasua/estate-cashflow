@@ -66,16 +66,25 @@ const sendResetEmail = async (email, name, resetLink) => {
   });
 };
 
-const sendReminderEmail = async (email, name, amount, period) => {
+const sendReminderEmail = async (email, name, amount, period, payUrl, fundLabel) => {
   await sendEmail({
     to: email,
-    subject: `Reminder: Outstanding Contribution for ${period}`,
+    subject: `Reminder: Outstanding ${fundLabel || ''} Contribution for ${period}`.replace('  ', ' '),
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #4f46e5;">Ferrano Court Portal</h2>
         <h3>Hello ${name},</h3>
-        <p>This is a friendly reminder that you have an outstanding contribution of <strong style="color: #ef4444;">₦${Number(amount).toLocaleString()}</strong> for the period of <strong>${period}</strong>.</p>
-        <p>Please log in to your resident account to complete your payment securely online.</p>
+        <p>This is a friendly reminder that you have an outstanding ${fundLabel || 'estate'} contribution of
+           <strong style="color: #ef4444;">₦${Number(amount).toLocaleString()}</strong> for the period of <strong>${period}</strong>.</p>
+        <p style="text-align: center; margin: 30px 0;">
+          <a href="${payUrl}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">Pay securely with Paystack</a>
+        </p>
+        <p style="color: #666; font-size: 0.9rem;">
+          The button takes you to your resident account, where you can pay by card or bank transfer.
+          If you have already paid, please disregard this message — and thank you!
+        </p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 24px 0;">
+        <p style="color: #888; font-size: 0.8rem;">Ferrano Court Estate Management · automated weekly reminder</p>
       </div>
     `,
   });
