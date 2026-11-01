@@ -40,6 +40,7 @@ app.use('/api/admin/broadcast', require('./routes/broadcast'));
 app.use('/api/my-account', require('./routes/my-account'));
 app.use('/api/reminders', require('./routes/reminders'));
 app.use('/api/budgets', require('./routes/budgets'));
+app.use('/api/maintenance', require('./routes/maintenance'));
 
 
 // Error handler

@@ -203,3 +203,21 @@ button:disabled { opacity: 0.6; }
     font-size: 0.85rem;
   }
 }
+/* --- Print: statements & reports print without the app chrome --- */
+@media print {
+  .sidebar,
+  .no-print {
+    display: none !important;
+  }
+  .app {
+    display: block !important;
+  }
+  .content {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+  body {
+    background: #fff !important;
+  }
+}

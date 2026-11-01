@@ -21,6 +21,11 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   role user_role NOT NULL DEFAULT 'member',
+  -- Links a login to its household (members). Plain column, no FK: seed
+  -- data inserts users before members, and member records can be re-linked.
+  member_id INTEGER,
+  move_in_date DATE,
+  move_out_date DATE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -121,7 +126,21 @@ CREATE TABLE IF NOT EXISTS category_budgets (
   UNIQUE (category_id, budget_year)
 );
 
--- 11. Audit Log Table (Already existed, perfect for tracking edits!)
+-- 12. Maintenance requests (member self-service)
+CREATE TABLE IF NOT EXISTS maintenance_requests (
+  id SERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'new'
+    CHECK (status IN ('new', 'in-progress', 'resolved')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_maintenance_member ON maintenance_requests(member_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_status ON maintenance_requests(status);
+
+-- 13. Audit Log Table (Already existed, perfect for tracking edits!)
 CREATE TABLE IF NOT EXISTS audit_log (
   id BIGSERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id),

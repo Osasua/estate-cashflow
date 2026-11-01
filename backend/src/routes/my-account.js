@@ -1,9 +1,66 @@
 const express = require('express');
 const { query } = require('../db');
 const { authenticate } = require('../auth');
+const { findMemberForUser } = require('../member-lookup');
 
 const router = express.Router();
 router.use(authenticate);
+
+// GET /api/my-account/statement — the resident's own record, complete:
+// every payment ever made, everything still owed, and the next bill date.
+// Powers the printable / downloadable PDF statement.
+router.get('/statement', async (req, res) => {
+  try {
+    const member = await findMemberForUser(req.user.id);
+    if (!member) return res.status(404).json({ error: 'No member record found for this user' });
+
+    const paymentsRes = await query(
+      `SELECT p.amount, p.method, p.reference, p.paid_at,
+              c.type::text AS fund, c.period_year, c.period_month
+         FROM payments p
+         JOIN contributions c ON c.id = p.contribution_id
+        WHERE c.member_id = $1
+        ORDER BY p.paid_at DESC, p.id DESC`,
+      [member.id]
+    );
+    const outstandingRes = await query(
+      `SELECT id, type::text AS fund, period_year, period_month,
+              amount_due, amount_paid, (amount_due - amount_paid) AS outstanding
+         FROM contributions
+        WHERE member_id = $1 AND amount_due > 0 AND amount_paid < amount_due
+        ORDER BY period_year, period_month`,
+      [member.id]
+    );
+
+    const next = new Date();
+    next.setDate(1);
+    next.setMonth(next.getMonth() + 1);
+
+    res.json({
+      member: {
+        house_number: member.house_number,
+        household_name: member.household_name,
+        monthly_due: member.monthly_due,
+      },
+      payments: paymentsRes.rows.map((r) => ({ ...r, amount: parseFloat(r.amount) || 0 })),
+      outstanding: outstandingRes.rows.map((r) => ({
+        ...r,
+        amount_due: parseFloat(r.amount_due) || 0,
+        amount_paid: parseFloat(r.amount_paid) || 0,
+        outstanding: parseFloat(r.outstanding) || 0,
+      })),
+      next_bill: {
+        date: next.toISOString().slice(0, 10),
+        fund: 'monthly',
+        amount: member.monthly_due,
+      },
+      generated_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Statement error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.get('/', async (req, res) => {
   try {
@@ -25,34 +82,13 @@ router.get('/', async (req, res) => {
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
 
-    // STEP 1: Find the correct member for this user
-    let memberRes = await query(`
-      SELECT m.id, m.house_number, m.household_name, m.monthly_due, m.active
-      FROM members m
-      WHERE m.id = (SELECT member_id FROM users WHERE id = $1)
-    `, [userId]);
+    // STEP 1: Find the correct member for this user (shared lookup)
+    const member = await findMemberForUser(userId);
 
-    if (memberRes.rows.length === 0) {
-      memberRes = await query(`
-        SELECT m.id, m.house_number, m.household_name, m.monthly_due, m.active
-        FROM members m
-        WHERE m.email = (SELECT email FROM users WHERE id = $1)
-      `, [userId]);
-    }
-
-    if (memberRes.rows.length === 0) {
-      memberRes = await query(`
-        SELECT m.id, m.house_number, m.household_name, m.monthly_due, m.active
-        FROM members m
-        WHERE m.household_name = (SELECT name FROM users WHERE id = $1)
-      `, [userId]);
-    }
-
-    if (memberRes.rows.length === 0) {
+    if (!member) {
       return res.status(404).json({ error: 'No member record found for this user' });
     }
 
-    const member = memberRes.rows[0];
     const memberId = member.id;
 
     // STEP 2: Build date filter

@@ -19,6 +19,8 @@ import Board from './pages/Board';
 import Chat from './pages/Chat';
 import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentFailure from './pages/PaymentFailure';
+import Statement from './pages/Statement';
+import Maintenance from './pages/Maintenance';
 
 
 function Layout({ children }) {
@@ -45,6 +47,7 @@ function Layout({ children }) {
           
           {/* 2. My Account (Residents Only) */}
           {user?.role === 'member' && <NavLink to="/my-account">My Account</NavLink>}
+          {user?.role === 'member' && <NavLink to="/statement">My Statement</NavLink>}
           
           {/* 3. Staff/Admin Menu */}
           {isStaff && <NavLink to="/contributions">Contributions</NavLink>}
@@ -53,6 +56,7 @@ function Layout({ children }) {
           {isComms && <NavLink to="/broadcast">Broadcast</NavLink>}
           {isStaff && <NavLink to="/categories">Categories</NavLink>}
           {isStaff && <NavLink to="/members">Members</NavLink>}
+          {isStaff && <NavLink to="/maintenance">Maintenance</NavLink>}
           
           {/* 4. Admin-only links */}
           {isAdmin && <NavLink to="/users">User Management</NavLink>}
@@ -102,6 +106,8 @@ function AppRoutes() {
       {/* Protected Routes (With Sidebar) */}
       <Route path="/" element={page(<Dashboard />)} />
       <Route path="/my-account" element={page(<MyAccount />)} />
+      <Route path="/statement" element={page(<Statement />)} />
+      <Route path="/maintenance" element={page(<Maintenance />)} />
       <Route path="/profile" element={page(<Profile />)} />
       <Route path="/broadcast" element={page(<Broadcast />)} />
       <Route path="/audit-log" element={page(<AuditLog />)} />

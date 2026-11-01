@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { naira } from '../format';
@@ -42,6 +43,35 @@ export default function MyAccount() {
   const [selectedBill, setSelectedBill] = useState(null);
   const [paymentEmail, setPaymentEmail] = useState(user?.email || '');
   const [paymentLoading, setPaymentLoading] = useState(false);
+
+  // Maintenance requests (self-service)
+  const [myRequests, setMyRequests] = useState([]);
+  const [maintTitle, setMaintTitle] = useState('');
+  const [maintDesc, setMaintDesc] = useState('');
+  const [maintBusy, setMaintBusy] = useState(false);
+  const [maintMsg, setMaintMsg] = useState('');
+
+  const loadMyRequests = () =>
+    api('/maintenance').then((d) => setMyRequests(d.requests || [])).catch(() => setMyRequests([]));
+  useEffect(() => { loadMyRequests(); }, []);
+
+  const submitMaintenance = async (e) => {
+    e.preventDefault();
+    if (!maintTitle.trim()) return;
+    setMaintBusy(true);
+    setMaintMsg('');
+    try {
+      await api('/maintenance', { method: 'POST', body: { title: maintTitle.trim(), description: maintDesc.trim() || undefined } });
+      setMaintTitle('');
+      setMaintDesc('');
+      setMaintMsg('✅ Request submitted — the estate team will pick it up.');
+      await loadMyRequests();
+    } catch (err) {
+      setMaintMsg('⚠️ ' + err.message);
+    } finally {
+      setMaintBusy(false);
+    }
+  };
   const [paymentError, setPaymentError] = useState('');
 
   useEffect(() => {
@@ -210,6 +240,14 @@ export default function MyAccount() {
         <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>
           View your contribution history and account status
         </p>
+        <div style={{ marginTop: '12px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <Link
+            to="/statement"
+            style={{ padding: '10px 18px', background: '#4f46e5', color: '#fff', borderRadius: '8px', fontWeight: '600', textDecoration: 'none', fontSize: '0.9rem' }}
+          >
+            📄 My Statement (PDF)
+          </Link>
+        </div>
       </div>
 
       {/* Fund tabs — mirror the dashboard */}
@@ -701,6 +739,66 @@ export default function MyAccount() {
           </div>
         </div>
       )}
+
+      {/* Maintenance requests — resident self-service */}
+      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', padding: '24px', marginTop: '32px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <h3 style={{ margin: '0 0 8px 0', fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>🛠️ Maintenance Requests</h3>
+        <p style={{ margin: '0 0 16px 0', fontSize: '0.875rem', color: '#6b7280' }}>
+          Report an issue in your home or the common areas — the estate team tracks every request to completion.
+        </p>
+        <form onSubmit={submitMaintenance} style={{ display: 'grid', gap: '12px', marginBottom: '20px' }}>
+          <input
+            value={maintTitle}
+            onChange={(e) => setMaintTitle(e.target.value)}
+            placeholder="Short title — e.g. Water leak in kitchen"
+            maxLength={120}
+            style={{ padding: '10px 14px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '0.95rem' }}
+          />
+          <textarea
+            value={maintDesc}
+            onChange={(e) => setMaintDesc(e.target.value)}
+            placeholder="Details (optional): what happened, when, how urgent…"
+            rows={3}
+            style={{ padding: '10px 14px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '0.95rem', resize: 'vertical' }}
+          />
+          <div>
+            <button
+              type="submit"
+              disabled={maintBusy || !maintTitle.trim()}
+              style={{
+                padding: '10px 22px',
+                background: maintBusy || !maintTitle.trim() ? '#9ca3af' : '#4f46e5',
+                color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600',
+                cursor: maintBusy || !maintTitle.trim() ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {maintBusy ? 'Submitting…' : 'Submit Request'}
+            </button>
+          </div>
+          {maintMsg && <div style={{ fontSize: '0.9rem', color: maintMsg.startsWith('✅') ? '#059669' : '#e11d48' }}>{maintMsg}</div>}
+        </form>
+
+        {myRequests.length > 0 && (
+          <div style={{ display: 'grid', gap: '10px' }}>
+            {myRequests.map((r) => {
+              const pill =
+                r.status === 'resolved' ? { bg: '#dcfce7', color: '#166534', label: '✅ Resolved' }
+                : r.status === 'in-progress' ? { bg: '#fef3c7', color: '#92400e', label: '🔧 In progress' }
+                : { bg: '#fee2e2', color: '#991b1b', label: '🆕 New' };
+              return (
+                <div key={r.id} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontWeight: '600', color: '#111827' }}>{r.title}</div>
+                    {r.description && <div style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '2px' }}>{r.description}</div>}
+                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>Submitted {new Date(r.created_at).toLocaleDateString()}</div>
+                  </div>
+                  <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '700', background: pill.bg, color: pill.color, whiteSpace: 'nowrap' }}>{pill.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
