@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { POWERED_BY } from '../brand';
 
@@ -10,6 +10,8 @@ const CAPABILITIES = [
   ['📌', 'Follow the board'],
 ];
 
+const HERO_VARIANTS = ['v1', 'v2', 'v3', 'v4'];
+
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -17,6 +19,18 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Hero text-placement variants: ?hero=v1..v4 to preview, ?review=1 shows
+  // the floating switcher. Production default stays v1 until a variant is chosen.
+  const [params, setParams] = useSearchParams();
+  const initialVariant = HERO_VARIANTS.includes(params.get('hero')) ? params.get('hero') : 'v1';
+  const [variant, setVariant] = useState(initialVariant);
+  const review = params.get('review') === '1';
+  const pickVariant = (v) => {
+    setVariant(v);
+    params.set('hero', v);
+    setParams(params, { replace: true });
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -35,7 +49,7 @@ export default function Login() {
   return (
     <div className="login-shell">
       {/* Brand hero — the estate's story before the sign-in */}
-      <aside className="login-hero">
+      <aside className={`login-hero hero-${variant}`}>
         <div className="login-hero-art" aria-hidden="true" />
         <div className="login-hero-orb orb-a" aria-hidden="true" />
         <div className="login-hero-orb orb-b" aria-hidden="true" />
@@ -44,13 +58,15 @@ export default function Login() {
             <img src="/favicon.png" alt="" style={{ width: '34px', height: '34px', borderRadius: '8px' }} />
             <span>Ferrano Court Portal</span>
           </div>
-          <h1 className="anim" style={{ animationDelay: '0.15s' }}>
-            One ledger.<br />Every household.<br />Full clarity.
-          </h1>
-          <p className="login-hero-tag anim" style={{ animationDelay: '0.25s' }}>
-            Contributions, expenses, statements and maintenance for the
-            Ferrano Court community — in one place, always in step.
-          </p>
+          <div className="login-hero-mid">
+            <h1 className="anim" style={{ animationDelay: '0.15s' }}>
+              One ledger.<br />Every household.<br />Full clarity.
+            </h1>
+            <p className="login-hero-tag anim" style={{ animationDelay: '0.25s' }}>
+              Contributions, expenses, statements and maintenance for the
+              Ferrano Court community — in one place, always in step.
+            </p>
+          </div>
           <div className="login-caps">
             {CAPABILITIES.map(([icon, label], i) => (
               <div key={label} className="login-cap anim" style={{ animationDelay: `${0.35 + i * 0.08}s` }}>
@@ -65,6 +81,7 @@ export default function Login() {
       {/* Sign-in side */}
       <main className="login-side">
         <form className="login-card anim" style={{ animationDelay: '0.1s' }} onSubmit={submit}>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <img src="/favicon.png" alt="Logo" style={{ width: '24px', height: '24px' }} />
             <span>Sign in to your account</span>
@@ -86,6 +103,17 @@ export default function Login() {
         </form>
         <div className="powered-by">{POWERED_BY}</div>
       </main>
+
+      {review && (
+        <div className="hero-switcher" role="group" aria-label="Hero layout variants">
+          <span>LAYOUT</span>
+          {HERO_VARIANTS.map((v) => (
+            <button key={v} className={v === variant ? 'on' : ''} onClick={() => pickVariant(v)}>
+              {v.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
