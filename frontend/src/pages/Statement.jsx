@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { naira } from '../format';
+import { POWERED_BY } from '../brand';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const FUND_LABEL = { monthly: 'Monthly', float: 'Float', projects: 'Projects', 'end-of-year': 'End of Year', welfare: 'Welfare', arrears: 'Arrears' };
@@ -136,6 +137,7 @@ export default function Statement() {
           This statement was generated electronically by the Ferrano Court Portal for {member.household_name} (House {member.house_number}).
           Questions? Contact the estate treasurer.
         </p>
+        <div className="powered-by">{POWERED_BY}</div>
       </div>
     </div>
   );

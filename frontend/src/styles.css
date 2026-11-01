@@ -102,6 +102,13 @@ button:disabled { opacity: 0.6; }
 
 /* Login */
 .login-page { min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
+.powered-by {
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em;
+  color: #94a3b8; text-align: center; margin-top: 14px;
+}
+.login-page .powered-by { margin-top: 18px; }
+.sidebar-footer .powered-by { margin-top: 12px; opacity: 0.8; }
+@media print { .powered-by { color: #6b7280; margin-top: 18px; } }
 .login-card {
   background: var(--card); border: 1px solid var(--border); border-radius: 16px;
   padding: 2rem; width: 100%; max-width: 380px;

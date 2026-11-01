@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
+import { POWERED_BY } from '../brand';
 
 export default function Login() {
   const { login } = useAuth();
@@ -46,6 +47,7 @@ export default function Login() {
      </a>
    </p>
               </form>
+      <div className="powered-by">{POWERED_BY}</div>
     </div>
   );
 }

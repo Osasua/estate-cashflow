@@ -3,6 +3,13 @@ const API_KEY = process.env.BREVO_API_KEY;
 const SENDER_EMAIL = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'osasua@gmail.com';
 const SENDER_NAME = process.env.SMTP_FROM_NAME || 'Ferrano Court Portal';
 
+// Product imprint appended to every outgoing email, current and future.
+const BRAND_FOOTER = `
+  <div style="margin-top:28px;padding-top:12px;border-top:1px solid #e5e7eb;
+              font-size:11px;color:#9ca3af;text-align:center;letter-spacing:0.04em;">
+    Powered By Peniel Charis Technologies Ltd
+  </div>`;
+
 async function sendEmail({ to, subject, html }) {
   if (!API_KEY) throw new Error('BREVO_API_KEY is not set in Render environment');
 
@@ -17,7 +24,7 @@ async function sendEmail({ to, subject, html }) {
       sender: { name: SENDER_NAME, email: SENDER_EMAIL },
       to: [{ email: to }],
       subject,
-      htmlContent: html,
+      htmlContent: html + BRAND_FOOTER,
     }),
   });
 

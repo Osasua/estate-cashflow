@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth';
+import { POWERED_BY } from './brand';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
@@ -84,6 +85,7 @@ function Layout({ children }) {
           <button className="btn-ghost" onClick={() => { logout(); navigate('/login'); }}>
             Sign out
           </button>
+          <div className="powered-by">{POWERED_BY}</div>
         </div>
       </aside>
       <main className="content">{children}</main>
