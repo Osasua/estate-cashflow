@@ -111,7 +111,17 @@ CREATE TABLE IF NOT EXISTS payment_reminders (
 CREATE INDEX IF NOT EXISTS idx_reminders_contribution ON payment_reminders(contribution_id);
 CREATE INDEX IF NOT EXISTS idx_reminders_sent_at ON payment_reminders(sent_at);
 
--- 10. Audit Log Table (Already existed, perfect for tracking edits!)
+-- 10. Per-category annual budgets (budget vs actual on the Expenses page)
+CREATE TABLE IF NOT EXISTS category_budgets (
+  id SERIAL PRIMARY KEY,
+  category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  budget_year INTEGER NOT NULL,
+  amount NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (amount >= 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (category_id, budget_year)
+);
+
+-- 11. Audit Log Table (Already existed, perfect for tracking edits!)
 CREATE TABLE IF NOT EXISTS audit_log (
   id BIGSERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id),

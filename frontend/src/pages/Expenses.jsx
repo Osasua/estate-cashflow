@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import { downloadCSV } from '../utils/csv';
 import { naira, fmtDate } from '../format';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -55,6 +56,64 @@ export default function Expenses() {
   const [message, setMessage] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  // --- budgets (category vs annual budget) ---
+  const [budgets, setBudgets] = useState(null);
+  const [budgetYear, setBudgetYear] = useState(new Date().getFullYear());
+  const [budgetDraft, setBudgetDraft] = useState({});
+  const [budgetSaving, setBudgetSaving] = useState(false);
+
+  const loadBudgets = async (y) => {
+    try {
+      const d = await api(`/budgets?year=${y}`);
+      setBudgets(d.budgets || []);
+      setBudgetDraft({});
+    } catch {
+      setBudgets(null);
+    }
+  };
+  useEffect(() => { loadBudgets(budgetYear); }, [budgetYear]);
+
+  const saveBudget = async (row) => {
+    const raw = budgetDraft[row.category_id];
+    const amount = raw === undefined || raw === '' ? row.budget : parseFloat(raw);
+    if (isNaN(amount)) return;
+    setBudgetSaving(true);
+    try {
+      await api('/budgets', {
+        method: 'POST',
+        body: { category_id: row.category_id, year: budgetYear, amount },
+      });
+      await loadBudgets(budgetYear);
+      setMessage(`✅ ${budgetYear} budget saved for ${row.name}`);
+    } catch (e) {
+      setMessage(`⚠️ Budget save failed: ${e.message}`);
+    } finally {
+      setBudgetSaving(false);
+    }
+  };
+
+  // Export the filtered expense list (month/year + fund) as Excel-ready CSV
+  const handleExportCSV = () => {
+    const rows = [
+      ['Date', 'Category', 'Fund', 'Description', 'Vendor', 'Amount', 'Receipt URL'],
+      ...filteredExpenses.map((e) => [
+        e.spent_on,
+        e.category || 'Uncategorized',
+        FUND_LABEL[e.type || 'monthly'] || e.type || 'monthly',
+        e.description || '',
+        e.vendor || '',
+        Number(e.amount || 0).toFixed(2),
+        e.receipt_url || '',
+      ]),
+      [],
+      ['TOTAL', '', '', `${filteredExpenses.length} receipts`, '', totalSpent.toFixed(2), ''],
+    ];
+    downloadCSV(
+      `expenses_${year}-${String(month).padStart(2, '0')}${fundFilter !== 'all' ? `_${fundFilter}` : ''}.csv`,
+      rows
+    );
+  };
   const itemsPerPage = 15;
 
   // Reset to page 1 when month/year changes
@@ -276,6 +335,19 @@ export default function Expenses() {
             {FUND_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
           </select>
         </div>
+        <button
+          onClick={handleExportCSV}
+          disabled={!filteredExpenses.length}
+          title="Download the filtered expenses as a CSV (opens in Excel)"
+          style={{
+            padding: '9px 18px', background: filteredExpenses.length ? '#059669' : '#9ca3af',
+            color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600',
+            cursor: filteredExpenses.length ? 'pointer' : 'not-allowed',
+            opacity: filteredExpenses.length ? 1 : 0.6,
+          }}
+        >
+          ⬇ Download CSV
+        </button>
       </div>
 
       {/* KPI Cards */}
@@ -380,6 +452,81 @@ export default function Expenses() {
             </div>
           )}
         </ChartPanel>
+      </div>
+
+      {/* Budgets: plan vs actual per category for a chosen year */}
+      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', marginBottom: '32px', overflow: 'hidden' }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>🎯 Budgets vs Actual</h2>
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
+              Annual spending plan per category, against what has actually been spent (all funds)
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Year</label>
+            <input type="number" value={budgetYear} onChange={(e) => setBudgetYear(+e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', width: '90px' }} />
+          </div>
+        </div>
+        {budgets === null ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>Budgets unavailable</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f9fafb' }}>
+                  {['Category', `Budget ${budgetYear}`, `Spent ${budgetYear}`, 'Remaining', 'Used'].map((h, i) => (
+                    <th key={h} style={{ padding: '12px 24px', textAlign: i === 0 ? 'left' : 'right', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {budgets.map((b) => {
+                  const over = b.budget > 0 && b.spent > b.budget;
+                  const pct = b.used_pct === null ? null : Math.min(b.used_pct, 100);
+                  return (
+                    <tr key={b.category_id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <td style={{ padding: '12px 24px', fontWeight: '600', color: '#111827' }}>{b.name}</td>
+                      <td style={{ padding: '12px 24px', textAlign: 'right' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          defaultValue={b.budget || ''}
+                          placeholder={b.budget ? '' : '0'}
+                          disabled={!['admin', 'treasurer'].includes(user?.role)}
+                          onChange={(e) => setBudgetDraft((d) => ({ ...d, [b.category_id]: e.target.value }))}
+                          style={{ width: '120px', padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', textAlign: 'right' }}
+                        />
+                        {' '}
+                        <button
+                          onClick={() => saveBudget(b)}
+                          disabled={budgetSaving || budgetDraft[b.category_id] === undefined}
+                          style={{ padding: '6px 10px', border: '1px solid #6366f1', color: budgetDraft[b.category_id] === undefined ? '#9ca3af' : '#6366f1', background: 'white', borderRadius: '6px', cursor: budgetDraft[b.category_id] === undefined ? 'default' : 'pointer', fontSize: '0.8rem', fontWeight: '600' }}
+                        >
+                          Save
+                        </button>
+                      </td>
+                      <td style={{ padding: '12px 24px', textAlign: 'right', fontWeight: '600', color: '#e11d48', fontVariantNumeric: 'tabular-nums' }}>{naira(b.spent)}</td>
+                      <td style={{ padding: '12px 24px', textAlign: 'right', fontWeight: '600', color: over ? '#e11d48' : '#059669', fontVariantNumeric: 'tabular-nums' }}>
+                        {b.budget > 0 ? naira(b.remaining) : '—'}
+                      </td>
+                      <td style={{ padding: '12px 24px', textAlign: 'right', minWidth: '160px' }}>
+                        {pct === null ? <span style={{ color: '#9ca3af' }}>no budget</span> : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
+                            <div style={{ width: '90px', height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
+                              <div style={{ width: `${pct}%`, height: '100%', background: over ? '#ef4444' : pct >= 80 ? '#f59e0b' : '#22c55e' }} />
+                            </div>
+                            <span style={{ fontSize: '0.8rem', fontWeight: '700', color: over ? '#e11d48' : '#374151' }}>{b.used_pct}%</span>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Form — accented by the selected fund */}

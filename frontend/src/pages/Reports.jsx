@@ -102,6 +102,7 @@ export default function Reports() {
   const [newNotes, setNewNotes] = useState('');
   const [openings, setOpenings] = useState(null); // per-fund manual openings
   const [formFund, setFormFund] = useState('estate');
+  const [cve, setCve] = useState(null); // collections vs expenses, by month
 
   const loadOpenings = async () => {
     try {
@@ -161,6 +162,12 @@ export default function Reports() {
       if (selectedFund) params.append('type', selectedFund);
       const res = await api(`/reports/summary?${params.toString()}`);
       setData(res);
+      // Collections vs expenses for the year of the selected start date
+      const yr = (startDate || '').slice(0, 4);
+      if (yr) {
+        const q = `/reports/collections-vs-expenses?year=${yr}${selectedFund ? `&type=${selectedFund}` : ''}`;
+        api(q).then(setCve).catch(() => setCve(null));
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -539,6 +546,28 @@ export default function Reports() {
           )}
         </ChartPanel>
       </div>
+
+      {/* Collections vs Expenses — the year's cash in vs cash out, side by side */}
+      {cve && (
+        <div style={{ marginBottom: '32px' }}>
+          <ChartPanel
+            title="Collections vs Expenses"
+            subtitle={`${cve.year} · ${cve.type ? `${FUND_LABEL[cve.type] || cve.type} fund` : 'all funds'} · collected ${naira(cve.totals.collected)} vs spent ${naira(cve.totals.spent)} (net ${naira(cve.totals.net)})`}
+          >
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={cve.months} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6b7280', fontWeight: '600' }} axisLine={false} tickLine={false} interval={0} />
+                <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => (v >= 1000 ? `₦${(v / 1000).toFixed(0)}k` : `₦${v}`)} />
+                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99, 102, 241, 0.08)' }} />
+                <Legend wrapperStyle={{ paddingTop: '12px', fontSize: '13px', fontWeight: '500' }} />
+                <Bar dataKey="collected" name="Collected" fill="#22c55e" radius={[6, 6, 0, 0]} maxBarSize={26} />
+                <Bar dataKey="spent" name="Spent" fill="#f43f5e" radius={[6, 6, 0, 0]} maxBarSize={26} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartPanel>
+        </div>
+      )}
 
       {/* Top Expenses Table */}
       <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>

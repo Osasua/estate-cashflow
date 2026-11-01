@@ -220,6 +220,67 @@ router.get('/summary', staff, async (req, res) => {
   }
 });
 
+// GET /api/reports/collections-vs-expenses?year=2026&type=float
+// Twelve month rows: cash collected (by payment date) vs cash spent (by spend
+// date), optionally scoped to one fund. Powers the summary chart on Reports.
+router.get('/collections-vs-expenses', authenticate, async (req, res) => {
+  try {
+    const year = +req.query.year || new Date().getFullYear();
+    const type = req.query.type;
+    const FUND_TYPES = ['monthly', 'float', 'projects', 'end-of-year', 'welfare'];
+    if (type && !FUND_TYPES.includes(type)) {
+      return res.status(400).json({ error: `Invalid type. Expected one of: ${FUND_TYPES.join(', ')}` });
+    }
+    const scopeFrag = type ? ' AND c.type = $2::contribution_type' : '';
+    const scopeFragE = type ? ' AND type = $2::contribution_type' : '';
+    const params = type ? [year, type] : [year];
+
+    const { rows } = await query(
+      `WITH months AS (SELECT generate_series(1, 12) AS m),
+       collected AS (
+         SELECT EXTRACT(MONTH FROM p.paid_at)::int AS m, COALESCE(SUM(p.amount), 0) AS total
+           FROM payments p JOIN contributions c ON c.id = p.contribution_id
+          WHERE EXTRACT(YEAR FROM p.paid_at) = $1${scopeFrag}
+          GROUP BY 1
+       ),
+       spent AS (
+         SELECT EXTRACT(MONTH FROM spent_on)::int AS m, COALESCE(SUM(amount), 0) AS total
+           FROM expenses
+          WHERE EXTRACT(YEAR FROM spent_on) = $1${scopeFragE}
+          GROUP BY 1
+       )
+       SELECT mo.m AS month,
+              TO_CHAR(make_date(CAST($1 AS integer), mo.m, 1), 'Mon') AS label,
+              COALESCE(co.total, 0) AS collected,
+              COALESCE(sp.total, 0) AS spent
+         FROM months mo
+         LEFT JOIN collected co ON co.m = mo.m
+         LEFT JOIN spent sp ON sp.m = mo.m
+        ORDER BY mo.m`,
+      params
+    );
+
+    const months = rows.map((r) => {
+      const collected = parseFloat(r.collected) || 0;
+      const spent = parseFloat(r.spent) || 0;
+      return { month: parseInt(r.month), label: r.label, collected, spent, net: collected - spent };
+    });
+    res.json({
+      year,
+      type: type || null,
+      months,
+      totals: {
+        collected: months.reduce((s, r) => s + r.collected, 0),
+        spent: months.reduce((s, r) => s + r.spent, 0),
+        net: months.reduce((s, r) => s + r.net, 0),
+      },
+    });
+  } catch (err) {
+    console.error('Collections vs expenses error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET all per-fund manual openings (for the Opening Balances panel)
 router.get('/opening-balances', staff, async (req, res) => {
   try {
