@@ -87,4 +87,28 @@ async function setManualOpening(fund, amount, effectiveDate, notes) {
   return res.rows[0];
 }
 
-module.exports = { FUND_KEYS, FUND_LABELS, getManualOpenings, manualForScope, setManualOpening };
+/**
+ * Remove one fund's manual opening entirely (fund falls back to ₦0.00).
+ * Used when an opening was entered by mistake or twice — e.g. the same cash
+ * already lived in the legacy estate pot. Keeps the legacy mirror in sync.
+ */
+async function deleteManualOpening(fund) {
+  if (!FUND_KEYS.includes(fund)) {
+    throw new Error(`Unknown fund "${fund}". Expected one of: ${FUND_KEYS.join(', ')}`);
+  }
+  const res = await query(
+    `DELETE FROM fund_opening_balances WHERE fund_type = $1 RETURNING fund_type`,
+    [fund]
+  );
+  if (fund === 'estate') {
+    // Legacy mirror so pre-fund scripts/queries stay correct.
+    await query(
+      `UPDATE estate_opening_balance
+          SET opening_balance = 0, notes = 'Opening balance deleted', updated_at = CURRENT_TIMESTAMP
+        WHERE id = 1`
+    );
+  }
+  return res.rowCount > 0;
+}
+
+module.exports = { FUND_KEYS, FUND_LABELS, getManualOpenings, manualForScope, setManualOpening, deleteManualOpening };

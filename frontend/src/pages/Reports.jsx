@@ -139,6 +139,30 @@ export default function Reports() {
     }
   };
 
+  const startEditOpening = (o) => {
+    setFormFund(o.fund);
+    setNewOpeningBalance(String(o.opening_balance));
+    setNewEffectiveDate(o.effective_date || '2026-01-01');
+    setNewNotes(o.notes || '');
+    setShowOpeningBalanceForm(true);
+  };
+
+  const handleDeleteOpening = async (o) => {
+    const ok = window.confirm(
+      `Delete the ${o.label} opening balance of ${naira(o.opening_balance)}?\n\n` +
+      `That fund will then start from ₦0.00 brought forward. You can always re-enter it later.`
+    );
+    if (!ok) return;
+    try {
+      await api(`/reports/opening-balance/${o.fund}`, { method: 'DELETE' });
+      alert('✅ Opening balance deleted.');
+      loadOpenings();
+      loadData(); // Refresh data
+    } catch (err) {
+      alert('❌ Error: ' + err.message);
+    }
+  };
+
   useEffect(() => { loadOpenings(); }, []);
 
   useEffect(() => {
@@ -310,7 +334,7 @@ export default function Reports() {
         <KPICard
           title="Closing Balance"
           value={naira(kpis.closing_balance)}
-          subtitle={`As of ${filters.end_date}${filters.type ? ` · ${FUND_LABEL[filters.type] || filters.type} fund` : ''}`}
+          subtitle={`As of ${filters.end_date} (end of selected period)${filters.type ? ` · ${FUND_LABEL[filters.type] || filters.type} fund` : ''}`}
           color="violet"
           icon=""
         />
@@ -367,6 +391,32 @@ export default function Reports() {
           {o.opening_balance !== 0 && o.effective_date && (
             <span style={{ opacity: 0.75 }}> · eff. {o.effective_date}</span>
           )}
+          <span style={{ display: 'inline-flex', gap: '6px', marginLeft: '10px' }}>
+            <button
+              onClick={() => startEditOpening(o)}
+              title={`Edit the ${o.label} opening balance`}
+              style={{
+                padding: '2px 10px', fontSize: '0.72rem', fontWeight: '600', cursor: 'pointer',
+                color: 'white', background: 'rgba(255,255,255,0.18)',
+                border: '1px solid rgba(255,255,255,0.45)', borderRadius: '6px',
+              }}
+            >
+              Edit
+            </button>
+            {o.opening_balance !== 0 && (
+              <button
+                onClick={() => handleDeleteOpening(o)}
+                title={`Delete the ${o.label} opening balance`}
+                style={{
+                  padding: '2px 10px', fontSize: '0.72rem', fontWeight: '600', cursor: 'pointer',
+                  color: 'white', background: 'rgba(220,38,38,0.55)',
+                  border: '1px solid rgba(255,255,255,0.45)', borderRadius: '6px',
+                }}
+              >
+                Delete
+              </button>
+            )}
+          </span>
         </div>
       );
     })}

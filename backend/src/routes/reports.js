@@ -1,7 +1,7 @@
 const express = require('express');
 const { query } = require('../db');
 const { authenticate, staff } = require('../auth');
-const { FUND_KEYS, FUND_LABELS, getManualOpenings, manualForScope, setManualOpening } = require('../opening');
+const { FUND_KEYS, FUND_LABELS, getManualOpenings, manualForScope, setManualOpening, deleteManualOpening } = require('../opening');
 
 const router = express.Router();
 router.use(authenticate);
@@ -327,6 +327,23 @@ router.post('/opening-balance', staff, async (req, res) => {
     });
   } catch (err) {
     console.error('Update opening balance error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE one fund's opening balance — removes the manual row entirely so the
+// fund falls back to ₦0.00 brought forward. For correcting mistaken/duplicate
+// entries; editing is just a POST with the corrected amount.
+router.delete('/opening-balance/:fund', staff, async (req, res) => {
+  try {
+    const fund = req.params.fund;
+    if (!FUND_KEYS.includes(fund)) {
+      return res.status(400).json({ error: `Unknown fund. Expected one of: ${FUND_KEYS.join(', ')}` });
+    }
+    const existed = await deleteManualOpening(fund);
+    res.json({ success: true, fund, deleted: existed, opening_balance: 0 });
+  } catch (err) {
+    console.error('Delete opening balance error:', err);
     res.status(500).json({ error: err.message });
   }
 });
