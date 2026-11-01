@@ -1,6 +1,7 @@
 const express = require('express');
 const { query } = require('../db');
 const { authenticate } = require('../auth');
+const { getManualOpenings, manualForScope } = require('../opening');
 
 const router = express.Router();
 router.use(authenticate);
@@ -23,15 +24,17 @@ router.get('/', async (req, res) => {
     }
     const scoped = type !== undefined;
 
-    // 1. KPIs - Include estate opening balance
-    //    Without ?type: identical to the previous behaviour (month_due from
-    //    active members, pending_count from monthly bills).
-    //    With ?type: contribution-side figures (month_in, month_due,
-    //    pending_count) scope to that type's bills, plus a new all-time
-    //    collected total; balance and month_expense stay estate-wide.
+    // 1. KPIs
+    //    balance is computed WITHOUT any manual opening here; the opening pots
+    //    are added below via src/opening.js so Reports and Dashboard always use
+    //    the same source of truth.
+    //    Without ?type: month_due from active members, pending_count from
+    //    monthly bills. With ?type: contribution-side figures scope to that
+    //    type's bills, plus all-time collected/spent and the fund's own
+    //    balance (its manual opening + everything it raised - everything it
+    //    spent).
     const kpisSql = scoped ? `
       SELECT 
-        COALESCE((SELECT opening_balance FROM estate_opening_balance WHERE id = 1), 0) +
         COALESCE((SELECT SUM(amount_paid) FROM contributions), 0) -
         COALESCE((SELECT SUM(amount) FROM expenses), 0) AS balance,
         
@@ -69,10 +72,15 @@ router.get('/', async (req, res) => {
           SELECT SUM(amount_paid)
           FROM contributions
           WHERE type = $3
-        ), 0) AS type_all_time_collected
+        ), 0) AS type_all_time_collected,
+
+        COALESCE((
+          SELECT SUM(amount)
+          FROM expenses
+          WHERE type = $3
+        ), 0) AS type_all_time_spent
     ` : `
       SELECT 
-        COALESCE((SELECT opening_balance FROM estate_opening_balance WHERE id = 1), 0) +
         COALESCE((SELECT SUM(amount_paid) FROM contributions), 0) -
         COALESCE((SELECT SUM(amount) FROM expenses), 0) AS balance,
         
@@ -117,9 +125,21 @@ router.get('/', async (req, res) => {
       month_expense: parseFloat(kpisRes.rows[0].month_expense) || 0,
       pending_count: parseInt(kpisRes.rows[0].pending_count) || 0
     };
+
+    // Manual openings (single source of truth, shared with Reports).
+    const { amounts: manualAmounts } = await getManualOpenings();
+    // Estate cash in the bank = every manual pot + all receipts - all spending.
+    kpis.balance = manualForScope(manualAmounts, null) + kpis.balance;
+
     if (scoped) {
-      kpis.type_all_time_collected =
-        parseFloat(kpisRes.rows[0].type_all_time_collected) || 0;
+      const collected = parseFloat(kpisRes.rows[0].type_all_time_collected) || 0;
+      const spent = parseFloat(kpisRes.rows[0].type_all_time_spent) || 0;
+      kpis.type_all_time_collected = collected;
+      kpis.type_all_time_spent = spent;
+      // The fund's own position — what the Float/Projects/... tab must show:
+      // what it brought in + what it raised - what it spent.
+      kpis.fund_opening = manualForScope(manualAmounts, type);
+      kpis.fund_balance = kpis.fund_opening + collected - spent;
     }
 
     // 2. Trend - Last 6 months (GUARANTEED to return all 6 months even with zero data)
@@ -188,7 +208,6 @@ router.get('/', async (req, res) => {
       };
     });
 
-    console.log('Trend data:', trend); // Debug log
 
     // 3. Daily Expenses
     const dailyRes = await query(`
@@ -303,17 +322,103 @@ router.get('/occasions', async (req, res) => {
     });
 
     const withRate = occasions.filter(o => o.rate !== null);
+
+    // --- Cash movement for this fund, by month -----------------------------
+    // Money IN is dated by payment (payments.paid_at), money OUT by spend date.
+    // This is what lets an occasional fund tell its whole story: one levy in,
+    // spending dripping out across the months that follow.
+    const { amounts: manualAmounts, meta: manualMeta } = await getManualOpenings();
+    const fundOpening = manualForScope(manualAmounts, type);
+
+    const [inRes, outRes, catRes] = await Promise.all([
+      query(`
+        SELECT TO_CHAR(p.paid_at, 'YYYY-MM') AS month, COALESCE(SUM(p.amount), 0) AS total
+        FROM payments p JOIN contributions c ON c.id = p.contribution_id
+        WHERE c.type = $1
+        GROUP BY 1 ORDER BY 1`, [type]),
+      query(`
+        SELECT TO_CHAR(spent_on, 'YYYY-MM') AS month, COALESCE(SUM(amount), 0) AS total
+        FROM expenses WHERE type = $1
+        GROUP BY 1 ORDER BY 1`, [type]),
+      query(`
+        SELECT COALESCE(c.name, 'Uncategorized') AS name,
+               COALESCE(SUM(e.amount), 0) AS total, COUNT(e.id)::int AS count
+        FROM expenses e LEFT JOIN categories c ON c.id = e.category_id
+        WHERE e.type = $1
+        GROUP BY 1 ORDER BY 2 DESC`, [type]),
+    ]);
+    const inByMonth = new Map(inRes.rows.map(r => [r.month, parseFloat(r.total) || 0]));
+    const outByMonth = new Map(outRes.rows.map(r => [r.month, parseFloat(r.total) || 0]));
+
+    const monthIndex = (ym) => { const [y, m] = ym.split('-').map(Number); return y * 12 + (m - 1); };
+    const fromIndex = (i) => `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`;
+    const monthLabel = (ym) => {
+      const [y, m] = ym.split('-').map(Number);
+      return `${MONTHS[m - 1].slice(0, 3)} ${String(y).slice(2)}`;
+    };
+
+    const now = new Date();
+    const nowYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const nowIdx = monthIndex(nowYm);
+
+    const activityIdx = [...inByMonth.keys(), ...outByMonth.keys()].map(monthIndex);
+    const startIdx = Math.min(
+      occasions.length ? monthIndex(occasions[0].period) : nowIdx,
+      activityIdx.length ? Math.min(...activityIdx) : nowIdx
+    );
+
+    // Month-by-month statement with a running balance (opening carried in).
+    const monthly = [];
+    let running = fundOpening;
+    for (let i = startIdx; i <= nowIdx; i++) {
+      const ym = fromIndex(i);
+      const moneyIn = inByMonth.get(ym) || 0;
+      const spent = outByMonth.get(ym) || 0;
+      running += moneyIn - spent;
+      monthly.push({ month: ym, label: monthLabel(ym), in: moneyIn, spent, balance: running });
+    }
+
+    // Attribute spending to the activation whose window it falls in:
+    // window = [activation month, next activation month) — the last runs open.
+    const windowStart = occasions.map(o => monthIndex(o.period));
+    occasions.forEach((o, i) => {
+      const from = windowStart[i];
+      const to = i + 1 < occasions.length ? windowStart[i + 1] : nowIdx + 1;
+      let spent = 0;
+      for (let m = from; m < to; m++) spent += outByMonth.get(fromIndex(m)) || 0;
+      o.spent = spent;
+      // Running balance at the end of this activation's window
+      const last = monthly.filter(row => monthIndex(row.month) < to).pop();
+      o.balance_after = last ? last.balance : fundOpening;
+    });
+
+    const allTimeSpent = [...outByMonth.values()].reduce((s, v) => s + v, 0);
     const totals = {
       occasions: occasions.length,
       all_time_expected: occasions.reduce((s2, o) => s2 + o.expected, 0),
       all_time_collected: occasions.reduce((s2, o) => s2 + o.collected, 0),
+      all_time_spent: allTimeSpent,
+      fund_opening: fundOpening,
+      fund_opening_effective_date: manualMeta[type]?.effective_date || null,
+      fund_balance: fundOpening + occasions.reduce((s2, o) => s2 + o.collected, 0) - allTimeSpent,
       avg_collection_rate: withRate.length
         ? parseFloat((withRate.reduce((s2, o) => s2 + o.rate, 0) / withRate.length).toFixed(1))
         : null,
       latest: occasions.length ? occasions[occasions.length - 1].period : null
     };
+    totals.spend_ratio = totals.all_time_collected > 0
+      ? parseFloat(((allTimeSpent / totals.all_time_collected) * 100).toFixed(1))
+      : null;
 
-    res.json({ scope: { type }, totals, occasions });
+    res.json({
+      scope: { type },
+      totals,
+      occasions,
+      monthly,
+      categories: catRes.rows.map(r => ({
+        name: r.name, total: parseFloat(r.total) || 0, count: parseInt(r.count) || 0
+      })),
+    });
   } catch (err) {
     console.error('Occasions error:', err);
     res.status(500).json({ error: err.message });

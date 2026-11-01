@@ -85,7 +85,20 @@ CREATE TABLE IF NOT EXISTS expenses (
 );
 CREATE INDEX IF NOT EXISTS idx_expenses_spent_on ON expenses(spent_on);
 
--- 8. Audit Log Table (Already existed, perfect for tracking edits!)
+-- 8. Per-fund Opening Balances
+--    Manual (brought-forward) cash per fund, so every fund can state where it
+--    started: 'estate' = unallocated/general pot, plus one row per fund type.
+--    Every screen derives its opening figure from this table (src/opening.js),
+--    which is what keeps Reports and the Dashboard telling the same story.
+CREATE TABLE IF NOT EXISTS fund_opening_balances (
+  fund_type       TEXT PRIMARY KEY,
+  opening_balance NUMERIC(15,2) NOT NULL DEFAULT 0,
+  effective_date  DATE NOT NULL DEFAULT '2026-01-01',
+  notes           TEXT,
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 9. Audit Log Table (Already existed, perfect for tracking edits!)
 CREATE TABLE IF NOT EXISTS audit_log (
   id BIGSERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id),
