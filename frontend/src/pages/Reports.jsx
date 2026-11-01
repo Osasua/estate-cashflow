@@ -1,16 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import {
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  AreaChart, Area
+} from 'recharts';
 
 const FUND_TYPES = [
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'float', label: 'Float' },
-  { value: 'projects', label: 'Projects' },
-  { value: 'end-of-year', label: 'End of Year' },
-  { value: 'welfare', label: 'Welfare' }
+  { value: 'monthly', label: 'Monthly', color: '#6366f1' },
+  { value: 'float', label: 'Float', color: '#22c55e' },
+  { value: 'projects', label: 'Projects', color: '#f59e0b' },
+  { value: 'end-of-year', label: 'End of Year', color: '#ef4444' },
+  { value: 'welfare', label: 'Welfare', color: '#06b6d4' }
 ];
 
-const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7'];
+const CHART_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#ec4899', '#14b8a6'];
 
 export default function Reports() {
   const { user } = useAuth();
@@ -21,7 +26,7 @@ export default function Reports() {
   const [filters, setFilters] = useState({
     startDate: `${now.getFullYear()}-01-01`,
     endDate: `${now.getFullYear()}-12-31`,
-    type: 'float' // Default to Float as requested
+    type: 'monthly'
   });
 
   const [report, setReport] = useState({
@@ -32,7 +37,7 @@ export default function Reports() {
 
   const [showModal, setShowModal] = useState(false);
   const [balanceForm, setBalanceForm] = useState({
-    type: 'float',
+    type: 'monthly',
     effective_date: `${now.getFullYear() - 1}-12-31`,
     amount: '',
     notes: ''
@@ -78,7 +83,48 @@ export default function Reports() {
   };
 
   const formatCurrency = (amount) => `₦${Number(amount).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const maxBreakdown = Math.max(...report.expense_breakdown.map(e => e.total), 1);
+  const formatCompact = (amount) => {
+    if (amount >= 1000000) return `₦${(amount / 1000000).toFixed(1)}M`;
+    if (amount >= 1000) return `₦${(amount / 1000).toFixed(0)}k`;
+    return `₦${amount}`;
+  };
+
+  // Custom tooltip for charts
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div style={{
+          background: '#fff',
+          padding: '12px',
+          border: '1px solid #e5e7eb',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+        }}>
+          <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: '#111827' }}>{label}</p>
+          {payload.map((entry, index) => (
+            <p key={index} style={{ margin: '4px 0', color: entry.color, fontSize: '0.9rem' }}>
+              {entry.name}: {formatCurrency(entry.value)}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Custom label for pie chart
+  const renderPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) => {
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+    return (
+      <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" style={{ fontSize: '12px', fontWeight: '600' }}>
+        {`${(percent * 100).toFixed(0)}%`}
+      </text>
+    );
+  };
 
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 24px' }}>
@@ -141,48 +187,97 @@ export default function Reports() {
       </div>
 
       {/* Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>
-        {/* Expense Breakdown */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+        {/* Expense Breakdown - Pie Chart */}
         <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-          <h3 style={{ margin: '0 0 16px 0', fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>Expense Breakdown</h3>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>Expense Breakdown</h3>
+          <p style={{ margin: '0 0 24px 0', color: '#6b7280', fontSize: '0.9rem' }}>Distribution by category</p>
+          
           {report.expense_breakdown.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>No expenses in selected period</div>
+            <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '12px' }}>📊</div>
+              No expenses in selected period
+            </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {report.expense_breakdown.map((item, idx) => (
-                <div key={idx}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '0.9rem', fontWeight: '600', color: '#111827' }}>{item.name}</span>
-                    <span style={{ fontSize: '0.9rem', color: '#6b7280' }}>{formatCurrency(item.total)} ({item.count})</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+              <ResponsiveContainer width="50%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={report.expense_breakdown}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={3}
+                    dataKey="total"
+                    label={renderPieLabel}
+                    labelLine={false}
+                  >
+                    {report.expense_breakdown.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div style={{ flex: 1 }}>
+                {report.expense_breakdown.map((item, idx) => (
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                    <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: CHART_COLORS[idx % CHART_COLORS.length], flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{formatCurrency(item.total)} ({item.count})</div>
+                    </div>
                   </div>
-                  <div style={{ height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
-                    <div style={{ width: `${(item.total / maxBreakdown) * 100}%`, height: '100%', background: COLORS[idx % COLORS.length], borderRadius: '4px' }} />
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>
 
-        {/* Daily Trend */}
+        {/* Daily Expense Trend - Area Chart */}
         <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-          <h3 style={{ margin: '0 0 16px 0', fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>Daily Expense Trend</h3>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>Daily Expense Trend</h3>
+          <p style={{ margin: '0 0 24px 0', color: '#6b7280', fontSize: '0.9rem' }}>Spending over time</p>
+          
           {report.daily_trend.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>No daily data available</div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '250px', paddingTop: '20px' }}>
-              {report.daily_trend.map((day, idx) => {
-                const maxTrend = Math.max(...report.daily_trend.map(d => d.total), 1);
-                const heightPct = (day.total / maxTrend) * 100;
-                return (
-                  <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                    <div style={{ fontSize: '0.7rem', color: '#6b7280', marginBottom: '4px' }}>₦{(day.total/1000).toFixed(0)}k</div>
-                    <div style={{ width: '100%', maxWidth: '40px', height: `${Math.max(heightPct, 2)}%`, background: '#ef4444', borderRadius: '4px 4px 0 0', transition: 'height 0.3s' }} title={formatCurrency(day.total)} />
-                    <div style={{ fontSize: '0.7rem', color: '#9ca3af', transform: 'rotate(-45deg)', transformOrigin: 'top left', marginTop: '8px' }}>{day.label}</div>
-                  </div>
-                );
-              })}
+            <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '12px' }}>📈</div>
+              No daily data available
             </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={report.daily_trend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis 
+                  dataKey="label" 
+                  tick={{ fontSize: '0.75rem', fill: '#6b7280' }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={60}
+                />
+                <YAxis 
+                  tickFormatter={(value) => formatCompact(value)}
+                  tick={{ fontSize: '0.75rem', fill: '#6b7280' }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Area 
+                  type="monotone" 
+                  dataKey="total" 
+                  name="Amount"
+                  stroke="#ef4444" 
+                  strokeWidth={2}
+                  fillOpacity={1} 
+                  fill="url(#colorTotal)" 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
           )}
         </div>
       </div>
@@ -205,7 +300,7 @@ export default function Reports() {
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Opening Balance (₦)</label>
-                <input type="number" value={balanceForm.amount} onChange={(e) => setBalanceForm({ ...balanceForm, amount: e.target.value })} placeholder="e.g., -1219000" style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
+                <input type="number" value={balanceForm.amount} onChange={(e) => setBalanceForm({ ...balanceForm, amount: e.target.value })} placeholder="e.g., 360000" style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Note (Optional)</label>
