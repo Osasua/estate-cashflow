@@ -62,8 +62,14 @@ function MemberMaintenance() {
         </p>
       </div>
 
-      <div style={{ ...card, padding: '24px', marginBottom: '24px' }}>
-        <h3 style={{ margin: '0 0 16px 0', fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>Submit a request</h3>
+      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderTop: '4px solid #4f46e5', borderRadius: '16px', padding: '24px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', flexShrink: 0 }}>🛠️</div>
+          <div>
+            <h3 style={{ margin: '0 0 2px 0', fontSize: '1.125rem', fontWeight: '700', color: '#111827' }}>Submit a request</h3>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#6b7280' }}>Water, power, gates, common areas — anything that needs the estate team's hands.</p>
+          </div>
+        </div>
         <form onSubmit={submit} style={{ display: 'grid', gap: '12px' }}>
           <input
             value={title}
@@ -84,37 +90,46 @@ function MemberMaintenance() {
               type="submit"
               disabled={busy || !title.trim()}
               style={{
-                padding: '10px 22px',
-                background: busy || !title.trim() ? '#9ca3af' : '#4f46e5',
-                color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600',
+                padding: '11px 24px',
+                background: busy || !title.trim() ? '#9ca3af' : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700',
                 cursor: busy || !title.trim() ? 'not-allowed' : 'pointer',
+                boxShadow: busy || !title.trim() ? 'none' : '0 4px 12px rgba(99, 102, 241, 0.3)',
               }}
             >
-              {busy ? 'Submitting…' : 'Submit Request'}
+              {busy ? 'Submitting…' : '🛠️ Submit Request'}
             </button>
           </div>
           {msg && <div style={{ fontSize: '0.9rem', color: msg.startsWith('✅') ? '#059669' : '#e11d48' }}>{msg}</div>}
         </form>
       </div>
 
-      <div style={{ ...card, padding: '24px' }}>
-        <h3 style={{ margin: '0 0 16px 0', fontSize: '1.125rem', fontWeight: '600', color: '#111827' }}>Your requests</h3>
+      <div style={{ ...card, padding: '24px', borderTop: '4px solid #10b981' }}>
+        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', flexShrink: 0 }}>📋</div>
+          <div>
+            <h3 style={{ margin: '0 0 2px 0', fontSize: '1.125rem', fontWeight: '700', color: '#111827' }}>Your requests</h3>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#6b7280' }}>Live status — the estate team updates these as they work.</p>
+          </div>
+        </div>
         {requests === null ? (
           <Skeleton height="120px" width="100%" />
         ) : requests.length === 0 ? (
           <div style={{ padding: '32px', textAlign: 'center', color: '#9ca3af' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>📋</div>
             No maintenance requests yet — submit one above and it will appear here with its status.
           </div>
         ) : (
           <div style={{ display: 'grid', gap: '10px' }}>
             {requests.map((r) => {
               const s = STATUS_STYLE[r.status] || STATUS_STYLE.new;
+              const edge = r.status === 'resolved' ? '#059669' : r.status === 'in-progress' ? '#f59e0b' : '#e11d48';
               return (
-                <div key={r.id} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div key={r.id} style={{ border: '1px solid #e5e7eb', borderLeft: `4px solid ${edge}`, borderRadius: '10px', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap', background: '#fff' }}>
                   <div>
                     <div style={{ fontWeight: '600', color: '#111827' }}>{r.title}</div>
                     {r.description && <div style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '2px' }}>{r.description}</div>}
-                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>Submitted {new Date(r.created_at).toLocaleDateString()}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>📅 Submitted {new Date(r.created_at).toLocaleDateString()}</div>
                   </div>
                   <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '700', background: s.bg, color: s.color, whiteSpace: 'nowrap' }}>{s.label}</span>
                 </div>
@@ -155,11 +170,20 @@ function StaffQueue() {
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ margin: '0 0 8px 0', fontSize: '2rem', fontWeight: '700', color: '#111827' }}>Maintenance Requests</h1>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>
-          {open} open request{open === 1 ? '' : 's'} · residents submit these from the Maintenance link in their sidebar
-        </p>
+      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ margin: '0 0 8px 0', fontSize: '2rem', fontWeight: '700', color: '#111827' }}>🛠️ Maintenance Requests</h1>
+          <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>
+            Triage queue · residents submit these from the Maintenance link in their sidebar
+          </p>
+        </div>
+        <span style={{
+          padding: '8px 18px', borderRadius: '14px', fontWeight: '700', fontSize: '0.9rem',
+          background: open > 0 ? '#fef3c7' : '#ecfdf5', color: open > 0 ? '#92400e' : '#059669',
+          border: `1px solid ${open > 0 ? '#fde68a' : '#a7f3d0'}`,
+        }}>
+          {open > 0 ? `⚠️ ${open} open request${open === 1 ? '' : 's'}` : '✅ all resolved'}
+        </span>
       </div>
 
       <div style={{ ...card, overflow: 'hidden' }}>
