@@ -33,14 +33,28 @@ export default function OccasionDashboard({ typeKey, typeLabel }) {
         const allMonthsResults = await Promise.all(allMonthsPromises);
         const allContribs = allMonthsResults.flatMap(res => res.contributions || []);
 
-        // Find the most recent activation
-        const latest = allContribs.length > 0 
-          ? allContribs.sort((a, b) => {
-              const dateA = new Date(a.period_year, a.period_month - 1);
-              const dateB = new Date(b.period_year, b.period_month - 1);
-              return dateB - dateA;
-            })[0]
-          : null;
+        // Find the most recent activation PERIOD and aggregate totals across ALL households
+const latest = allContribs.length > 0 
+  ? (() => {
+      // Group contributions by period (year + month)
+      const grouped = allContribs.reduce((acc, c) => {
+        const key = `${c.period_year}-${c.period_month}`;
+        if (!acc[key]) acc[key] = { period_year: c.period_year, period_month: c.period_month, total_paid: 0, total_due: 0 };
+        acc[key].total_paid += parseFloat(c.amount_paid) || 0;
+        acc[key].total_due += parseFloat(c.amount_due) || 0;
+        return acc;
+      }, {});
+      
+      // Sort periods and pick the latest
+      const sorted = Object.values(grouped).sort((a, b) => {
+        const dateA = new Date(a.period_year, a.period_month - 1);
+        const dateB = new Date(b.period_year, b.period_month - 1);
+        return dateB - dateA;
+      });
+      
+      return sorted[0] || null;
+    })()
+  : null;
 
         if (alive) {
           setReportData(reportRes);
@@ -153,8 +167,8 @@ export default function OccasionDashboard({ typeKey, typeLabel }) {
           </div>
           <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '4px' }}>
             {latestActivation 
-              ? `${formatCurrency(latestActivation.amount_paid || 0)} of ${formatCurrency(latestActivation.amount_due || 0)}`
-              : 'No activations yet'}
+  ? `${formatCurrency(latestActivation.total_paid || 0)} of ${formatCurrency(latestActivation.total_due || 0)} collected`
+  : 'No activations yet'}
           </div>
         </div>
 
