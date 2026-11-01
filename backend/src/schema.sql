@@ -6,7 +6,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
-  CREATE TYPE payment_method AS ENUM ('cash', 'transfer', 'paystack', 'flutterwave');
+  CREATE TYPE payment_method AS ENUM ('cash', 'transfer', 'paystack', 'flutterwave', 'bank_transfer', 'adjustment');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- NEW: Contribution types for the 5 tabs
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS contributions (
 CREATE TABLE IF NOT EXISTS payments (
   id SERIAL PRIMARY KEY,
   contribution_id INTEGER NOT NULL REFERENCES contributions(id) ON DELETE CASCADE,
-  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  amount NUMERIC(12,2) NOT NULL CHECK (amount <> 0),
   method payment_method NOT NULL DEFAULT 'cash',
   reference TEXT UNIQUE,
   note TEXT,

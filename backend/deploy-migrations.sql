@@ -128,6 +128,32 @@ CREATE TABLE IF NOT EXISTS maintenance_requests (
 CREATE INDEX IF NOT EXISTS idx_maintenance_member ON maintenance_requests(member_id);
 CREATE INDEX IF NOT EXISTS idx_maintenance_status ON maintenance_requests(status);
 
+-- ----------------------------------------------------------------------------
+-- payment_method enum: production payment rows already use 'bank_transfer'
+-- (statement imports) and the bill-edit audit guardrail writes 'adjustment'
+-- rows. Idempotent: each value is added only if missing. Safe to re-run.
+-- ----------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+                  WHERE t.typname = 'payment_method' AND e.enumlabel = 'bank_transfer') THEN
+    ALTER TYPE payment_method ADD VALUE 'bank_transfer';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+                  WHERE t.typname = 'payment_method' AND e.enumlabel = 'adjustment') THEN
+    ALTER TYPE payment_method ADD VALUE 'adjustment';
+  END IF;
+END $$;
+
+-- ----------------------------------------------------------------------------
+-- payments.amount: allow negative rows. The bill-edit audit guardrail writes
+-- 'adjustment' rows for the signed difference of an edit; reducing a bill's
+-- paid amount is a legitimate correction and must be representable.
+-- Idempotent: drops and recreates the check constraint. Safe to re-run.
+-- ----------------------------------------------------------------------------
+ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_amount_check;
+ALTER TABLE payments ADD CONSTRAINT payments_amount_check CHECK (amount <> 0);
+
 -- ============================================================================
 -- Done. After deploying the app, set each fund's brought-forward cash once:
 --   Reports -> Opening Balances -> Update Opening Balance -> Fund: Float

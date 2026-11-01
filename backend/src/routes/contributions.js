@@ -119,11 +119,13 @@ router.put('/:id', staff, async (req, res) => {
     if (newDue !== null && newDue < 0) return res.status(400).json({ error: 'Amount due cannot be negative' });
     if (newPaid !== null && newPaid < 0) return res.status(400).json({ error: 'Amount paid cannot be negative' });
 
+    let current = null;
     if (newPaid !== null) {
-      const { rows: [current] } = await query(
-        `SELECT member_id, type, period_year, period_month, amount_due FROM contributions WHERE id = $1`,
+      const cur = await query(
+        `SELECT member_id, type, period_year, period_month, amount_due, amount_paid FROM contributions WHERE id = $1`,
         [req.params.id]
       );
+      current = cur.rows[0] || null;
 
       if (current) {
         const effectiveDue = newDue !== null ? newDue : current.amount_due;
@@ -163,7 +165,24 @@ router.put('/:id', staff, async (req, res) => {
     );
     
     if (rows.length === 0) return res.status(404).json({ error: 'Contribution not found' });
-    
+
+    // Audit guardrail: whenever a bill's paid amount is edited by hand, write a
+    // matching payment-ledger row for the difference (negative for reductions)
+    // so the payments book can never silently drift from the bill book again.
+    if (newPaid !== null && current && Number(current.amount_paid) !== newPaid) {
+      await query(
+        `INSERT INTO payments (contribution_id, amount, method, reference, note, recorded_by)
+         VALUES ($1, $2, 'adjustment', $3, $4, $5)`,
+        [
+          req.params.id,
+          newPaid - Number(current.amount_paid),
+          `BILL-EDIT-${req.params.id}-${Date.now()}`,
+          'Auto-recorded bill-edit adjustment',
+          req.user.id,
+        ]
+      );
+    }
+
     res.json({ 
       contribution: { ...rows[0], status: statusOf(rows[0]) },
       message: 'Contribution updated successfully'
