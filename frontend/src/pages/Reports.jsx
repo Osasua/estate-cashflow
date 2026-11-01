@@ -1,558 +1,224 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
-import { naira } from '../format';
-import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
-  PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area,
-} from 'recharts';
-import Skeleton from '../components/Skeleton';
-
-const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#64748b', '#84cc16', '#ec4899', '#14b8a6'];
-
-function KPICard({ title, value, subtitle, color, icon }) {
-  const colorMap = {
-    indigo: { bg: '#eef2ff', text: '#4f46e5' },
-    emerald: { bg: '#ecfdf5', text: '#059669' },
-    rose: { bg: '#fff1f2', text: '#e11d48' },
-    violet: { bg: '#f5f3ff', text: '#7c3aed' },
-  };
-  const c = colorMap[color] || colorMap.indigo;
-
-  return (
-    <div style={{
-      background: '#fff',
-      borderRadius: '16px',
-      padding: '24px',
-      border: '1px solid #e5e7eb',
-      borderLeft: `4px solid ${c.text}`,
-      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-      position: 'relative',
-      overflow: 'hidden'
-    }}>
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        right: 0,
-        width: '120px',
-        height: '120px',
-        background: `radial-gradient(circle at top right, ${c.bg} 0%, transparent 70%)`,
-        opacity: 0.6
-      }} />
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</span>
-          <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '8px',
-            background: c.bg,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '1.1rem'
-          }}>{icon}</div>
-        </div>
-        <div style={{ fontSize: '2rem', fontWeight: '700', color: '#111827', lineHeight: 1.1, marginBottom: '6px' }}>{value}</div>
-        {subtitle && <div style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{subtitle}</div>}
-      </div>
-    </div>
-  );
-}
-
-function ChartPanel({ title, subtitle, children }) {
-  return (
-    <div style={{
-      background: '#fff',
-      borderRadius: '16px',
-      border: '1px solid #e5e7eb',
-      padding: '24px',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-    }}>
-      <div style={{ marginBottom: '20px' }}>
-        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600', color: '#111827' }}>{title}</h3>
-        {subtitle && <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>{subtitle}</p>}
-      </div>
-      {children}
-    </div>
-  );
-}
 
 const FUND_TYPES = [
-  { key: 'monthly', label: 'Monthly' },
-  { key: 'float', label: 'Float' },
-  { key: 'projects', label: 'Projects' },
-  { key: 'end-of-year', label: 'End of Year' },
-  { key: 'welfare', label: 'Welfare' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'float', label: 'Float' },
+  { value: 'projects', label: 'Projects' },
+  { value: 'end-of-year', label: 'End of Year' },
+  { value: 'welfare', label: 'Welfare' }
 ];
-const FUND_LABEL = FUND_TYPES.reduce((m, t) => ({ ...m, [t.key]: t.label }), {});
+
+const COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7'];
 
 export default function Reports() {
   const { user } = useAuth();
-  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedFund, setSelectedFund] = useState('');
-  const [showOpeningBalanceForm, setShowOpeningBalanceForm] = useState(false);
-const [newOpeningBalance, setNewOpeningBalance] = useState('');
-const [newEffectiveDate, setNewEffectiveDate] = useState('2026-01-01');
-const [newNotes, setNewNotes] = useState('');
+  const [message, setMessage] = useState('');
+  
+  const now = new Date();
+  const [filters, setFilters] = useState({
+    startDate: `${now.getFullYear()}-01-01`,
+    endDate: `${now.getFullYear()}-12-31`,
+    type: 'float' // Default to Float as requested
+  });
 
-const handleSaveOpeningBalance = async () => {
-  if (!newOpeningBalance) {
-    alert('Please enter an amount');
-    return;
-  }
-  try {
-    await api('/reports/opening-balance', {
-      method: 'POST',
-      body: {
-        amount: parseFloat(newOpeningBalance),
-        effective_date: newEffectiveDate,
-        notes: newNotes
-      }
-    });
-    alert('✅ Opening balance updated successfully!');
-    setShowOpeningBalanceForm(false);
-    setNewOpeningBalance('');
-    setNewNotes('');
-    loadData(); // Refresh data
-  } catch (err) {
-    alert('❌ Error: ' + err.message);
-  }
-};
+  const [report, setReport] = useState({
+    kpis: { opening_balance: 0, total_received: 0, total_expenses: 0, closing_balance: 0, manual_opening_balance: 0, effective_date: '' },
+    expense_breakdown: [],
+    daily_trend: []
+  });
+
+  const [showModal, setShowModal] = useState(false);
+  const [balanceForm, setBalanceForm] = useState({
+    type: 'float',
+    effective_date: `${now.getFullYear() - 1}-12-31`,
+    amount: '',
+    notes: ''
+  });
 
   useEffect(() => {
-    const now = new Date();
-    const firstDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const lastDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`;
-    setStartDate(firstDay);
-    setEndDate(lastDay);
-  }, []);
+    loadReport();
+  }, [filters]);
 
-  useEffect(() => {
-    if (startDate && endDate) loadData();
-  }, [startDate, endDate, selectedCategory, selectedFund]);
-
-  const loadData = async () => {
+  const loadReport = async () => {
     setLoading(true);
-    setError('');
     try {
-      const params = new URLSearchParams({ startDate, endDate });
-      if (selectedCategory) params.append('category_id', selectedCategory);
-      if (selectedFund) params.append('type', selectedFund);
-      const res = await api(`/reports/summary?${params.toString()}`);
-      setData(res);
-    } catch (e) {
-      setError(e.message);
+      const params = new URLSearchParams({
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        type: filters.type
+      });
+      const res = await api(`/reports/summary?${params}`);
+      setReport(res);
+    } catch (err) {
+      setMessage('❌ Failed to load report: ' + err.message);
+      setTimeout(() => setMessage(''), 5000);
     } finally {
       setLoading(false);
     }
   };
 
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div style={{
-          background: 'white',
-          padding: '12px 16px',
-          border: '1px solid #e5e7eb',
-          borderRadius: '10px',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-          fontSize: '0.85rem'
-        }}>
-          <p style={{ margin: '0 0 8px 0', fontWeight: '600', color: '#111827' }}>{label}</p>
-          {payload.map((entry, index) => (
-            <div key={index} style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', margin: '4px 0' }}>
-              <span style={{ color: '#6b7280', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: entry.color }}></span>
-                {entry.name}
-              </span>
-              <span style={{ fontWeight: '600', color: '#111827' }}>{naira(entry.value)}</span>
-            </div>
-          ))}
-        </div>
-      );
+  const handleSetBalance = async () => {
+    try {
+      await api('/reports/opening-balance', {
+        method: 'POST',
+        body: balanceForm
+      });
+      setMessage('✅ Opening balance set successfully');
+      setTimeout(() => setMessage(''), 3000);
+      setShowModal(false);
+      setBalanceForm({ ...balanceForm, amount: '', notes: '' });
+      loadReport();
+    } catch (err) {
+      setMessage('❌ Failed: ' + err.message);
+      setTimeout(() => setMessage(''), 5000);
     }
-    return null;
   };
 
-  if (error) return <div style={{ padding: '40px', color: '#ef4444', textAlign: 'center' }}><h2>Error</h2><p>{error}</p></div>;
-  if (loading || !data) return <div style={{ padding: '40px' }}><Skeleton height="40px" width="300px" style={{ marginBottom: '24px' }} /><div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>{[1,2,3,4].map(i => <Skeleton key={i} height="140px" width="100%" />)}</div></div>;
-
-  const { kpis, expense_breakdown, daily_trend, top_expenses, categories, filters } = data;
-
-  // Calculate total for percentages
-  const breakdownTotal = expense_breakdown.reduce((sum, item) => sum + item.total, 0);
+  const formatCurrency = (amount) => `₦${Number(amount).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const maxBreakdown = Math.max(...report.expense_breakdown.map(e => e.total), 1);
 
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 24px' }}>
-      {/* Header */}
       <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ margin: '0 0 8px 0', fontSize: '2rem', fontWeight: '700', color: '#111827', letterSpacing: '-0.02em' }}>
-          Reports & Analytics
-        </h1>
-        <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>
-          Comprehensive financial insights and expense tracking
-        </p>
+        <h1 style={{ margin: '0 0 8px 0', fontSize: '2rem', fontWeight: '700', color: '#111827' }}>Reports & Analytics</h1>
+        <p style={{ margin: 0, color: '#6b7280', fontSize: '1.05rem' }}>Comprehensive financial insights and expense tracking</p>
       </div>
 
-            {/* Filters */}
-      <div style={{
-        background: '#fff',
-        borderRadius: '16px',
-        border: '2px solid #e5e7eb',
-        borderTop: `4px solid #6366f1`,
-        padding: '24px',
-        marginBottom: '24px',
-        boxShadow: '0 2px 8px rgba(99, 102, 241, 0.08)'
-      }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', alignItems: 'end' }}>
+      {message && (
+        <div style={{ background: message.includes('✅') ? '#ecfdf5' : '#fff1f2', border: `1px solid ${message.includes('✅') ? '#a7f3d0' : '#fecdd3'}`, borderRadius: '8px', padding: '12px', marginBottom: '20px', color: message.includes('✅') ? '#065f46' : '#991b1b' }}>{message}</div>
+      )}
+
+      {/* Filters */}
+      <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb', marginBottom: '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'end' }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Start Date</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' }}
-            />
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px', color: '#374151' }}>Start Date</label>
+            <input type="date" value={filters.startDate} onChange={(e) => setFilters({ ...filters, startDate: e.target.value })} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
           </div>
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>End Date</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' }}
-            />
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px', color: '#374151' }}>End Date</label>
+            <input type="date" value={filters.endDate} onChange={(e) => setFilters({ ...filters, endDate: e.target.value })} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
           </div>
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Category Filter</label>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' }}
-            >
-              <option value="">All Categories</option>
-              {categories.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', marginBottom: '6px', color: '#374151' }}>Fund Type</label>
+            <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }}>
+              {FUND_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fund Filter</label>
-            <select
-              value={selectedFund}
-              onChange={(e) => setSelectedFund(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' }}
-            >
-              <option value="">All Funds</option>
-              {FUND_TYPES.map(f => (
-                <option key={f.key} value={f.key}>{f.label}</option>
-              ))}
-            </select>
-          </div>
+          <button onClick={() => setShowModal(true)} style={{ padding: '10px 20px', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>
+            Set Opening Balance
+          </button>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '32px' }}>
-       <KPICard
-  title="Opening Balance"
-  value={naira(kpis.opening_balance)}
-  subtitle={kpis.is_system_start 
-    ? "System start — no prior data" 
-    : `As of ${filters.start_date}${filters.type ? ` · ${FUND_LABEL[filters.type] || filters.type} fund` : ''}`}
-  color="indigo"
-  icon=""
-/>
-        <KPICard
-          title="Total Received"
-          value={naira(kpis.total_received)}
-          subtitle={filters.type ? `${FUND_LABEL[filters.type] || filters.type} collections` : 'Contributions collected'}
-          color="emerald"
-          icon="📥"
-        />
-        <KPICard
-          title="Total Expenses"
-          value={naira(kpis.total_expenses)}
-          subtitle={`${expense_breakdown.length} categories`}
-          color="rose"
-          icon="📤"
-        />
-        <KPICard
-          title="Closing Balance"
-          value={naira(kpis.closing_balance)}
-          subtitle={`As of ${filters.end_date}${filters.type ? ` · ${FUND_LABEL[filters.type] || filters.type} fund` : ''}`}
-          color="violet"
-          icon=""
-        />
-      </div>
-
-{/* Estate Opening Balance Card — estate-level, hidden on fund-scoped reports */}
-{(!filters.type || filters.type === 'monthly') && (
-<div style={{
-  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-  borderRadius: '16px',
-  padding: '24px',
-  marginBottom: '24px',
-  color: 'white',
-  boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-}}>
-  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-    <div>
-      <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', fontWeight: '600' }}>Estate Opening Balance</h3>
-      <p style={{ margin: 0, fontSize: '0.9rem', opacity: 0.9 }}>
-        Current: <strong>{naira(kpis.estate_opening_balance || 0)}</strong> 
-        {kpis.estate_effective_date && ` (effective ${kpis.estate_effective_date})`}
-      </p>
-    </div>
-    <button
-      onClick={() => setShowOpeningBalanceForm(true)}
-      style={{
-        padding: '10px 20px',
-        background: 'white',
-        color: '#667eea',
-        border: 'none',
-        borderRadius: '8px',
-        fontWeight: '600',
-        cursor: 'pointer',
-        fontSize: '0.9rem'
-      }}
-    >
-      Update Opening Balance
-    </button>
-  </div>
-
-  {showOpeningBalanceForm && (
-    <div style={{ 
-      marginTop: '20px', 
-      padding: '20px', 
-      background: 'rgba(255,255,255,0.1)', 
-      borderRadius: '12px',
-      backdropFilter: 'blur(10px)'
-    }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'end' }}>
-        <div>
-          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '500' }}>Amount (₦)</label>
-          <input
-            type="number"
-            value={newOpeningBalance}
-            onChange={(e) => setNewOpeningBalance(e.target.value)}
-            placeholder="e.g., 500000"
-            style={{ width: '100%', padding: '10px 12px', border: 'none', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' }}
-          />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+        <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb', borderLeft: '4px solid #6366f1' }}>
+          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px' }}>Opening Balance</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: '700', color: '#4f46e5' }}>{formatCurrency(report.kpis.opening_balance)}</div>
+          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>Manual: {formatCurrency(report.kpis.manual_opening_balance)} + Prior Activity</div>
         </div>
-        <div>
-          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '500' }}>Effective Date</label>
-          <input
-            type="date"
-            value={newEffectiveDate}
-            onChange={(e) => setNewEffectiveDate(e.target.value)}
-            style={{ width: '100%', padding: '10px 12px', border: 'none', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' }}
-          />
+        <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb', borderLeft: '4px solid #22c55e' }}>
+          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px' }}>Total Received</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: '700', color: '#059669' }}>{formatCurrency(report.kpis.total_received)}</div>
+          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>Collections in selected period</div>
         </div>
-        <div>
-          <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '500' }}>Notes</label>
-          <input
-            type="text"
-            value={newNotes}
-            onChange={(e) => setNewNotes(e.target.value)}
-            placeholder="e.g., Initial estate fund"
-            style={{ width: '100%', padding: '10px 12px', border: 'none', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' }}
-          />
+        <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb', borderLeft: '4px solid #ef4444' }}>
+          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px' }}>Total Expenses</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: '700', color: '#e11d48' }}>{formatCurrency(report.kpis.total_expenses)}</div>
+          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>Spending in selected period</div>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={handleSaveOpeningBalance}
-            style={{
-              padding: '10px 20px',
-              background: '#10b981',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontWeight: '600',
-              cursor: 'pointer'
-            }}
-          >
-            Save
-          </button>
-          <button
-            onClick={() => setShowOpeningBalanceForm(false)}
-            style={{
-              padding: '10px 20px',
-              background: 'rgba(255,255,255,0.2)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontWeight: '600',
-              cursor: 'pointer'
-            }}
-          >
-            Cancel
-          </button>
+        <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb', borderLeft: '4px solid #a855f7' }}>
+          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px' }}>Closing Balance</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: '700', color: report.kpis.closing_balance >= 0 ? '#7c3aed' : '#e11d48' }}>
+            {formatCurrency(report.kpis.closing_balance)}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>Opening + Received - Expenses</div>
         </div>
       </div>
-    </div>
-  )}
-</div>
-)}
 
-      {/* Charts Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '24px', marginBottom: '32px' }}>
-        {/* Expense Breakdown - Fixed: no overlapping labels */}
-        <ChartPanel title="Expense Breakdown" subtitle="By category">
-          {expense_breakdown && expense_breakdown.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'center' }}>
-              <div style={{ height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={expense_breakdown}
-                      dataKey="total"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={90}
-                      paddingAngle={2}
-                      // ✅ FIX: Removed inline labels to prevent overlap
-                    >
-                      {expense_breakdown.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip content={<CustomTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              {/* ✅ FIX: Clean legend table instead of overlapping labels */}
+      {/* Charts */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>
+        {/* Expense Breakdown */}
+        <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+          <h3 style={{ margin: '0 0 16px 0', fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>Expense Breakdown</h3>
+          {report.expense_breakdown.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>No expenses in selected period</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {report.expense_breakdown.map((item, idx) => (
+                <div key={idx}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '0.9rem', fontWeight: '600', color: '#111827' }}>{item.name}</span>
+                    <span style={{ fontSize: '0.9rem', color: '#6b7280' }}>{formatCurrency(item.total)} ({item.count})</span>
+                  </div>
+                  <div style={{ height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ width: `${(item.total / maxBreakdown) * 100}%`, height: '100%', background: COLORS[idx % COLORS.length], borderRadius: '4px' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Daily Trend */}
+        <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+          <h3 style={{ margin: '0 0 16px 0', fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>Daily Expense Trend</h3>
+          {report.daily_trend.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>No daily data available</div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '250px', paddingTop: '20px' }}>
+              {report.daily_trend.map((day, idx) => {
+                const maxTrend = Math.max(...report.daily_trend.map(d => d.total), 1);
+                const heightPct = (day.total / maxTrend) * 100;
+                return (
+                  <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#6b7280', marginBottom: '4px' }}>₦{(day.total/1000).toFixed(0)}k</div>
+                    <div style={{ width: '100%', maxWidth: '40px', height: `${Math.max(heightPct, 2)}%`, background: '#ef4444', borderRadius: '4px 4px 0 0', transition: 'height 0.3s' }} title={formatCurrency(day.total)} />
+                    <div style={{ fontSize: '0.7rem', color: '#9ca3af', transform: 'rotate(-45deg)', transformOrigin: 'top left', marginTop: '8px' }}>{day.label}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Opening Balance Modal */}
+      {showModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowModal(false)}>
+          <div style={{ background: '#fff', borderRadius: '16px', padding: '32px', width: '90%', maxWidth: '500px' }} onClick={e => e.stopPropagation()}>
+            <h2 style={{ margin: '0 0 24px 0', fontSize: '1.5rem', fontWeight: '700', color: '#111827' }}>Set Opening Balance</h2>
+            <div style={{ display: 'grid', gap: '16px' }}>
               <div>
-                {expense_breakdown.map((item, i) => {
-                  const percentage = breakdownTotal > 0 ? ((item.total / breakdownTotal) * 100).toFixed(1) : 0;
-                  return (
-                    <div key={i} style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'space-between',
-                      padding: '10px 0',
-                      borderBottom: i < expense_breakdown.length - 1 ? '1px solid #f3f4f6' : 'none'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
-                        <div style={{ 
-                          width: '12px', 
-                          height: '12px', 
-                          borderRadius: '3px', 
-                          background: COLORS[i % COLORS.length] 
-                        }}></div>
-                        <span style={{ fontSize: '0.9rem', color: '#374151', fontWeight: '500' }}>{item.name}</span>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#111827' }}>{naira(item.total)}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{percentage}%</div>
-                      </div>
-                    </div>
-                  );
-                })}
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Fund Type</label>
+                <select value={balanceForm.type} onChange={(e) => setBalanceForm({ ...balanceForm, type: e.target.value })} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }}>
+                  {FUND_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Effective Date (Last day of previous period)</label>
+                <input type="date" value={balanceForm.effective_date} onChange={(e) => setBalanceForm({ ...balanceForm, effective_date: e.target.value })} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Opening Balance (₦)</label>
+                <input type="number" value={balanceForm.amount} onChange={(e) => setBalanceForm({ ...balanceForm, amount: e.target.value })} placeholder="e.g., -1219000" style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: '600', color: '#374151' }}>Note (Optional)</label>
+                <textarea value={balanceForm.notes} onChange={(e) => setBalanceForm({ ...balanceForm, notes: e.target.value })} placeholder="e.g., Balance carried forward from 2025" style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', minHeight: '60px', boxSizing: 'border-box' }} />
               </div>
             </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '300px', color: '#9ca3af' }}>
-              No expenses in selected period
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowModal(false)} style={{ padding: '10px 20px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleSetBalance} style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>Save Opening Balance</button>
             </div>
-          )}
-        </ChartPanel>
-
-        {/* Daily Expense Trend */}
-        <ChartPanel title="Daily Expense Trend" subtitle="Spending over time">
-          {daily_trend && daily_trend.length > 0 ? (
-            <ResponsiveContainer width="100%" height={320}>
-              <AreaChart data={daily_trend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`} />
-                <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="total" name="Expenses" stroke="#ef4444" strokeWidth={2.5} fillOpacity={1} fill="url(#colorExpense)" dot={{ r: 4, fill: '#ef4444', strokeWidth: 2, stroke: '#fff' }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '320px', color: '#9ca3af' }}>
-              No daily data available
-            </div>
-          )}
-        </ChartPanel>
-      </div>
-
-      {/* Top Expenses Table */}
-      <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', background: 'linear-gradient(to right, #f9fafb, #ffffff)' }}>
-          <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600', color: '#111827' }}>Top Expenses</h3>
-          <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>Largest transactions in selected period</p>
+          </div>
         </div>
-
-        {top_expenses && top_expenses.length > 0 ? (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f9fafb' }}>
-                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Date</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Description</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Category</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '0.7rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Vendor</th>
-                  <th style={{ padding: '14px 24px', textAlign: 'right', fontSize: '0.7rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' }}>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {top_expenses.map((expense, idx) => (
-                  <tr key={expense.id} style={{ transition: 'background 0.2s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                  >
-                    <td style={{ padding: '14px 24px', fontSize: '0.85rem', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>
-                      {new Date(expense.spent_on).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </td>
-                    <td style={{ padding: '14px 24px', fontSize: '0.9rem', fontWeight: '500', color: '#111827', borderBottom: '1px solid #f3f4f6', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {expense.description}
-                    </td>
-                    <td style={{ padding: '14px 24px', borderBottom: '1px solid #f3f4f6' }}>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '4px 10px',
-                        background: COLORS[idx % COLORS.length] + '15',
-                        color: COLORS[idx % COLORS.length],
-                        borderRadius: '6px',
-                        fontSize: '0.75rem',
-                        fontWeight: '600'
-                      }}>
-                        {expense.category_name || 'Uncategorized'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '14px 24px', fontSize: '0.85rem', color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>
-                      {expense.vendor || '—'}
-                    </td>
-                    <td style={{ padding: '14px 24px', textAlign: 'right', fontSize: '0.9rem', fontWeight: '700', color: '#ef4444', borderBottom: '1px solid #f3f4f6', fontVariantNumeric: 'tabular-nums' }}>
-                      {naira(expense.amount)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div style={{ padding: '60px 20px', textAlign: 'center', color: '#9ca3af' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>📊</div>
-            <p style={{ fontSize: '1rem', fontWeight: '600', color: '#6b7280' }}>No expenses found</p>
-            <p style={{ fontSize: '0.85rem' }}>Try adjusting your date range or category filter</p>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
