@@ -170,6 +170,13 @@ export default function OccasionDashboard({ typeKey, typeLabel }) {
       {/* KPI Cards — the fund's whole cycle at a glance */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '32px' }}>
         <KPICard
+          title="Latest Activation"
+          value={latest.label}
+          subtitle={`${naira(latest.collected)} of ${naira(latest.expected)} collected`}
+          color="amber"
+          icon="📅"
+        />
+        <KPICard
           title="Opening Balance"
           value={naira(totals.fund_opening)}
           subtitle={totals.fund_opening_effective_date
@@ -184,13 +191,6 @@ export default function OccasionDashboard({ typeKey, typeLabel }) {
           subtitle={`${totals.occasions} activation${totals.occasions === 1 ? '' : 's'} · all-time`}
           color="emerald"
           icon="💰"
-        />
-        <KPICard
-          title="Latest Activation"
-          value={latest.label}
-          subtitle={`${naira(latest.collected)} of ${naira(latest.expected)} collected`}
-          color="amber"
-          icon="📅"
         />
         <KPICard
           title={`${typeLabel} Expenses`}

@@ -70,6 +70,9 @@ function Layout({ children }) {
           
           {/* ✅ NEW: Community Chat (Everyone) */}
           <NavLink to="/chat">Community Chat</NavLink>
+
+          {/* Maintenance — residents report & track requests here (staff keep their queue link in the staff menu) */}
+          {user?.role === 'member' && <NavLink to="/maintenance">Maintenance</NavLink>}
           
           {/* 5. My Profile (Everyone, at the bottom) */}
           <NavLink to="/profile">My Profile</NavLink>
