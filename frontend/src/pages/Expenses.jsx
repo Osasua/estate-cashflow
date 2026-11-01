@@ -60,29 +60,31 @@ export default function Expenses() {
   // --- budgets (category vs annual budget) ---
   const [budgets, setBudgets] = useState(null);
   const [budgetYear, setBudgetYear] = useState(new Date().getFullYear());
-  const [budgetDraft, setBudgetDraft] = useState({});
+  const [budgetEdit, setBudgetEdit] = useState(null); // { id, value } while editing a row
   const [budgetSaving, setBudgetSaving] = useState(false);
 
   const loadBudgets = async (y) => {
     try {
       const d = await api(`/budgets?year=${y}`);
       setBudgets(d.budgets || []);
-      setBudgetDraft({});
+      setBudgetEdit(null);
     } catch {
       setBudgets(null);
     }
   };
   useEffect(() => { loadBudgets(budgetYear); }, [budgetYear]);
 
-  const saveBudget = async (row) => {
-    const raw = budgetDraft[row.category_id];
-    const amount = raw === undefined || raw === '' ? row.budget : parseFloat(raw);
-    if (isNaN(amount)) return;
+  const saveBudget = async (row, amount) => {
+    const value = parseFloat(amount);
+    if (isNaN(value) || value < 0) {
+      setMessage('⚠️ Enter a valid budget amount');
+      return;
+    }
     setBudgetSaving(true);
     try {
       await api('/budgets', {
         method: 'POST',
-        body: { category_id: row.category_id, year: budgetYear, amount },
+        body: { category_id: row.category_id, year: budgetYear, amount: value },
       });
       await loadBudgets(budgetYear);
       setMessage(`✅ ${budgetYear} budget saved for ${row.name}`);
@@ -90,6 +92,17 @@ export default function Expenses() {
       setMessage(`⚠️ Budget save failed: ${e.message}`);
     } finally {
       setBudgetSaving(false);
+    }
+  };
+
+  const clearBudget = async (row) => {
+    if (!window.confirm(`Remove the ${budgetYear} budget for ${row.name}? Spending history is not affected.`)) return;
+    try {
+      await api(`/budgets/${row.category_id}/${budgetYear}`, { method: 'DELETE' });
+      await loadBudgets(budgetYear);
+      setMessage(`✅ ${budgetYear} budget cleared for ${row.name}`);
+    } catch (e) {
+      setMessage(`⚠️ Could not clear budget: ${e.message}`);
     }
   };
 
@@ -488,23 +501,55 @@ export default function Expenses() {
                     <tr key={b.category_id} style={{ borderBottom: '1px solid #f3f4f6' }}>
                       <td style={{ padding: '12px 24px', fontWeight: '600', color: '#111827' }}>{b.name}</td>
                       <td style={{ padding: '12px 24px', textAlign: 'right' }}>
-                        <input
-                          type="number"
-                          min="0"
-                          defaultValue={b.budget || ''}
-                          placeholder={b.budget ? '' : '0'}
-                          disabled={!['admin', 'treasurer'].includes(user?.role)}
-                          onChange={(e) => setBudgetDraft((d) => ({ ...d, [b.category_id]: e.target.value }))}
-                          style={{ width: '120px', padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', textAlign: 'right' }}
-                        />
-                        {' '}
-                        <button
-                          onClick={() => saveBudget(b)}
-                          disabled={budgetSaving || budgetDraft[b.category_id] === undefined}
-                          style={{ padding: '6px 10px', border: '1px solid #6366f1', color: budgetDraft[b.category_id] === undefined ? '#9ca3af' : '#6366f1', background: 'white', borderRadius: '6px', cursor: budgetDraft[b.category_id] === undefined ? 'default' : 'pointer', fontSize: '0.8rem', fontWeight: '600' }}
-                        >
-                          Save
-                        </button>
+                        {budgetEdit && budgetEdit.id === b.category_id ? (
+                          <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                            <input
+                              type="number"
+                              min="0"
+                              autoFocus
+                              value={budgetEdit.value}
+                              onChange={(e) => setBudgetEdit({ id: b.category_id, value: e.target.value })}
+                              style={{ width: '110px', padding: '6px 10px', border: '1px solid #6366f1', borderRadius: '6px', fontSize: '0.875rem', textAlign: 'right' }}
+                            />
+                            <button
+                              onClick={() => saveBudget(b, budgetEdit.value)}
+                              disabled={budgetSaving}
+                              style={{ padding: '6px 14px', border: 'none', borderRadius: '6px', fontSize: '0.8rem', fontWeight: '700', color: '#fff', background: budgetSaving ? '#9ca3af' : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', cursor: budgetSaving ? 'not-allowed' : 'pointer' }}
+                            >
+                              {budgetSaving ? 'Saving…' : 'Save'}
+                            </button>
+                            <button
+                              onClick={() => setBudgetEdit(null)}
+                              style={{ padding: '6px 10px', border: '1px solid #d1d5db', color: '#6b7280', background: '#fff', borderRadius: '6px', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer' }}
+                            >
+                              Cancel
+                            </button>
+                          </span>
+                        ) : (
+                          <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: '600', color: '#111827', fontVariantNumeric: 'tabular-nums' }}>{b.budget > 0 ? naira(b.budget) : '—'}</span>
+                            {['admin', 'treasurer'].includes(user?.role) && (
+                              <>
+                                <button
+                                  onClick={() => setBudgetEdit({ id: b.category_id, value: String(b.budget || '') })}
+                                  title={`Edit the ${budgetYear} budget for ${b.name}`}
+                                  style={{ padding: '4px 10px', border: '1px solid #6366f1', color: '#6366f1', background: '#fff', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}
+                                >
+                                  Edit
+                                </button>
+                                {b.budget > 0 && (
+                                  <button
+                                    onClick={() => clearBudget(b)}
+                                    title={`Remove the ${budgetYear} budget for ${b.name}`}
+                                    style={{ padding: '4px 10px', border: '1px solid #e11d48', color: '#e11d48', background: '#fff', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}
+                                  >
+                                    Clear
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </span>
+                        )}
                       </td>
                       <td style={{ padding: '12px 24px', textAlign: 'right', fontWeight: '600', color: '#e11d48', fontVariantNumeric: 'tabular-nums' }}>{naira(b.spent)}</td>
                       <td style={{ padding: '12px 24px', textAlign: 'right', fontWeight: '600', color: over ? '#e11d48' : '#059669', fontVariantNumeric: 'tabular-nums' }}>
