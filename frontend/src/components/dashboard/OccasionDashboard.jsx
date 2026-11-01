@@ -8,7 +8,7 @@ const CHART_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a
 export default function OccasionDashboard({ typeKey, typeLabel }) {
   const [loading, setLoading] = useState(true);
   const [reportData, setReportData] = useState(null);
-  const [contributions, setContributions] = useState([]);
+  const [latestActivation, setLatestActivation] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -19,18 +19,32 @@ export default function OccasionDashboard({ typeKey, typeLabel }) {
     const loadData = async () => {
       try {
         const now = new Date();
-        const startDate = `${now.getFullYear()}-01-01`;
-        const endDate = `${now.getFullYear()}-12-31`;
+        const year = now.getFullYear();
+        const startDate = `${year}-01-01`;
+        const endDate = `${year}-12-31`;
         
-        // Fetch BOTH report analytics AND contribution activations in parallel
-        const [reportRes, contribRes] = await Promise.all([
-          api(`/reports/summary?startDate=${startDate}&endDate=${endDate}&type=${typeKey}`),
-          api(`/contributions?type=${typeKey}&year=${now.getFullYear()}`)
-        ]);
+        // 1. Fetch Report Data (This gives us Opening Balance, Total Raised, Expenses)
+        const reportRes = await api(`/reports/summary?startDate=${startDate}&endDate=${endDate}&type=${typeKey}`);
+        
+        // 2. Fetch Contributions across all 12 months to find the Latest Activation date
+        const allMonthsPromises = Array.from({ length: 12 }, (_, i) => 
+          api(`/contributions?type=${typeKey}&year=${year}&month=${i + 1}`)
+        );
+        const allMonthsResults = await Promise.all(allMonthsPromises);
+        const allContribs = allMonthsResults.flatMap(res => res.contributions || []);
+
+        // Find the most recent activation
+        const latest = allContribs.length > 0 
+          ? allContribs.sort((a, b) => {
+              const dateA = new Date(a.period_year, a.period_month - 1);
+              const dateB = new Date(b.period_year, b.period_month - 1);
+              return dateB - dateA;
+            })[0]
+          : null;
 
         if (alive) {
           setReportData(reportRes);
-          setContributions(contribRes.contributions || []);
+          setLatestActivation(latest);
         }
       } catch (err) {
         if (alive) {
@@ -62,10 +76,6 @@ export default function OccasionDashboard({ typeKey, typeLabel }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '32px' }}>
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} height="140px" width="100%" />)}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-          <Skeleton height="350px" width="100%" />
-          <Skeleton height="350px" width="100%" />
-        </div>
       </div>
     );
   }
@@ -74,28 +84,18 @@ export default function OccasionDashboard({ typeKey, typeLabel }) {
     return <div style={{ padding: '40px', color: '#ef4444', textAlign: 'center' }}>{error}</div>;
   }
 
-  // 1. Calculate Contribution Metrics
-  const totalRaised = contributions.reduce((sum, c) => sum + (parseFloat(c.amount_paid) || 0), 0);
-  
-  const latestActivation = contributions.length > 0 
-    ? contributions.sort((a, b) => {
-        const dateA = new Date(a.period_year, a.period_month - 1);
-        const dateB = new Date(b.period_year, b.period_month - 1);
-        return dateB - dateA;
-      })[0]
-    : null;
+  // Extract synced data from Reports API
+  const openingBalance = reportData?.kpis?.opening_balance || 0;
+  const totalRaised = reportData?.kpis?.total_received || 0; // ✅ SYNCED WITH REPORTS PAGE
+  const totalExpenses = reportData?.kpis?.total_expenses || 0;
+  const expenseBreakdown = reportData?.expense_breakdown || [];
+  const dailyTrend = reportData?.daily_trend || [];
+  const closingBalance = openingBalance + totalRaised - totalExpenses;
 
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const latestActivationLabel = latestActivation 
     ? `${months[latestActivation.period_month - 1]} ${latestActivation.period_year}`
     : 'None';
-
-  // 2. Extract Synced Report Metrics
-  const openingBalance = reportData?.kpis?.opening_balance || 0;
-  const totalExpenses = reportData?.kpis?.total_expenses || 0;
-  const expenseBreakdown = reportData?.expense_breakdown || [];
-  const dailyTrend = reportData?.daily_trend || [];
-  const closingBalance = openingBalance + totalRaised - totalExpenses;
 
   // Custom Tooltip for Charts
   const CustomTooltip = ({ active, payload, label }) => {
@@ -119,7 +119,7 @@ export default function OccasionDashboard({ typeKey, typeLabel }) {
       {/* --- 4 KPI CARDS --- */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '32px' }}>
         
-        {/* 1. Opening Balance (New & Synced) */}
+        {/* 1. Opening Balance */}
         <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb', borderLeft: '4px solid #6366f1' }}>
           <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span>💰</span> OPENING BALANCE
@@ -130,7 +130,7 @@ export default function OccasionDashboard({ typeKey, typeLabel }) {
           <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '4px' }}>From previous period</div>
         </div>
 
-        {/* 2. Total Raised (Retained & Fixed) */}
+        {/* 2. Total Raised (SYNCED) */}
         <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb', borderLeft: '4px solid #22c55e' }}>
           <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span>📥</span> TOTAL RAISED — {typeLabel.toUpperCase()}
@@ -139,11 +139,11 @@ export default function OccasionDashboard({ typeKey, typeLabel }) {
             {formatCurrency(totalRaised)}
           </div>
           <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '4px' }}>
-            {contributions.length} activation{contributions.length !== 1 ? 's' : ''} this year
+            Collections this year
           </div>
         </div>
 
-        {/* 3. Latest Activation (Retained & Fixed) */}
+        {/* 3. Latest Activation */}
         <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb', borderLeft: '4px solid #f59e0b' }}>
           <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span>📅</span> LATEST ACTIVATION
@@ -158,7 +158,7 @@ export default function OccasionDashboard({ typeKey, typeLabel }) {
           </div>
         </div>
 
-        {/* 4. Expenses (New & Synced) */}
+        {/* 4. Expenses */}
         <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb', borderLeft: '4px solid #ef4444' }}>
           <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span>📤</span> {typeLabel.toUpperCase()} EXPENSES
@@ -172,7 +172,20 @@ export default function OccasionDashboard({ typeKey, typeLabel }) {
         </div>
       </div>
 
-      {/* --- ANALYTICS CHARTS (Restored) --- */}
+      {/* --- FUND SUMMARY (Moved above analytics) --- */}
+      <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb', marginBottom: '24px' }}>
+        <h3 style={{ margin: '0 0 16px 0', fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>
+          {typeLabel} Fund Summary
+        </h3>
+        <p style={{ color: '#6b7280', margin: 0, fontSize: '1.05rem', lineHeight: '1.6' }}>
+          Opening Balance ({formatCurrency(openingBalance)}) + Total Raised ({formatCurrency(totalRaised)}) - Expenses ({formatCurrency(totalExpenses)}) = 
+          <strong style={{ color: closingBalance >= 0 ? '#059669' : '#e11d48', marginLeft: '4px' }}>
+            {formatCurrency(closingBalance)} Closing Balance
+          </strong>
+        </p>
+      </div>
+
+      {/* --- ANALYTICS CHARTS --- */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
         
         {/* Expense Breakdown Pie Chart */}
@@ -268,19 +281,6 @@ export default function OccasionDashboard({ typeKey, typeLabel }) {
           )}
         </div>
 
-      </div>
-
-      {/* Summary Footer */}
-      <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb', marginTop: '24px' }}>
-        <h3 style={{ margin: '0 0 16px 0', fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>
-          {typeLabel} Fund Summary
-        </h3>
-        <p style={{ color: '#6b7280', margin: 0, fontSize: '1.05rem', lineHeight: '1.6' }}>
-          Opening Balance ({formatCurrency(openingBalance)}) + Total Raised ({formatCurrency(totalRaised)}) - Expenses ({formatCurrency(totalExpenses)}) = 
-          <strong style={{ color: closingBalance >= 0 ? '#059669' : '#e11d48', marginLeft: '4px' }}>
-            {formatCurrency(closingBalance)} Closing Balance
-          </strong>
-        </p>
       </div>
     </div>
   );
