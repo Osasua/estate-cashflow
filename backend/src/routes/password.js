@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { query } = require('../db');
+const { frontendUrl } = require('../frontend-url');
 const { sendResetEmail } = require('../mailer');
 
 const router = express.Router();
@@ -29,7 +30,7 @@ router.post('/forgot', async (req, res) => {
     );
 
     // Create the reset link
-    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+    const resetLink = `${frontendUrl()}/reset-password?token=${token}`;
 
     // Send the email
     await sendResetEmail(user.email, user.name, resetLink);

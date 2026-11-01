@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { query } = require('../db');
+const { frontendUrl } = require('../frontend-url');
 const { authenticate, staff } = require('../auth'); // ✅ Added 'staff' here
 const { sendWelcomeEmail } = require('../mailer');
 
@@ -46,7 +47,7 @@ router.post('/', adminOnly, async (req, res) => {
       [name, email.toLowerCase().trim(), password_hash, role, member_id || null]
     );
 
-    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const loginUrl = frontendUrl();
     try {
       await sendWelcomeEmail(email, tempPassword, loginUrl);
     } catch (emailErr) {

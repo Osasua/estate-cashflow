@@ -2,6 +2,7 @@
 require('dns').setDefaultResultOrder('ipv4first'); // ✅ Fix for Render IPv6 timeout
 
 const express = require('express');
+const { frontendUrl } = require('../frontend-url');
 const { pool, query } = require('../db');
 const { authenticate, staff } = require('../auth');
 const Paystack = require('paystack');
@@ -400,7 +401,7 @@ router.post('/payments/initialize', async (req, res) => {
           }
         ]
       },
-      callback_url: `${process.env.FRONTEND_URL}/my-account?payment=success`,
+      callback_url: `${frontendUrl()}/my-account?payment=success`,
       channels: ['card', 'bank_transfer', 'ussd']
     });
 

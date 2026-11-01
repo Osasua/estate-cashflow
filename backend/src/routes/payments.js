@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const axios = require('axios');
 const { query, pool } = require('../db');
+const { frontendUrl } = require('../frontend-url');
 
 const router = express.Router();
 
@@ -65,7 +66,7 @@ router.post('/initialize', express.json(), async (req, res) => {
         amount: Math.round(amount * 100), 
         reference,
         // ✅ UPDATED: Point to the new dedicated success page
-        callback_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment-success?reference=${reference}`,
+        callback_url: `${frontendUrl()}/payment-success?reference=${reference}`,
         metadata: { contribution_id, user_id: req.user?.id || null } 
       },
       { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`, 'Content-Type': 'application/json' }, timeout: 10000 }

@@ -10,6 +10,7 @@
  */
 const { query } = require('./db');
 const { sendReminderEmail } = require('./mailer');
+const { frontendUrl } = require('./frontend-url');
 
 const COOLDOWN_DAYS = 7;
 
@@ -58,7 +59,7 @@ async function runReminders({ dryRun = false } = {}) {
     return { found: targets.length, sent: 0, failed: 0, dryRun: true, targets };
   }
 
-  const payUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/my-account`;
+  const payUrl = `${frontendUrl()}/my-account`;
   let sent = 0;
   let failed = 0;
 

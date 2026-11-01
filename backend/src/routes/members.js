@@ -2,6 +2,7 @@ const express = require('express');
 const { query } = require('../db');
 const { authenticate, staff } = require('../auth');
 const crypto = require('crypto');
+const { frontendUrl } = require('../frontend-url');
 const bcrypt = require('bcryptjs');
 const { sendWelcomeEmail } = require('../mailer');
 
@@ -152,7 +153,7 @@ router.post('/:id/create-login', staff, async (req, res) => {
     res.json({ message: `Login created for ${m.email}! Temp password: ${tempPassword}` });
 
     // ✅ Send Welcome Email using Brevo HTTP API
-    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const loginUrl = frontendUrl();
     const BREVO_API_KEY = process.env.BREVO_API_KEY;
     const senderEmail = process.env.SMTP_FROM_EMAIL || 'your-verified-email@domain.com';
     const senderName = process.env.SMTP_FROM_NAME || 'Estate Management';
@@ -247,7 +248,7 @@ router.post('/:id/reset-password', staff, async (req, res) => {
     const userEmail = result.rows[0].email;
     res.json({ message: `Password reset for ${userEmail}! New password: ${tempPassword}` });
 
-    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const loginUrl = frontendUrl();
     sendWelcomeEmail(userEmail, tempPassword, loginUrl)
       .then(() => console.log('✅ Email sent to', userEmail))
       .catch((err) => console.error('❌ Email failed:', err.message));
