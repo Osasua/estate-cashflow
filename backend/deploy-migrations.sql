@@ -1,0 +1,135 @@
+-- ============================================================================
+-- estate-cashflow — consolidated deployment migration
+--
+-- Brings ANY database (fresh schema.sql build or the long-lived production
+-- one) fully up to date with the app, in one idempotent script.
+-- Paste into the Neon SQL editor, or run:
+--   psql "$DATABASE_URL" -f backend/deploy-migrations.sql
+-- Safe to re-run; changes nothing that already exists.
+-- ============================================================================
+
+-- 0. Tables that older environments created via one-off scripts. Included so
+--    a fresh database gets the complete app schema from this single file.
+CREATE TABLE IF NOT EXISTS estate_opening_balance (
+  id SERIAL PRIMARY KEY,
+  opening_balance NUMERIC(15,2) NOT NULL DEFAULT 0,
+  effective_date DATE NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO estate_opening_balance (opening_balance, effective_date, notes)
+SELECT 0, '2026-01-01', 'System initialized'
+ WHERE NOT EXISTS (SELECT 1 FROM estate_opening_balance);
+
+CREATE TABLE IF NOT EXISTS board_posts (
+  id SERIAL PRIMARY KEY,
+  author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  author_name TEXT NOT NULL,
+  author_role TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('notice', 'event')),
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  event_date DATE,
+  event_time TEXT,
+  location TEXT,
+  pinned BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_board_posts_created ON board_posts(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id BIGSERIAL PRIMARY KEY,
+  author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  author_name TEXT NOT NULL,
+  author_role TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  image_mime TEXT,
+  image_data TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_id ON chat_messages(id);
+
+CREATE TABLE IF NOT EXISTS meeting_minutes (
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  meeting_date DATE NOT NULL,
+  content TEXT NOT NULL,
+  document_link TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 1. Login -> household link (+ move dates).
+--    (Enum values older environments added via one-off scripts:)
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'secretary';
+ALTER TYPE contribution_type ADD VALUE IF NOT EXISTS 'arrears';
+ALTER TYPE contribution_type ADD VALUE IF NOT EXISTS 'end-of-year';
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS member_id INTEGER;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS move_in_date DATE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS move_out_date DATE;
+
+-- 2. Per-fund opening balances (the single source of truth shared by
+--    Reports and the Dashboard).
+CREATE TABLE IF NOT EXISTS fund_opening_balances (
+  fund_type       TEXT PRIMARY KEY,
+  opening_balance NUMERIC(15,2) NOT NULL DEFAULT 0,
+  effective_date  DATE NOT NULL DEFAULT '2026-01-01',
+  notes           TEXT,
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+--    One-time carry-over of the legacy estate opening into the new table.
+DO $$
+BEGIN
+  IF to_regclass('public.estate_opening_balance') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM fund_opening_balances WHERE fund_type = 'estate') THEN
+    INSERT INTO fund_opening_balances (fund_type, opening_balance, effective_date, notes)
+    SELECT 'estate', opening_balance, effective_date,
+           COALESCE(notes, 'Migrated from estate_opening_balance')
+      FROM estate_opening_balance WHERE id = 1;
+  END IF;
+END $$;
+
+-- 3. Reminder audit log + 7-day spam cooldown.
+CREATE TABLE IF NOT EXISTS payment_reminders (
+  id BIGSERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  contribution_id INTEGER NOT NULL REFERENCES contributions(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL DEFAULT 'email',
+  fund TEXT,
+  outstanding_at_send NUMERIC(12,2),
+  sent_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_reminders_contribution ON payment_reminders(contribution_id);
+CREATE INDEX IF NOT EXISTS idx_reminders_sent_at ON payment_reminders(sent_at);
+
+-- 4. Per-category annual budgets.
+CREATE TABLE IF NOT EXISTS category_budgets (
+  id SERIAL PRIMARY KEY,
+  category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  budget_year INTEGER NOT NULL,
+  amount NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (amount >= 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (category_id, budget_year)
+);
+
+-- 5. Maintenance requests (member self-service).
+CREATE TABLE IF NOT EXISTS maintenance_requests (
+  id SERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'new'
+    CHECK (status IN ('new', 'in-progress', 'resolved')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_maintenance_member ON maintenance_requests(member_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_status ON maintenance_requests(status);
+
+-- ============================================================================
+-- Done. After deploying the app, set each fund's brought-forward cash once:
+--   Reports -> Opening Balances -> Update Opening Balance -> Fund: Float
+-- (The legacy single estate figure does NOT auto-split across funds.)
+-- ============================================================================
