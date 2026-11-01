@@ -237,7 +237,7 @@ export default function Reports() {
 
         {/* Daily Expense Trend - Area Chart */}
         <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>Daily Expense Trend</h3>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.25rem', fontWeight: '600', color: '#111827' }}>Expense Trend</h3>
           <p style={{ margin: '0 0 24px 0', color: '#6b7280', fontSize: '0.9rem' }}>Spending over time</p>
           
           {report.daily_trend.length === 0 ? (
