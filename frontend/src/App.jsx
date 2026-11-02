@@ -22,6 +22,7 @@ import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentFailure from './pages/PaymentFailure';
 import Statement from './pages/Statement';
 import Maintenance from './pages/Maintenance';
+import FerranoPages from './pages/FerranoPages';
 
 
 function Layout({ children }) {
@@ -72,6 +73,9 @@ function Layout({ children }) {
           {/* ✅ NEW: Community Chat (Everyone) */}
           <NavLink to="/chat">Community Chat</NavLink>
 
+          {/* 📇 Ferrano Pages — the resident directory (Everyone) */}
+          <NavLink to="/ferrano-pages">Ferrano Pages</NavLink>
+
           {/* Maintenance — residents report & track requests here (staff keep their queue link in the staff menu) */}
           {user?.role === 'member' && <NavLink to="/maintenance">Maintenance</NavLink>}
           
@@ -113,6 +117,7 @@ function AppRoutes() {
       <Route path="/my-account" element={page(<MyAccount />)} />
       <Route path="/statement" element={page(<Statement />)} />
       <Route path="/maintenance" element={page(<Maintenance />)} />
+      <Route path="/ferrano-pages" element={page(<FerranoPages />)} />
       <Route path="/profile" element={page(<Profile />)} />
       <Route path="/broadcast" element={page(<Broadcast />)} />
       <Route path="/audit-log" element={page(<AuditLog />)} />

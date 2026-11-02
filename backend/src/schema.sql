@@ -151,3 +151,20 @@ CREATE TABLE IF NOT EXISTS audit_log (
   new_value JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- 14. Ferrano Pages — the resident directory. Each household can list up to
+--     two people; residents populate their own listing from My Profile data.
+CREATE TABLE IF NOT EXISTS directory_entries (
+  id SERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  slot SMALLINT NOT NULL CHECK (slot IN (1, 2)),
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  phone TEXT,
+  email TEXT,
+  occupation TEXT,
+  organization TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (member_id, slot)
+);
+CREATE INDEX IF NOT EXISTS idx_directory_member ON directory_entries(member_id);

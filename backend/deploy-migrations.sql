@@ -159,3 +159,20 @@ ALTER TABLE payments ADD CONSTRAINT payments_amount_check CHECK (amount <> 0);
 --   Reports -> Opening Balances -> Update Opening Balance -> Fund: Float
 -- (The legacy single estate figure does NOT auto-split across funds.)
 -- ============================================================================
+
+-- 12. Ferrano Pages — resident directory (up to 2 people per household).
+CREATE TABLE IF NOT EXISTS directory_entries (
+  id SERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  slot SMALLINT NOT NULL CHECK (slot IN (1, 2)),
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  phone TEXT,
+  email TEXT,
+  occupation TEXT,
+  organization TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (member_id, slot)
+);
+CREATE INDEX IF NOT EXISTS idx_directory_member ON directory_entries(member_id);
