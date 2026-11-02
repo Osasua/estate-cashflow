@@ -256,6 +256,19 @@ export default function FerranoPages() {
     return (
       <div>
         <h2 style={{ margin: '0 0 16px 0', color: '#111827' }}>📇 Ferrano Pages</h2>
+        {msg && (
+          <div style={{
+            background: '#fee2e2', color: '#991b1b', borderRadius: '10px',
+            padding: '12px 16px', marginBottom: '16px', fontSize: '0.9rem',
+            display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap',
+          }}>
+            <span style={{ flex: 1, minWidth: '200px' }}>{msg}</span>
+            <button onClick={() => { setMsg(''); load(); }} style={{
+              padding: '8px 16px', color: '#991b1b', background: '#fff',
+              border: '1px solid #fecaca', borderRadius: '8px', fontWeight: '600', cursor: 'pointer',
+            }}>↻ Retry</button>
+          </div>
+        )}
         <Skeleton height="220px" />
       </div>
     );
