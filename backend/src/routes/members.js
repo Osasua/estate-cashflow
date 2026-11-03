@@ -4,7 +4,7 @@ const { authenticate, staff } = require('../auth');
 const crypto = require('crypto');
 const { frontendUrl } = require('../frontend-url');
 const bcrypt = require('bcryptjs');
-const { sendWelcomeEmail } = require('../mailer');
+const { sendWelcomeEmail } = require('../welcome-mail');
 
 const router = express.Router();
 router.use(authenticate);
