@@ -42,6 +42,7 @@ app.use('/api/reminders', require('./routes/reminders'));
 app.use('/api/budgets', require('./routes/budgets'));
 app.use('/api/maintenance', require('./routes/maintenance'));
 app.use('/api/directory', require('./routes/directory'));
+app.use('/api/access-codes', require('./routes/access-codes'));
 
 
 // Error handler

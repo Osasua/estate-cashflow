@@ -53,7 +53,7 @@ export default function OverviewDashboard({ data }) {
   return (
     <>
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+      <div data-tour="dash-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '32px' }}>
         <KPICard
           title="Cash Balance"
           value={naira(kpis.balance)}

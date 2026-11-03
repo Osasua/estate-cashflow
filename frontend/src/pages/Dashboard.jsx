@@ -137,7 +137,9 @@ export default function Dashboard() {
         </p>
       </div>
 
-      <Tabs tabs={DASH_TABS} active={tab} onChange={changeTab} />
+      <div data-tour="dash-tabs">
+        <Tabs tabs={DASH_TABS} active={tab} onChange={changeTab} />
+      </div>
 
       {isOccasion
         ? <OccasionDashboard typeKey={tab} typeLabel={TAB_LABEL[tab]} />

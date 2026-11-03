@@ -176,3 +176,32 @@ CREATE TABLE IF NOT EXISTS directory_entries (
   UNIQUE (member_id, slot)
 );
 CREATE INDEX IF NOT EXISTS idx_directory_member ON directory_entries(member_id);
+
+-- 13. Ferrano Gate Access — visitor codes + gate notification log.
+CREATE TABLE IF NOT EXISTS access_codes (
+  id SERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  code TEXT NOT NULL UNIQUE,
+  visitor_name TEXT NOT NULL,
+  visitor_phone TEXT,
+  arrives_at TIMESTAMPTZ NOT NULL,
+  departs_at TIMESTAMPTZ NOT NULL,
+  people_count INTEGER NOT NULL DEFAULT 1 CHECK (people_count >= 1),
+  vehicle TEXT,
+  note TEXT,
+  revoked_at TIMESTAMPTZ,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (departs_at > arrives_at)
+);
+CREATE INDEX IF NOT EXISTS idx_access_codes_member ON access_codes(member_id);
+CREATE INDEX IF NOT EXISTS idx_access_codes_window ON access_codes(arrives_at, departs_at);
+CREATE TABLE IF NOT EXISTS gate_alerts (
+  id BIGSERIAL PRIMARY KEY,
+  access_code_id INTEGER NOT NULL REFERENCES access_codes(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL DEFAULT 'whatsapp',
+  status TEXT NOT NULL,
+  detail TEXT,
+  sent_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_gate_alerts_code ON gate_alerts(access_code_id);
