@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS contributions (
   period_month INTEGER NOT NULL CHECK (period_month BETWEEN 1 AND 12),
   amount_due NUMERIC(12,2) NOT NULL DEFAULT 0,
   amount_paid NUMERIC(12,2) NOT NULL DEFAULT 0,
+  note TEXT, -- optional remark on the bill (shown on My Account per-fund tabs)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   -- Updated unique constraint to include 'type'
   UNIQUE (member_id, type, period_year, period_month) 
