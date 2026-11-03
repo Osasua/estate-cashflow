@@ -100,6 +100,7 @@ export default function Users() {
             <option value="admin">Admin</option>
             <option value="secretary">Secretary</option>
             <option value="facility">Facility Manager</option>
+            <option value="gate">Gate Security</option>
           </select>
           
           <select 
@@ -145,6 +146,7 @@ export default function Users() {
                         <option value="treasurer">Treasurer</option>
                         <option value="secretary">Secretary</option>
                         <option value="facility">Facility Manager</option>
+                        <option value="gate">Gate Security</option>
                         <option value="member">Member</option>
                       </select>
                     </td>

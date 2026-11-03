@@ -41,6 +41,7 @@ const waLink = (phone, text) =>
 export default function GateAccess() {
   const { user } = useAuth();
   const isComms = COMMS.includes(user?.role);
+  const isGate = user?.role === 'gate'; // gatehouse console: verify only
   const [codes, setCodes] = useState(null);
   const [alerts, setAlerts] = useState(null);
   const [msg, setMsg] = useState('');
@@ -149,7 +150,8 @@ export default function GateAccess() {
         }}>{msg}</div>
       )}
 
-      {/* Issue form */}
+      {/* Issue form — residents and comms only; gate staff verify, never issue */}
+      {!isGate && (
       <div style={{ ...card, padding: '20px', marginBottom: '20px' }}>
         <h3 style={{ margin: '0 0 14px 0', fontSize: '1.05rem', fontWeight: '700', color: '#111827' }}>➕ Issue a visitor code</h3>
         <form onSubmit={issue} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
@@ -195,10 +197,11 @@ export default function GateAccess() {
           </div>
         )}
       </div>
+      )}
 
       {/* Codes */}
       <h3 style={{ margin: '0 0 12px 0', fontSize: '1.05rem', fontWeight: '700', color: '#111827' }}>
-        {isComms ? 'All household codes' : 'Your codes'}
+        {isComms || isGate ? 'All household codes' : 'Your codes'}
       </h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
         {codes.map((c) => {
@@ -211,7 +214,7 @@ export default function GateAccess() {
                   fontSize: '1.25rem', fontWeight: '800', letterSpacing: '0.14em', color: '#134e4a',
                 }}>{c.code}</span>
                 <span style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}`, borderRadius: '999px', padding: '3px 10px', fontSize: '0.72rem', fontWeight: '700' }}>{s.label}</span>
-                {isComms && (
+                {(isComms || isGate) && (
                   <span style={{ background: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe', borderRadius: '8px', padding: '3px 10px', fontSize: '0.75rem', fontWeight: '700' }}>
                     🏠 House {c.house_number} · {c.household_name}
                   </span>
@@ -227,7 +230,7 @@ export default function GateAccess() {
               <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
                 <button onClick={() => copy(c.code, 'Code')} style={{ padding: '6px 14px', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer', color: '#0f766e', background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '8px' }}>📋 Copy</button>
                 <a href={waLink(c.visitor_phone, `${'Ferrano Court gate access'}\nCode: ${c.code}\nValid: ${fmtWhen(c.arrives_at)} → ${fmtWhen(c.departs_at)}`)} target="_blank" rel="noreferrer" style={{ padding: '6px 14px', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer', color: '#fff', background: '#25d366', border: 'none', borderRadius: '8px', textDecoration: 'none' }}>💬 WhatsApp</a>
-                {(c.status === 'active' || c.status === 'scheduled') && (
+                {!isGate && (c.status === 'active' || c.status === 'scheduled') && (
                   <button onClick={() => revoke(c)} style={{ padding: '6px 14px', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer', color: '#991b1b', background: '#fee2e2', border: '1px solid #fecaca', borderRadius: '8px' }}>🚫 Revoke</button>
                 )}
               </div>
@@ -236,7 +239,7 @@ export default function GateAccess() {
         })}
         {!codes.length && (
           <div style={{ ...card, padding: '24px', textAlign: 'center', color: '#6b7280', fontSize: '0.9rem' }}>
-            No codes yet — issue the first one above. Your visitor shows the code at the gate on arrival.
+            {!isGate ? 'No codes yet — issue the first one above. Your visitor shows the code at the gate on arrival.' : 'No visitor codes are currently on record.'}
           </div>
         )}
       </div>

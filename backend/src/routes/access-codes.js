@@ -26,7 +26,7 @@ router.get('/', async (req, res) => {
                  FROM access_codes ac
                  JOIN members m ON m.id = ac.member_id`;
     let params = [];
-    if (!isComms(req.user.role)) {
+    if (!isComms(req.user.role) && req.user.role !== 'gate') {
       const member = await findMemberForUser(req.user.id);
       if (!member) return res.json({ codes: [] });
       sql += ' WHERE ac.member_id = $1';

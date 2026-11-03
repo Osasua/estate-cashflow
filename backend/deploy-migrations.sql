@@ -216,3 +216,7 @@ ALTER TABLE contributions ADD COLUMN IF NOT EXISTS note TEXT;
 -- 15. Facility Manager role: owns the maintenance queue and receives
 -- resident maintenance emails. NOT in staff (no finances), NOT in comms.
 ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'facility';
+
+-- 16. Gate security role: read-only verification view of visitor codes
+-- (the gatehouse console). Cannot issue or revoke codes.
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'gate';
