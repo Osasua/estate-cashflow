@@ -246,6 +246,6 @@ function StaffQueue() {
 
 export default function Maintenance() {
   const { user } = useAuth();
-  const isStaff = ['admin', 'treasurer'].includes(user?.role);
+  const isStaff = ['admin', 'facility'].includes(user?.role);
   return isStaff ? <StaffQueue /> : <MemberMaintenance />;
 }

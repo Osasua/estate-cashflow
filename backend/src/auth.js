@@ -33,4 +33,11 @@ const comms = (req, res, next) =>
     ? next()
     : res.status(403).json({ error: 'Staff or Secretary access required' });
 
-module.exports = { sign, authenticate, staff, comms };
+// Facility team: maintenance queue only. Deliberately outside `staff`
+// (no finances) and outside `comms` (no broadcasts).
+const facilities = (req, res, next) =>
+  ['admin', 'facility'].includes(req.user && req.user.role)
+    ? next()
+    : res.status(403).json({ error: 'Facility Manager or Admin access required' });
+
+module.exports = { sign, authenticate, staff, comms, facilities };

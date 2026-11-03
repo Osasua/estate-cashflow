@@ -1,17 +1,19 @@
 const express = require('express');
 const { query } = require('../db');
-const { authenticate, staff } = require('../auth');
+const { authenticate, facilities } = require('../auth');
 const { findMemberForUser } = require('../member-lookup');
+const { sendMaintenanceEmail } = require('../mailer');
+const { frontendUrl } = require('../frontend-url');
 
 const router = express.Router();
 router.use(authenticate);
 
 const STATUSES = ['new', 'in-progress', 'resolved'];
 
-// GET /api/maintenance — staff see the whole queue, members see their own
+// GET /api/maintenance — facility team see the whole queue, members see their own
 router.get('/', async (req, res) => {
   try {
-    const isStaff = ['admin', 'treasurer'].includes(req.user.role);
+    const isStaff = ['admin', 'facility'].includes(req.user.role);
     let sql = `
       SELECT mr.*, m.household_name, m.house_number
         FROM maintenance_requests mr
@@ -48,15 +50,32 @@ router.post('/', async (req, res) => {
        VALUES ($1, $2, $3) RETURNING *`,
       [member.id, String(title).trim(), description || null]
     );
-    res.status(201).json({ request: rows[0] });
+    const created = rows[0];
+
+    // Notify the Facility Manager mailboxes (fire-and-forget: a mail failure
+    // must never block the resident's request). The treasurer is no longer
+    // on this distribution list.
+    query(`SELECT email FROM users WHERE role = 'facility'`)
+      .then(({ rows: facRows }) => Promise.all(facRows.map((r) =>
+        sendMaintenanceEmail({
+          to: r.email,
+          title: created.title,
+          household: member.household_name,
+          houseNumber: member.house_number,
+          link: `${frontendUrl()}/maintenance`,
+        }).catch((e) => console.error('Maintenance email failed for', r.email, e.message))
+      )))
+      .catch((e) => console.error('Facility lookup failed:', e.message));
+
+    res.status(201).json({ request: created });
   } catch (err) {
     console.error('Maintenance create error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT /api/maintenance/:id { status } — staff triage
-router.put('/:id', staff, async (req, res) => {
+// PUT /api/maintenance/:id { status } — facility triage
+router.put('/:id', facilities, async (req, res) => {
   const { status } = req.body || {};
   if (!STATUSES.includes(status)) {
     return res.status(400).json({ error: `Invalid status. Expected one of: ${STATUSES.join(', ')}` });

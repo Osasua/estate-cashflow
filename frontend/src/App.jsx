@@ -73,7 +73,7 @@ function Layout({ children }) {
           {isComms && <NavLink to="/broadcast">Broadcast</NavLink>}
           {isStaff && <NavLink to="/categories">Categories</NavLink>}
           {isStaff && <NavLink to="/members" data-tour="nav-members">Members</NavLink>}
-          {isStaff && <NavLink to="/maintenance" data-tour="nav-maintenance">Maintenance</NavLink>}
+          {['admin', 'facility'].includes(user?.role) && <NavLink to="/maintenance" data-tour="nav-maintenance">Maintenance</NavLink>}
           
           {/* 4. Admin-only links */}
           {isAdmin && <NavLink to="/users">User Management</NavLink>}

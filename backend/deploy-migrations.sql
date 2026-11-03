@@ -212,3 +212,7 @@ CREATE INDEX IF NOT EXISTS idx_gate_alerts_code ON gate_alerts(access_code_id);
 -- ("column c.note does not exist"), so the My Account per-fund tabs and their
 -- Pay Now buttons never render. Idempotent: safe to re-run any time.
 ALTER TABLE contributions ADD COLUMN IF NOT EXISTS note TEXT;
+
+-- 15. Facility Manager role: owns the maintenance queue and receives
+-- resident maintenance emails. NOT in staff (no finances), NOT in comms.
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'facility';

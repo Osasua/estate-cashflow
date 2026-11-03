@@ -31,8 +31,8 @@ router.get('/', adminOnly, async (req, res) => {
 router.post('/', adminOnly, async (req, res) => {
   const { name, email, role, member_id } = req.body;
   
-  if (!['admin', 'treasurer', 'secretary'].includes(role)) {
-    return res.status(400).json({ error: 'Invalid role. Must be admin, treasurer or secretary.' });
+  if (!['admin', 'treasurer', 'secretary', 'facility'].includes(role)) {
+    return res.status(400).json({ error: 'Invalid role. Must be admin, treasurer, secretary or facility.' });
   }
 
   const existing = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase().trim()]);
@@ -65,7 +65,7 @@ router.post('/', adminOnly, async (req, res) => {
 router.put('/:id', adminOnly, async (req, res) => {
   const { role, member_id } = req.body;
   
-  if (role && !['admin', 'treasurer', 'secretary', 'member'].includes(role)) {
+  if (role && !['admin', 'treasurer', 'secretary', 'facility', 'member'].includes(role)) {
     return res.status(400).json({ error: 'Invalid role' });
   }
 

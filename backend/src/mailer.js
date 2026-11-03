@@ -114,4 +114,19 @@ const sendBroadcastEmail = async (email, subject, message, residentName) => {
   });
 };
 
-module.exports = { sendResetEmail, sendWelcomeEmail, sendReminderEmail, sendBroadcastEmail };
+const sendMaintenanceEmail = async ({ to, title, household, houseNumber, link }) => {
+  await sendEmail({
+    to,
+    subject: `New maintenance request — ${houseNumber} ${household}: ${title}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #0f766e;">🛠 New maintenance request</h2>
+        <p><strong>${household}</strong> (House ${houseNumber}) raised a request:</p>
+        <p style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:12px;font-weight:600;color:#134e4a;">${title}</p>
+        <p><a href="${link}">Open the maintenance queue</a> to triage it (new → in-progress → resolved).</p>
+      </div>
+    `,
+  });
+};
+
+module.exports = { sendResetEmail, sendWelcomeEmail, sendReminderEmail, sendBroadcastEmail, sendMaintenanceEmail };
