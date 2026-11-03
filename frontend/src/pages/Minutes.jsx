@@ -59,7 +59,7 @@ export default function Minutes() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: '700', color: '#111827', letterSpacing: '-0.02em' }}>Meeting Minutes</h1>
+          <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: '700', color: '#111827', letterSpacing: '-0.02em' }}>Ferrano Minutes</h1>
           <p style={{ margin: '8px 0 0 0', color: '#6b7280', fontSize: '1.05rem' }}>Official records of estate meetings</p>
         </div>
         {isStaff && (

@@ -73,7 +73,7 @@ function Layout({ children }) {
       { to: '/audit-log', label: 'Audit Log' },
     ] },
     { key: 'community', label: 'Community', show: !isFacility && !isGate, items: [
-      { to: '/minutes', label: 'Minutes', tour: 'nav-minutes' },
+      { to: '/minutes', label: 'Ferrano Minutes', tour: 'nav-minutes' },
       { to: '/board', label: 'Ferrano Board', tour: 'nav-board' },
       { to: '/chat', label: 'Community Chat', tour: 'nav-chat' },
       { to: '/ferrano-pages', label: 'Ferrano Pages', tour: 'nav-ferrano-pages' },
