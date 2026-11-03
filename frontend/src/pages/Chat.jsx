@@ -134,7 +134,7 @@ export default function Chat() {
       <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>💬</div>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.9rem', fontWeight: '700', color: '#111827', letterSpacing: '-0.02em' }}>Community Lounge</h1>
+          <h1 style={{ margin: 0, fontSize: '1.9rem', fontWeight: '700', color: '#111827', letterSpacing: '-0.02em' }}>Ferrano Chat</h1>
           <p style={{ margin: '2px 0 0 0', color: '#6b7280', fontSize: '0.95rem' }}>
             Chat with your neighbours · share fun pictures · be kind 🙂
           </p>

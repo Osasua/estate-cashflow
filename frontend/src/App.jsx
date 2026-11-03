@@ -75,7 +75,7 @@ function Layout({ children }) {
     { key: 'community', label: 'Community', show: !isFacility && !isGate, items: [
       { to: '/minutes', label: 'Ferrano Minutes', tour: 'nav-minutes' },
       { to: '/board', label: 'Ferrano Board', tour: 'nav-board' },
-      { to: '/chat', label: 'Community Chat', tour: 'nav-chat' },
+      { to: '/chat', label: 'Ferrano Chat', tour: 'nav-chat' },
       { to: '/ferrano-pages', label: 'Ferrano Pages', tour: 'nav-ferrano-pages' },
     ] },
     { key: 'account', label: 'Account', show: true, items: [
