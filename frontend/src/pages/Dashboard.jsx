@@ -7,6 +7,8 @@ import Tabs from '../components/Tabs';
 import OverviewDashboard from '../components/dashboard/OverviewDashboard';
 import TypeDashboard from '../components/dashboard/TypeDashboard';
 import OccasionDashboard from '../components/dashboard/OccasionDashboard';
+import FacilityDashboard from '../components/dashboard/FacilityDashboard';
+import GateDashboard from '../components/dashboard/GateDashboard';
 
 /**
  * Tabbed financial dashboard.
@@ -38,7 +40,7 @@ const OCCASION_FUNDS = ['float', 'projects', 'end-of-year', 'welfare'];
 
 const TAB_LABEL = DASH_TABS.reduce((m, t) => ({ ...m, [t.key]: t.label }), {});
 
-export default function Dashboard() {
+function TabbedDashboard() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
 
@@ -148,4 +150,13 @@ export default function Dashboard() {
           : <TypeDashboard data={data} typeKey={tab} typeLabel={TAB_LABEL[tab]} />}
     </div>
   );
+}
+
+// Role-aware entry point: Facility and Gate open their own desks;
+// everyone else gets the tabbed financial dashboard.
+export default function Dashboard() {
+  const { user } = useAuth();
+  if (user?.role === 'facility') return <FacilityDashboard />;
+  if (user?.role === 'gate') return <GateDashboard />;
+  return <TabbedDashboard />;
 }

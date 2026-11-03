@@ -67,6 +67,17 @@ export default function Users() {
     setForm({ name: '', email: '', role: 'treasurer', member_id: '' });
   };
 
+  const deleteUser = async (u) => {
+    if (!window.confirm(`Delete ${u.name} (${u.email})?\n\nThis removes their portal login only. Households, bills and payment history are kept, and past records keep their audit trail.`)) return;
+    try {
+      await api(`/users/${u.id}`, { method: 'DELETE' });
+      setMessage(`✅ Deleted ${u.name}`);
+      loadData();
+    } catch (err) {
+      setMessage(`❌ ${err.message}`);
+    }
+  };
+
   return (
     <div>
       <h1>User Management</h1>
@@ -178,6 +189,9 @@ export default function Users() {
                     </td>
                     <td style={{ padding: '10px', textAlign: 'right' }}>
                       <button className="btn-ghost" onClick={() => startEdit(u)}>Edit</button>
+                      {u.id !== user?.id && (
+                        <button onClick={() => deleteUser(u)} style={{marginLeft: '5px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer'}}>Delete</button>
+                      )}
                     </td>
                   </>
                 )}

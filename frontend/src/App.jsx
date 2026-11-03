@@ -34,7 +34,54 @@ function Layout({ children }) {
   const isAdmin = user?.role === 'admin';
   const isStaff = ['admin', 'treasurer'].includes(user?.role);
   const isComms = ['admin', 'treasurer', 'secretary'].includes(user?.role);
+  const isFacility = user?.role === 'facility';
+  const isGate = user?.role === 'gate';
+  // Residents see everything open; staff roles start with the low-traffic
+  // groups folded so every menu they own fits above the fold.
+  const [closed, setClosed] = useState(
+    user?.role === 'member' ? {} : user?.role === 'admin' ? { finance: true, comms: true, community: true } : { community: true }
+  );
+  const toggleGroup = (k) => setClosed((c) => ({ ...c, [k]: !c[k] }));
   const [tourOpen, setTourOpen] = useState(false);
+
+  // Role-aware navigation groups. Empty groups disappear entirely, so each
+  // role only ever sees the menus it actually owns. Facility and Gate get a
+  // two-item sidebar: their dashboard, their one tool, their profile.
+  const GROUPS = [
+    { key: 'household', label: 'My Household', show: user?.role === 'member', items: [
+      { to: '/my-account', label: 'My Account', tour: 'nav-my-account' },
+      { to: '/statement', label: 'My Statement', tour: 'nav-statement' },
+      { to: '/maintenance', label: 'Maintenance', tour: 'nav-maintenance' },
+      { to: '/gate-access', label: 'Gate Access', tour: 'nav-gate-access' },
+    ] },
+    { key: 'finance', label: 'Finance', show: isStaff, items: [
+      { to: '/contributions', label: 'Contributions', tour: 'nav-contributions' },
+      { to: '/expenses', label: 'Expenses', tour: 'nav-expenses' },
+      { to: '/reports', label: 'Reports', tour: 'nav-reports' },
+      { to: '/categories', label: 'Categories' },
+      { to: '/members', label: 'Members', tour: 'nav-members' },
+    ] },
+    { key: 'comms', label: 'Communications', show: isComms, items: [
+      { to: '/broadcast', label: 'Broadcast' },
+    ] },
+    { key: 'ops', label: 'Operations', show: !['member'].includes(user?.role), items: [
+      { to: '/maintenance', label: 'Maintenance', tour: 'nav-maintenance', show: ['admin', 'facility'].includes(user?.role) },
+      { to: '/gate-access', label: 'Gate Access', tour: 'nav-gate-access', show: ['admin', 'gate'].includes(user?.role) || isComms },
+    ] },
+    { key: 'admin', label: 'Administration', show: isAdmin, items: [
+      { to: '/users', label: 'User Management' },
+      { to: '/audit-log', label: 'Audit Log' },
+    ] },
+    { key: 'community', label: 'Community', show: !isFacility && !isGate, items: [
+      { to: '/minutes', label: 'Minutes', tour: 'nav-minutes' },
+      { to: '/board', label: 'Ferrano Board', tour: 'nav-board' },
+      { to: '/chat', label: 'Community Chat', tour: 'nav-chat' },
+      { to: '/ferrano-pages', label: 'Ferrano Pages', tour: 'nav-ferrano-pages' },
+    ] },
+    { key: 'account', label: 'Account', show: true, items: [
+      { to: '/profile', label: 'My Profile', tour: 'nav-profile' },
+    ] },
+  ];
 
   // Offer the guided tour once, on first sign-in ever (per browser).
   useEffect(() => {
@@ -59,46 +106,30 @@ function Layout({ children }) {
         </div>
         
         <nav>
-          {/* 1. Dashboard (Everyone) */}
+          {/* Dashboard — everyone; for Facility & Gate it opens their own desk */}
           <NavLink to="/" end data-tour="nav-dashboard">Dashboard</NavLink>
-          
-          {/* 2. My Account (Residents Only) */}
-          {user?.role === 'member' && <NavLink to="/my-account" data-tour="nav-my-account">My Account</NavLink>}
-          {user?.role === 'member' && <NavLink to="/statement" data-tour="nav-statement">My Statement</NavLink>}
-          
-          {/* 3. Staff/Admin Menu */}
-          {isStaff && <NavLink to="/contributions" data-tour="nav-contributions">Contributions</NavLink>}
-          {isStaff && <NavLink to="/expenses" data-tour="nav-expenses">Expenses</NavLink>}
-          {isStaff && <NavLink to="/reports" data-tour="nav-reports">Reports</NavLink>}
-          {isComms && <NavLink to="/broadcast">Broadcast</NavLink>}
-          {isStaff && <NavLink to="/categories">Categories</NavLink>}
-          {isStaff && <NavLink to="/members" data-tour="nav-members">Members</NavLink>}
-          {['admin', 'facility'].includes(user?.role) && <NavLink to="/maintenance" data-tour="nav-maintenance">Maintenance</NavLink>}
-          
-          {/* 4. Admin-only links */}
-          {isAdmin && <NavLink to="/users">User Management</NavLink>}
-          {isAdmin && <NavLink to="/audit-log">Audit Log</NavLink>}
-          
-          {/* ✅ NEW: Minutes (Everyone - Residents & Staff) */}
-          <NavLink to="/minutes" data-tour="nav-minutes">Minutes</NavLink>
-          
-          {/* ✅ NEW: Ferrano Board (Everyone) */}
-          <NavLink to="/board" data-tour="nav-board">Ferrano Board</NavLink>
-          
-          {/* ✅ NEW: Community Chat (Everyone) */}
-          <NavLink to="/chat" data-tour="nav-chat">Community Chat</NavLink>
 
-          {/* 📇 Ferrano Pages — the resident directory (Everyone) */}
-          <NavLink to="/ferrano-pages" data-tour="nav-ferrano-pages">Ferrano Pages</NavLink>
-
-          {/* 🛡 Gate Access — resident-issued visitor codes (Everyone) */}
-          <NavLink to="/gate-access" data-tour="nav-gate-access">Gate Access</NavLink>
-
-          {/* Maintenance — residents report & track requests here (staff keep their queue link in the staff menu) */}
-          {user?.role === 'member' && <NavLink to="/maintenance" data-tour="nav-maintenance">Maintenance</NavLink>}
-          
-          {/* 5. My Profile (Everyone, at the bottom) */}
-          <NavLink to="/profile" data-tour="nav-profile">My Profile</NavLink>
+          {GROUPS.filter((g) => g.show).map((g) => {
+            const items = g.items.filter((i) => i.show !== false);
+            if (!items.length) return null;
+            const open = !closed[g.key];
+            return (
+              <div className="nav-group" key={g.key}>
+                <button
+                  type="button"
+                  className="nav-group-h"
+                  aria-expanded={open}
+                  onClick={() => toggleGroup(g.key)}
+                >
+                  <span>{g.label}</span>
+                  <span aria-hidden="true">{open ? '▾' : '▸'}</span>
+                </button>
+                {open && items.map((i) => (
+                  <NavLink key={g.key + i.to} to={i.to} data-tour={i.tour}>{i.label}</NavLink>
+                ))}
+              </div>
+            );
+          })}
         </nav>
         
         <div className="sidebar-footer">
@@ -124,6 +155,14 @@ function RequireAuth({ children }) {
   return user ? children : <Navigate to="/login" replace />;
 }
 
+// Hard role guard: the sidebar hides menus per role, this enforces the same
+// matrix on direct URL entry (facility/gate never reach resident pages).
+function RoleGate({ roles, children }) {
+  const { user } = useAuth();
+  return roles.includes(user?.role) ? children : <Navigate to="/" replace />;
+}
+const RESIDENT_PAGES = ['admin', 'treasurer', 'secretary', 'member'];
+
 function AppRoutes() {
   const page = (el) => <RequireAuth><Layout>{el}</Layout></RequireAuth>;
 
@@ -136,27 +175,27 @@ function AppRoutes() {
       
       {/* Protected Routes (With Sidebar) */}
       <Route path="/" element={page(<Dashboard />)} />
-      <Route path="/my-account" element={page(<MyAccount />)} />
-      <Route path="/statement" element={page(<Statement />)} />
-      <Route path="/maintenance" element={page(<Maintenance />)} />
-      <Route path="/ferrano-pages" element={page(<FerranoPages />)} />
-      <Route path="/gate-access" element={page(<GateAccess />)} />
+      <Route path="/my-account" element={page(<RoleGate roles={['member']}><MyAccount /></RoleGate>)} />
+      <Route path="/statement" element={page(<RoleGate roles={['member']}><Statement /></RoleGate>)} />
+      <Route path="/maintenance" element={page(<RoleGate roles={['admin', 'facility', 'member']}><Maintenance /></RoleGate>)} />
+      <Route path="/ferrano-pages" element={page(<RoleGate roles={RESIDENT_PAGES}><FerranoPages /></RoleGate>)} />
+      <Route path="/gate-access" element={page(<RoleGate roles={[...RESIDENT_PAGES, 'gate']}><GateAccess /></RoleGate>)} />
       <Route path="/profile" element={page(<Profile />)} />
-      <Route path="/broadcast" element={page(<Broadcast />)} />
-      <Route path="/audit-log" element={page(<AuditLog />)} />
-      <Route path="/expenses" element={page(<Expenses />)} />
-      <Route path="/contributions" element={page(<Contributions />)} />
-      <Route path="/reports" element={page(<Reports />)} />
-      <Route path="/categories" element={page(<Categories />)} />
-      <Route path="/members" element={page(<Members />)} />
-      <Route path="/users" element={page(<Users />)} />
+      <Route path="/broadcast" element={page(<RoleGate roles={['admin', 'treasurer', 'secretary']}><Broadcast /></RoleGate>)} />
+      <Route path="/audit-log" element={page(<RoleGate roles={['admin']}><AuditLog /></RoleGate>)} />
+      <Route path="/expenses" element={page(<RoleGate roles={['admin', 'treasurer']}><Expenses /></RoleGate>)} />
+      <Route path="/contributions" element={page(<RoleGate roles={['admin', 'treasurer']}><Contributions /></RoleGate>)} />
+      <Route path="/reports" element={page(<RoleGate roles={['admin', 'treasurer']}><Reports /></RoleGate>)} />
+      <Route path="/categories" element={page(<RoleGate roles={['admin', 'treasurer']}><Categories /></RoleGate>)} />
+      <Route path="/members" element={page(<RoleGate roles={['admin', 'treasurer']}><Members /></RoleGate>)} />
+      <Route path="/users" element={page(<RoleGate roles={['admin']}><Users /></RoleGate>)} />
       <Route path="/payment-success" element={<PaymentSuccess />} />
       <Route path="/payment-failed" element={<PaymentFailure />} />
       
       {/* ✅ FIXED: Added page() wrapper so the sidebar shows up */}
-      <Route path="/minutes" element={page(<Minutes />)} />
-      <Route path="/board" element={page(<Board />)} />
-      <Route path="/chat" element={page(<Chat />)} />
+      <Route path="/minutes" element={page(<RoleGate roles={RESIDENT_PAGES}><Minutes /></RoleGate>)} />
+      <Route path="/board" element={page(<RoleGate roles={RESIDENT_PAGES}><Board /></RoleGate>)} />
+      <Route path="/chat" element={page(<RoleGate roles={RESIDENT_PAGES}><Chat /></RoleGate>)} />
     </Routes>
   );
 }

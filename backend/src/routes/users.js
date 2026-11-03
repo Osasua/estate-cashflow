@@ -5,6 +5,7 @@ const { query } = require('../db');
 const { frontendUrl } = require('../frontend-url');
 const { authenticate, staff } = require('../auth'); // ✅ Added 'staff' here
 const { sendWelcomeEmail } = require('../mailer');
+const { audit } = require('../audit');
 
 const router = express.Router();
 router.use(authenticate);
@@ -97,13 +98,33 @@ router.put('/:id', adminOnly, async (req, res) => {
   res.json({ user: rows[0] });
 });
 
-// DELETE a user (Admin only)
+// DELETE a user (Admin only). Removes the portal LOGIN only — households,
+// bills and payment history are untouched. Historical references are
+// detached (set null) so the audit trail and payment records survive.
 router.delete('/:id', adminOnly, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid user id' });
+  if (id === req.user.id) {
+    return res.status(400).json({ error: 'You cannot delete your own account' });
+  }
   try {
-    await query('DELETE FROM users WHERE id = $1', [req.params.id]);
+    const { rows } = await query('SELECT id, name, email, role FROM users WHERE id = $1', [id]);
+    if (!rows[0]) return res.status(404).json({ error: 'User not found' });
+    if (rows[0].role === 'admin') {
+      const { rows: admins } = await query(`SELECT count(*)::int AS n FROM users WHERE role = 'admin'`);
+      if (admins[0].n <= 1) {
+        return res.status(400).json({ error: 'Cannot delete the last admin account' });
+      }
+    }
+    await query('UPDATE payments SET recorded_by = NULL WHERE recorded_by = $1', [id]);
+    await query('UPDATE audit_log SET user_id = NULL WHERE user_id = $1', [id]);
+    await query('UPDATE access_codes SET created_by = NULL WHERE created_by = $1', [id]);
+    await query('DELETE FROM users WHERE id = $1', [id]);
+    await audit(req.user.id, 'DELETE', 'users', id, { name: rows[0].name, email: rows[0].email, role: rows[0].role }, null);
     res.json({ message: 'User deleted successfully' });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to delete user' });
+    console.error('User delete error:', err);
+    res.status(500).json({ error: 'Failed to delete user: ' + err.message });
   }
 });
 
