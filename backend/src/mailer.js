@@ -1,6 +1,8 @@
 // backend/src/mailer.js — Brevo HTTPS API (no SMTP, no IPv6 issues)
 const API_KEY = process.env.BREVO_API_KEY;
-const SENDER_EMAIL = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'osasua@gmail.com';
+// Verified Brevo sender (domain-verified 2026-11-03). Override with SMTP_FROM_EMAIL
+// if it ever changes; never fall back to a personal mailbox again.
+const SENDER_EMAIL = process.env.SMTP_FROM_EMAIL || 'ferrano.secretariat@ferranocourt.estate';
 const SENDER_NAME = process.env.SMTP_FROM_NAME || 'Ferrano Court Portal';
 
 // Product imprint appended to every outgoing email, current and future.
