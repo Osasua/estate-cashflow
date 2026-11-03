@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const rateLimit = require('express-rate-limit'); // NEW: Import rate limiter
 const { query } = require('../db');
 const { sign, authenticate } = require('../auth');
-const { sendResetEmail } = require('../mailer');
+const { sendResetEmail } = require('../welcome-mail');
 
 const router = express.Router();
 

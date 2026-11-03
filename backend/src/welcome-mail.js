@@ -97,4 +97,81 @@ async function sendWelcomeEmail(email, password, loginUrl, name) {
   return text;
 }
 
-module.exports = { sendWelcomeEmail, buildWelcomeHtml };
+const buildResetHtml = (email, name, resetLink) => `
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f7;padding:24px 0;">
+  <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(15,23,42,0.12);">
+
+      <!-- Header band -->
+      <tr><td align="center" style="background:#0f172a;padding:28px 24px 22px 24px;">
+        <img src="${LOGO_URL}" width="72" height="72" alt="Ferrano Court crest" style="display:block;border-radius:10px;margin:0 auto 12px auto;" />
+        <div style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:2px;font-family:Arial,sans-serif;">FERRANO COURT PORTAL</div>
+        <div style="color:#94a3b8;font-size:12px;letter-spacing:1px;margin-top:6px;font-family:Arial,sans-serif;">ONE COURT &middot; ONE PORTAL &middot; ZERO WAHALA</div>
+      </td></tr>
+
+      <!-- Body -->
+      <tr><td style="background:#ffffff;padding:28px 32px;">
+        <div style="font-size:22px;font-weight:bold;color:#0f172a;font-family:Arial,sans-serif;">Trouble signing in${name ? `, ${name}` : ''}? 🔑</div>
+        <p style="font-size:14px;line-height:22px;color:#475569;margin:10px 0 18px 0;font-family:Arial,sans-serif;">
+          Someone (hopefully you) asked to reset the password for <b>${email}</b>.
+          Tap the button below and pick a fresh one — it takes about ten seconds.
+        </p>
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          <tr><td align="center" style="padding:6px 0 16px 0;">
+            <a href="${resetLink}" style="display:inline-block;background:#0f766e;color:#ffffff;text-decoration:none;border-radius:10px;padding:14px 28px;font-size:16px;font-weight:bold;font-family:Arial,sans-serif;">Reset my password →</a>
+          </td></tr>
+        </table>
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;">
+          <tr><td style="padding:12px 16px;font-size:13px;line-height:19px;color:#92400e;font-family:Arial,sans-serif;">
+            ⏳ &nbsp;For safety, this link <b>expires in 15 minutes</b> and works once.<br/>
+            🛡 &nbsp;If you did not request this, ignore this email — your password stays exactly as it is.
+          </td></tr>
+        </table>
+
+        <p style="font-size:12px;line-height:18px;color:#94a3b8;margin:16px 0 0 0;font-family:Arial,sans-serif;">
+          Button misbehaving? Paste this into your browser:<br/>
+          <a href="${resetLink}" style="color:#0f766e;word-break:break-all;text-decoration:none;">${resetLink}</a>
+        </p>
+      </td></tr>
+
+      <!-- Footer band -->
+      <tr><td align="center" style="background:#0f172a;padding:16px 24px;">
+        <div style="color:#94a3b8;font-size:11px;letter-spacing:1px;font-family:Arial,sans-serif;">POWERED BY PENIEL CHARIS TECHNOLOGIES LTD</div>
+        <div style="color:#64748b;font-size:11px;margin-top:4px;font-family:Arial,sans-serif;">Ferrano Court &middot; <a href="${SITE_URL}" style="color:#5eead4;text-decoration:none;">${SITE_URL.replace(/^https?:\/\//, '')}</a></div>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>`;
+
+// Tolerant of both call styles in the codebase:
+//   sendResetEmail(email, name, resetLink)  — routes/password.js
+//   sendResetEmail(email, tokenOrLink)      — legacy routes/auth.js
+async function sendResetEmail(email, a, b) {
+  let name = null;
+  let link = b;
+  if (!link) {
+    link = /^https?:\/\//.test(a || '') ? a : `${SITE_URL}/reset-password?token=${encodeURIComponent(a)}`;
+  } else {
+    name = a;
+  }
+  if (!API_KEY) throw new Error('BREVO_API_KEY is not set in Render environment');
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': API_KEY, 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      sender: { name: SENDER_NAME, email: SENDER_EMAIL },
+      to: [{ email, name: name || undefined }],
+      subject: '🔑 Reset your Ferrano Court Portal password',
+      htmlContent: buildResetHtml(email, name, link),
+    }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Brevo API error ${res.status}: ${text}`);
+  console.log('✅ Reset email accepted by Brevo for:', email);
+  return text;
+}
+
+module.exports = { sendWelcomeEmail, sendResetEmail, buildWelcomeHtml, buildResetHtml };

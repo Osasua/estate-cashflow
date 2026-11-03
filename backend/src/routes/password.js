@@ -3,7 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { query } = require('../db');
 const { frontendUrl } = require('../frontend-url');
-const { sendResetEmail } = require('../mailer');
+const { sendResetEmail } = require('../welcome-mail');
 
 const router = express.Router();
 
