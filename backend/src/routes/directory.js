@@ -41,17 +41,24 @@ function validateBody(body) {
 // for a house that has none yet; residents only see (and edit) their own.
 router.get('/', async (req, res) => {
   try {
-    const member = await findMemberForUser(req.user.id);
+    const found = await findMemberForUser(req.user.id);
+    // Moved-out households (active = false) leave the directory entirely —
+    // card, slots and listings. Their financial history is untouched; this
+    // only controls visibility here. A moved-out resident signed in is
+    // treated like an unlinked login rather than shown their old household.
+    const member = found && found.active ? found : null;
     const { rows: entries } = await query(
       `SELECT d.*, m.household_name, m.house_number
          FROM directory_entries d
          JOIN members m ON m.id = d.member_id
+        WHERE m.active = TRUE
         ORDER BY m.house_number, d.slot`
     );
     let households = null;
     if (isComms(req.user.role)) {
       const h = await query(
-        `SELECT id, household_name, house_number, active FROM members ORDER BY house_number`
+        `SELECT id, household_name, house_number, active FROM members
+          WHERE active = TRUE ORDER BY house_number`
       );
       households = h.rows;
     }

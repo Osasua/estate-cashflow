@@ -38,7 +38,21 @@ router.get('/', async (req, res) => {
 // UPDATE a member
 router.put('/:id', staff, async (req, res) => {
   try {
-    const { household_name, house_number, phone, email, monthly_due, active, opening_balance = 0} = req.body || {};
+    const body = req.body || {};
+    const { household_name, house_number, phone, email, monthly_due, opening_balance = 0 } = body;
+    // The active flag arrives as `active` from newer clients; older builds of
+    // the Members page send `is_active` or `status: 'moved_out' | 'active'`.
+    // Accept all three so "Mark as moved out" can never silently no-op again.
+    let active;
+    if (body.active !== undefined) active = body.active;
+    else if (body.is_active !== undefined) active = body.is_active;
+    else if (typeof body.status === 'string') {
+      const s = body.status.toLowerCase();
+      if (s === 'moved_out' || s === 'inactive') active = false;
+      else if (s === 'active') active = true;
+    }
+    if (active === 'true') active = true;
+    if (active === 'false') active = false;
 
     if (opening_balance !== undefined) {
       const val = Math.max(0, Number(opening_balance) || 0);

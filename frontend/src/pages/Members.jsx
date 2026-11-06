@@ -63,7 +63,7 @@ export default function Members() {
     if (!window.confirm('Mark this member as moved out?')) return;
     try {
       console.log('📤 Moving out member:', id);
-      const res = await api(`/members/${id}`, { method: 'PUT', body: { status: 'moved_out', is_active: false } });
+      const res = await api(`/members/${id}`, { method: 'PUT', body: { active: false, status: 'moved_out', is_active: false } });
       console.log('✅ Move out response:', res);
       setMessage('✅ Member marked as moved out');
       setTimeout(() => setMessage(''), 3000);
@@ -78,7 +78,7 @@ export default function Members() {
   const handleReactivate = async (id) => {
     try {
       console.log('🔄 Reactivating member:', id);
-      const res = await api(`/members/${id}`, { method: 'PUT', body: { status: 'active', is_active: true } });
+      const res = await api(`/members/${id}`, { method: 'PUT', body: { active: true, status: 'active', is_active: true } });
       console.log('✅ Reactivate response:', res);
       setMessage('✅ Member reactivated successfully');
       setTimeout(() => setMessage(''), 3000);
