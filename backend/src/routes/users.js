@@ -19,7 +19,7 @@ const adminOnly = (req, res, next) =>
 router.get('/', adminOnly, async (req, res) => {
   try {
     const { rows } = await query(
-      'SELECT id, name, email, role, member_id, created_at FROM users ORDER BY created_at DESC'
+      'SELECT id, name, email, role, member_id, created_at, last_login_at, last_login_ip FROM users ORDER BY created_at DESC'
     );
     res.json({ users: rows });
   } catch (err) {

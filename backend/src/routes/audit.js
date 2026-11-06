@@ -8,6 +8,7 @@ const router = express.Router();
 router.use(authenticate);
 
 // GET all logs (Admin only)
+// ?category=all|signins|financial (default all) · ?limit=1..500 (default 100)
 router.get('/', async (req, res) => {
   // Security check: Only admins can view the audit log
   if (req.user.role !== 'admin') {
@@ -15,14 +16,25 @@ router.get('/', async (req, res) => {
   }
 
   try {
-    // Fetch the last 100 actions, ordered by newest first
+    const category = ['all', 'signins', 'financial'].includes(req.query.category)
+      ? req.query.category
+      : 'all';
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+
+    // Sign-in events (LOGIN / LOGIN_FAILED) vs everything else, which is the
+    // financial write trail this log was originally built for.
+    let where = '';
+    if (category === 'signins') where = `WHERE al.action IN ('LOGIN', 'LOGIN_FAILED')`;
+    if (category === 'financial') where = `WHERE al.action NOT IN ('LOGIN', 'LOGIN_FAILED')`;
+
     const { rows } = await query(`
-      SELECT al.*, u.name as user_name 
-      FROM audit_log al 
-      LEFT JOIN users u ON al.user_id = u.id 
-      ORDER BY al.created_at DESC 
-      LIMIT 100
-    `);
+      SELECT al.*, u.name as user_name, u.email as user_email
+      FROM audit_log al
+      LEFT JOIN users u ON al.user_id = u.id
+      ${where}
+      ORDER BY al.created_at DESC
+      LIMIT $1
+    `, [limit]);
     res.json({ logs: rows });
   } catch (error) {
     console.error('Audit log fetch error:', error);

@@ -5,8 +5,41 @@ const rateLimit = require('express-rate-limit'); // NEW: Import rate limiter
 const { query } = require('../db');
 const { sign, authenticate } = require('../auth');
 const { sendResetEmail } = require('../welcome-mail');
+const { audit } = require('../audit');
 
 const router = express.Router();
+
+// Sign-in audit trail: which account signed in, when, from which client IP —
+// and which attempts failed (brute-force visibility). Telemetry must never
+// break authentication itself, so every write here is best-effort.
+const clientMeta = (req) => ({
+  ip: req.ip || null,
+  user_agent: req.get('user-agent') || null,
+});
+
+async function recordSigninSuccess(user, req) {
+  try {
+    const meta = clientMeta(req);
+    await query(
+      `UPDATE users SET last_login_at = now(), last_login_ip = $2 WHERE id = $1`,
+      [user.id, meta.ip]
+    );
+    await audit(user.id, 'LOGIN', 'users', user.id, null, { ...meta, role: user.role });
+  } catch (err) {
+    console.error('Sign-in audit (success) failed:', err.message);
+  }
+}
+
+async function recordSigninFailure(req, email) {
+  try {
+    await audit(null, 'LOGIN_FAILED', 'users', null, null, {
+      email: String(email === undefined || email === null ? '' : email).toLowerCase().trim().slice(0, 254),
+      ...clientMeta(req),
+    });
+  } catch (err) {
+    console.error('Sign-in audit (failure) failed:', err.message);
+  }
+}
 
 // NEW: Rate limiter configuration
 const authLimiter = rateLimit({
@@ -22,8 +55,11 @@ router.post('/login', authLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Email and password are required' });
   const { rows } = await query('SELECT * FROM users WHERE email = $1', [email.toLowerCase().trim()]);
   const user = rows[0];
-  if (!user || !bcrypt.compareSync(password, user.password_hash))
+  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    await recordSigninFailure(req, email);
     return res.status(401).json({ error: 'Invalid email or password' });
+  }
+  await recordSigninSuccess(user, req);
   res.json({
     token: sign(user),
     user: { id: user.id, name: user.name, email: user.email, role: user.role },

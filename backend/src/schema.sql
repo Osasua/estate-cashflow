@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS users (
   member_id INTEGER,
   move_in_date DATE,
   move_out_date DATE,
+  -- Sign-in audit trail: when a login last succeeded and from which client
+  -- IP. Per-event history lives in audit_log (action = LOGIN/LOGIN_FAILED).
+  last_login_at TIMESTAMPTZ,
+  last_login_ip TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

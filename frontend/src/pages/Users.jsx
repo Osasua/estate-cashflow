@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import { fmtDate } from '../format';
 
 export default function Users() {
   const { user } = useAuth();
@@ -140,6 +141,7 @@ export default function Users() {
               <th style={{ padding: '10px' }}>Email</th>
               <th style={{ padding: '10px' }}>Role</th>
               <th style={{ padding: '10px' }}>Linked Household</th>
+              <th style={{ padding: '10px' }}>Last Sign-in</th>
               <th style={{ padding: '10px', textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
@@ -169,6 +171,9 @@ export default function Users() {
                         ))}
                       </select>
                     </td>
+                    <td style={{ padding: '10px' }} className="muted">
+                      {u.last_login_at ? fmtDate(u.last_login_at) : 'Never'}
+                    </td>
                     <td style={{ padding: '10px', textAlign: 'right' }}>
                       <button onClick={saveEdit} style={{marginRight: '5px', background: '#22c55e', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer'}}>Save</button>
                       <button onClick={cancelEdit} className="btn-ghost">Cancel</button>
@@ -186,6 +191,11 @@ export default function Users() {
                     </td>
                     <td style={{ padding: '10px' }} className="muted">
                       {u.member_id ? 'Yes' : '—'}
+                    </td>
+                    <td style={{ padding: '10px' }} className="muted">
+                      {u.last_login_at
+                        ? `${fmtDate(u.last_login_at)}${u.last_login_ip ? ` · ${u.last_login_ip}` : ''}`
+                        : 'Never'}
                     </td>
                     <td style={{ padding: '10px', textAlign: 'right' }}>
                       <button className="btn-ghost" onClick={() => startEdit(u)}>Edit</button>
