@@ -163,7 +163,9 @@ export default function Users() {
                   // EDIT MODE
                   <>
                     <td style={{ padding: '10px' }}><input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} style={{width: '100%'}} /></td>
-                    <td style={{ padding: '10px' }} className="muted">{u.email} (Cannot change)</td>
+                    <td style={{ padding: '10px' }}>
+                      <input value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} title="Login email — this is what the person signs in with. Must be unique." style={{width: '100%'}} />
+                    </td>
                     <td style={{ padding: '10px' }}>
                       <select value={form.role} onChange={(e) => setForm({...form, role: e.target.value})} style={{width: '100%', padding: '5px'}}>
                         <option value="admin">Admin</option>

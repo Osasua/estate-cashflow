@@ -62,10 +62,16 @@ router.post('/', adminOnly, async (req, res) => {
   }
 });
 
-// PUT update user role and/or household link
+// PUT update user role, household link and/or login email.
+// The login email IS editable here (admin only): it is the credential people
+// sign in with, so it is validated, uniqueness-checked and audited. Note this
+// is independent of members.email (the household contact address) — the two
+// are joined nowhere by value; the household link is users.member_id.
 router.put('/:id', adminOnly, async (req, res) => {
-  const { role, member_id } = req.body;
-  
+  const { role, member_id, email } = req.body;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid user id' });
+
   if (role && !['admin', 'treasurer', 'secretary', 'facility', 'gate', 'member'].includes(role)) {
     return res.status(400).json({ error: 'Invalid role' });
   }
@@ -73,6 +79,7 @@ router.put('/:id', adminOnly, async (req, res) => {
   const updates = [];
   const values = [];
   let paramCount = 1;
+  let newEmail = null;
 
   if (role) {
     updates.push(`role = $${paramCount++}`);
@@ -82,20 +89,45 @@ router.put('/:id', adminOnly, async (req, res) => {
     updates.push(`member_id = $${paramCount++}`);
     values.push(member_id || null);
   }
+  if (email !== undefined && String(email).trim() !== '') {
+    newEmail = String(email).toLowerCase().trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      return res.status(400).json({ error: 'Invalid email address' });
+    }
+    const dupe = await query(
+      'SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND id <> $2',
+      [newEmail, id]
+    );
+    if (dupe.rows[0]) return res.status(409).json({ error: 'Email already in use by another account' });
+    updates.push(`email = $${paramCount++}`);
+    values.push(newEmail);
+  }
 
   if (updates.length === 0) {
     return res.status(400).json({ error: 'No fields to update' });
   }
 
-  values.push(req.params.id);
+  try {
+    const before = await query('SELECT email FROM users WHERE id = $1', [id]);
+    if (!before.rows[0]) return res.status(404).json({ error: 'User not found' });
 
-  const { rows } = await query(
-    `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, name, email, role, member_id`,
-    values
-  );
-  
-  if (!rows[0]) return res.status(404).json({ error: 'User not found' });
-  res.json({ user: rows[0] });
+    values.push(id);
+    const { rows } = await query(
+      `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, name, email, role, member_id`,
+      values
+    );
+
+    if (newEmail && newEmail !== before.rows[0].email) {
+      await audit(req.user.id, 'USER_EMAIL_CHANGE', 'users', id,
+        { email: before.rows[0].email }, { email: newEmail });
+    }
+
+    res.json({ user: rows[0] });
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'Email already in use by another account' });
+    console.error('PUT user error:', e);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
 });
 
 // DELETE a user (Admin only). Removes the portal LOGIN only — households,
