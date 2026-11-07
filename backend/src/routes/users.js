@@ -62,13 +62,16 @@ router.post('/', adminOnly, async (req, res) => {
   }
 });
 
-// PUT update user role, household link and/or login email.
+// PUT update user role, household link, login email and/or display name.
 // The login email IS editable here (admin only): it is the credential people
 // sign in with, so it is validated, uniqueness-checked and audited. Note this
 // is independent of members.email (the household contact address) — the two
 // are joined nowhere by value; the household link is users.member_id.
+// The display name is a snapshot taken when the login was created (copied
+// from the household name by create-login, or typed in the create form);
+// renaming a household later does not rename existing logins — edit them here.
 router.put('/:id', adminOnly, async (req, res) => {
-  const { role, member_id, email } = req.body;
+  const { role, member_id, email, name } = req.body;
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid user id' });
 
@@ -81,6 +84,12 @@ router.put('/:id', adminOnly, async (req, res) => {
   let paramCount = 1;
   let newEmail = null;
 
+  if (name !== undefined) {
+    const cleanName = String(name).trim();
+    if (!cleanName) return res.status(400).json({ error: 'Name cannot be empty' });
+    updates.push(`name = $${paramCount++}`);
+    values.push(cleanName);
+  }
   if (role) {
     updates.push(`role = $${paramCount++}`);
     values.push(role);

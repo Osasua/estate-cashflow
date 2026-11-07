@@ -132,6 +132,27 @@ function check(name, fn) {
   check('non-admin → 403', () => assert.strictEqual(res.status, 403));
   currentUser = { id: 1, role: 'admin' };
 
+  // 8) name update: trimmed
+  res = await put('/3', { name: '  The Jacobs  ' });
+  body = await res.json();
+  check('name change → 200 and trimmed', () => {
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(body.user.name, 'The Jacobs');
+  });
+
+  // 9) whitespace-only name → 400
+  res = await put('/3', { name: '   ' });
+  check('blank name → 400', () => assert.strictEqual(res.status, 400));
+
+  // 10) combined name + email update in one save
+  res = await put('/3', { name: 'The Jacobs Family', email: 'jacobs@estate.local' });
+  body = await res.json();
+  check('combined name + email update', () => {
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(body.user.name, 'The Jacobs Family');
+    assert.strictEqual(body.user.email, 'jacobs@estate.local');
+  });
+
   server.close();
   let failed = 0;
   for (const [st, name] of results) {
