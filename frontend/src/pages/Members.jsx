@@ -104,6 +104,26 @@ export default function Members() {
     }
   };
 
+  const handleUnlink = async (member) => {
+    const linkedEmail = member.linked_user || member.user_email;
+    if (!window.confirm(
+      `Unlink ${linkedEmail} from ${member.household_name} (${member.house_number})?\n\n` +
+      `The login account is NOT deleted — it keeps its name, password and role, but stops seeing this household.\n` +
+      `All bills and payment history stay on the house. You can create or link a login again later.`
+    )) return;
+    try {
+      console.log('🔓 Unlinking login from member:', member.id, linkedEmail);
+      const res = await api(`/members/${member.id}/unlink`, { method: 'POST' });
+      setMessage(`✅ ${res.message || `Unlinked ${linkedEmail} — account kept, history intact`}`);
+      setTimeout(() => setMessage(''), 4000);
+      await loadMembers();
+    } catch (err) {
+      console.error('❌ Unlink error:', err);
+      setMessage('❌ ' + err.message);
+      setTimeout(() => setMessage(''), 5000);
+    }
+  };
+
   const handleCreateLogin = async (id) => {
     try {
       console.log('👤 Creating login for member:', id);
@@ -343,6 +363,13 @@ export default function Members() {
                             >✅ Reactivate</button>
                           )}
                           
+                          {isLinked && (
+                            <button onClick={() => handleUnlink(member)} title="Detach this login from the household. The account and all history are kept." style={{ padding: '6px 12px', background: '#fff', color: '#4f46e5', border: '2px solid #c7d2fe', borderRadius: '6px', fontWeight: '600', fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s' }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = '#eef2ff'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                            >🔓 Unlink</button>
+                          )}
+
                           {isLinked ? (
                             <button onClick={() => handleResetPassword(member.id)} style={{ padding: '6px 12px', background: '#fff', color: '#7c3aed', border: '2px solid #ddd6fe', borderRadius: '6px', fontWeight: '600', fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s' }}
                               onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.transform = 'translateY(-1px)'; }}

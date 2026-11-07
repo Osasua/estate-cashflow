@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { frontendUrl } = require('../frontend-url');
 const bcrypt = require('bcryptjs');
 const { sendWelcomeEmail } = require('../welcome-mail');
+const { audit } = require('../audit');
 
 const router = express.Router();
 router.use(authenticate);
@@ -157,6 +158,19 @@ router.post('/:id/create-login', staff, async (req, res) => {
     } catch (dbError) {
       // ✅ Handle Duplicate Email Error gracefully
       if (dbError.code === '23505') {
+        // If an UNLINKED account already owns this email (e.g. it was unlinked
+        // from this house before), re-attach it instead of failing — unlink is
+        // meant to be reversible without touching the account.
+        const { rows: existing } = await query(
+          'SELECT id, email, member_id FROM users WHERE LOWER(email) = LOWER($1)',
+          [m.email.toLowerCase().trim()]
+        );
+        if (existing[0] && existing[0].member_id === null) {
+          await query('UPDATE users SET member_id = $1 WHERE id = $2', [m.id, existing[0].id]);
+          await audit(req.user.id, 'RELINK_LOGIN', 'users', existing[0].id,
+            { member_id: null }, { member_id: m.id });
+          return res.json({ message: `Re-linked existing account ${existing[0].email} to this household.` });
+        }
         return res.status(409).json({ 
           message: `The email '${m.email}' is already linked to another user account. Please use a unique email address.` 
         });
@@ -225,6 +239,51 @@ router.post('/:id/create-login', staff, async (req, res) => {
 
   } catch (err) {
     console.error('Create login error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 🔓 UNLINK a household's login — clears users.member_id and nothing else.
+// The user account (name, email, password, role, sign-in history) is NOT
+// deleted or modified, and the household keeps every bill and payment
+// (those reference members.id, never users.id). The login simply stops
+// being attached to this house: it becomes an "unlinked login" (the
+// resident pages answer 403 "not linked to a household") and can be
+// re-attached to any household later from Users → Edit → Linked Household.
+router.post('/:id/unlink', staff, async (req, res) => {
+  try {
+    const memberId = Number(req.params.id);
+    const { rows: mRows } = await query(
+      'SELECT id, house_number, household_name FROM members WHERE id = $1',
+      [memberId]
+    );
+    if (!mRows[0]) return res.status(404).json({ message: 'Member not found' });
+
+    const { rows: uRows } = await query(
+      'SELECT id, name, email, role FROM users WHERE member_id = $1',
+      [memberId]
+    );
+    if (!uRows[0]) {
+      return res.status(409).json({ message: 'This household has no linked login to unlink.' });
+    }
+
+    const u = uRows[0];
+    await query('UPDATE users SET member_id = NULL WHERE id = $1', [u.id]);
+    await audit(
+      req.user.id,
+      'UNLINK_LOGIN',
+      'users',
+      u.id,
+      { member_id: memberId, email: u.email },
+      { member_id: null }
+    );
+
+    res.json({
+      message: `Unlinked ${u.email} from ${mRows[0].household_name} (${mRows[0].house_number}). The account was kept — only the link was removed.`,
+      unlinked: u,
+    });
+  } catch (err) {
+    console.error('Unlink login error:', err);
     res.status(500).json({ message: err.message });
   }
 });
