@@ -153,6 +153,34 @@ function check(name, fn) {
     assert.strictEqual(body.user.email, 'jacobs@estate.local');
   });
 
+  // 11) admin password reset for any login (linked or not)
+  res = await fetch(base + '/3/reset-password', { method: 'POST' });
+  body = await res.json();
+  check('reset-password → 200 with temp password', () => {
+    assert.strictEqual(res.status, 200);
+    assert.match(body.tempPassword, /^[0-9a-f]{12}$/);
+    assert.match(body.message, /New password: /);
+  });
+  check('password hash actually changed', () => {
+    const u = state.users.find((x) => x.id === 3);
+    assert.ok(u.password_hash && u.password_hash !== 'x');
+  });
+  check('PASSWORD_RESET_BY_ADMIN audited', () => {
+    const a = state.audits[state.audits.length - 1];
+    assert.strictEqual(a.action, 'PASSWORD_RESET_BY_ADMIN');
+    assert.strictEqual(a.newValue.email, 'jacobs@estate.local');
+  });
+
+  // 12) reset unknown user → 404
+  res = await fetch(base + '/999/reset-password', { method: 'POST' });
+  check('reset unknown user → 404', () => assert.strictEqual(res.status, 404));
+
+  // 13) non-admin reset → 403
+  currentUser = { id: 9, role: 'member' };
+  res = await fetch(base + '/3/reset-password', { method: 'POST' });
+  check('non-admin reset → 403', () => assert.strictEqual(res.status, 403));
+  currentUser = { id: 1, role: 'admin' };
+
   server.close();
   let failed = 0;
   for (const [st, name] of results) {

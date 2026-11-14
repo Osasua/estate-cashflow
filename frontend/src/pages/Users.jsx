@@ -68,6 +68,16 @@ export default function Users() {
     setForm({ name: '', email: '', role: 'treasurer', member_id: '' });
   };
 
+  const resetUserPassword = async (u) => {
+    if (!window.confirm(`Reset the password for ${u.email}?\n\nA temporary password is generated and shown once in the green message above — share it securely. The person keeps their name, role and household link.`)) return;
+    try {
+      const res = await api(`/users/${u.id}/reset-password`, { method: 'POST' });
+      setMessage(`✅ ${res.message}`);
+    } catch (err) {
+      setMessage(`❌ ${err.message}`);
+    }
+  };
+
   const unlinkUser = async (u) => {
     if (!window.confirm(`Unlink ${u.email} from their household?\n\nThe account stays active with its role, password and sign-in history — only the household link is removed. Bills and payments stay with the house.`)) return;
     try {
@@ -212,6 +222,7 @@ export default function Users() {
                     </td>
                     <td style={{ padding: '10px', textAlign: 'right' }}>
                       <button className="btn-ghost" onClick={() => startEdit(u)}>Edit</button>
+                      <button onClick={() => resetUserPassword(u)} title="Generate a temporary password for this login (shown once)" style={{marginLeft: '5px', background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer'}}>Reset Pwd</button>
                       {u.member_id && (
                         <button onClick={() => unlinkUser(u)} title="Detach this login from its household. The account is kept." style={{marginLeft: '5px', background: '#eef2ff', color: '#4338ca', border: '1px solid #c7d2fe', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer'}}>Unlink</button>
                       )}

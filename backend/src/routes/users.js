@@ -139,6 +139,41 @@ router.put('/:id', adminOnly, async (req, res) => {
   }
 });
 
+// POST reset a login's password (Admin only). Works for ANY account —
+// including staff logins that are NOT linked to a household (the Members
+// page reset only reaches linked logins, which left secretary/admin/treasurer
+// logins with no reset path). Returns the temp password once in the response
+// and also emails it when Brevo is configured.
+router.post('/:id/reset-password', adminOnly, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid user id' });
+  try {
+    const tempPassword = crypto.randomBytes(6).toString('hex');
+    const password_hash = bcrypt.hashSync(tempPassword, 10);
+    const { rows } = await query(
+      'UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, email, name',
+      [password_hash, id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'User not found' });
+
+    await audit(req.user.id, 'PASSWORD_RESET_BY_ADMIN', 'users', id,
+      null, { email: rows[0].email });
+
+    res.json({
+      message: `Password reset for ${rows[0].email}! New password: ${tempPassword}`,
+      tempPassword,
+    });
+
+    const loginUrl = frontendUrl();
+    sendWelcomeEmail(rows[0].email, tempPassword, loginUrl, rows[0].name)
+      .then(() => console.log('✅ Reset email sent to', rows[0].email))
+      .catch((err) => console.error('❌ Reset email failed:', err.message));
+  } catch (err) {
+    console.error('Admin reset password error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE a user (Admin only). Removes the portal LOGIN only — households,
 // bills and payment history are untouched. Historical references are
 // detached (set null) so the audit trail and payment records survive.
