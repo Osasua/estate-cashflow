@@ -7,8 +7,8 @@
  *  - /api/* : NEVER cached — financial data must always be live; the app's
  *    own offline write-queue handles mutations made without connectivity.
  */
-const CACHE = 'fcp-shell-v1';
-const SHELL = ['/', '/manifest.webmanifest', '/favicon.png', '/ferrano-logo.png'];
+const CACHE = 'fcp-shell-v3';
+const SHELL = ['/', '/manifest.webmanifest', '/favicon.png', '/icon-192.png', '/ferrano-logo.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -35,8 +35,12 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('/', copy));
+          // Cache ONLY healthy responses — caching a 404/500 shell (e.g. a
+          // reload landing mid-deploy) would poison every later load.
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put('/', copy));
+          }
           return res;
         })
         .catch(() => caches.match('/'))
@@ -48,8 +52,10 @@ self.addEventListener('fetch', (e) => {
     caches.match(req).then((cached) => {
       const refresh = fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(req, copy));
+          }
           return res;
         })
         .catch(() => cached);
