@@ -43,6 +43,20 @@ function Layout({ children }) {
   );
   const toggleGroup = (k) => setClosed((c) => ({ ...c, [k]: !c[k] }));
   const [tourOpen, setTourOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Mobile: give every table its own horizontal scroll container so wide
+  // admin tables never blow out the viewport. Harmless on desktop (the
+  // wrapper only scrolls when content overflows).
+  useEffect(() => {
+    document.querySelectorAll('table').forEach((t) => {
+      if (t.parentElement && t.parentElement.classList.contains('table-scroll')) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'table-scroll';
+      t.parentNode.insertBefore(wrap, t);
+      wrap.appendChild(t);
+    });
+  });
 
   // Role-aware navigation groups. Empty groups disappear entirely, so each
   // role only ever sees the menus it actually owns. Facility and Gate get a
@@ -96,7 +110,21 @@ function Layout({ children }) {
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      <header className="mobile-topbar">
+        <button
+          type="button"
+          className="topbar-menu"
+          aria-label="Open menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen(true)}
+        >
+          ☰
+        </button>
+        <img src="/favicon.png" alt="" style={{ width: '26px', height: '26px', borderRadius: '6px' }} />
+        <div className="topbar-title">Ferrano Court</div>
+        <div className="topbar-user">{user?.name}</div>
+      </header>
+      <aside className={menuOpen ? 'sidebar open' : 'sidebar'}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
           <img src="/favicon.png" alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px' }} />
           <div>
@@ -105,7 +133,7 @@ function Layout({ children }) {
           </div>
         </div>
         
-        <nav>
+        <nav onClick={() => setMenuOpen(false)}>
           {/* Dashboard — everyone; for Facility & Gate it opens their own desk */}
           <NavLink to="/" end data-tour="nav-dashboard">Dashboard</NavLink>
 
@@ -144,6 +172,7 @@ function Layout({ children }) {
           <div className="powered-by">{POWERED_BY}</div>
         </div>
       </aside>
+      {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
       <main className="content">{children}</main>
       <Tour open={tourOpen} onClose={closeTour} />
     </div>

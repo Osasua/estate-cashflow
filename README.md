@@ -16,6 +16,11 @@ Built for ~100 households, Naira-denominated, with a Treasurer + Admin role mode
   closing balance), expense detail, per-household status; CSV export.
 - **Offline:** writes made without connectivity are queued on the device and
   replayed automatically when back online (PWA service worker included).
+- **Mobile:** responsive layout (sticky top bar + off-canvas menu, sideways-
+  scrolling tables, touch-sized controls) and installable as an app:
+  Android Chrome / iOS Safari → *Add to Home Screen*. Manifest + service
+  worker give it a standalone window, splash screen and offline app shell
+  (financial API calls always stay live).
 - **Audit log:** every financial write is recorded (who, what, old → new).
 
 ## Tech Stack
